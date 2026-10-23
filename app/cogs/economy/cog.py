@@ -9,6 +9,8 @@ from discord.app_commands import Choice
 from discord.ext import commands
 from discord.ext.commands import Range
 
+from app.cogs.economy.item_ui import ItemBrowser
+from app.cogs.economy.trade_ui import TradeView
 from app.cogs.economy.ui import BOOST_LABELS, EconomyHub, SearchView, boost_display_line, progress_bar
 from app.core import Accent, Bot, Cog, converter, make_notice
 from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
@@ -28,43 +30,56 @@ from app.services.economy import (
     HUNTING_COOLDOWN,
     HUNTING_TABLE,
     JOB_LADDER,
+    MAX_ITEM_STOCK,
     MONTHLY_AMOUNT,
     MONTHLY_COOLDOWN,
     PET_SPECIES,
     PRESTIGE_STEP,
+    REPLY_LIMIT,
     SEARCH_COOLDOWN,
     WEEKLY_AMOUNT,
     WEEKLY_COOLDOWN,
     WORK_COOLDOWN,
     EconomySnapshot,
     GuildEconomySettings,
+    PurchaseStatus,
     SearchLocation,
+    TradeOffer,
     boost_multiplier,
     compute_daily,
     compute_periodic,
     compute_pet_claim,
     compute_shift,
+    daily_sale,
     describe_effect,
     evaluate_achievements,
     generate_daily_quests,
     get_achievement,
     get_job,
     get_species,
+    item_emoji,
     pick_search_options,
     pick_weighted_winner,
     prestige_multiplier,
     prestige_requirement,
+    purchase_error,
     resolve_search,
     roll_loot,
     roll_lootbox,
+    sale_price,
     sell_price,
+    trade_error,
+    trade_failure_message,
     validate_item_effect,
+    validate_item_meta,
 )
 from app.utils import fnumb, fuzzy, get_asset_url, helpers, pluralize, timetools
 from config import Emojis
 
 #: Species ids offered as slash choices by ``pet adopt``.
 PetSpeciesChoice = Literal['hamster', 'cat', 'dog', 'parrot', 'fox', 'dragon']
+#: Rarity ids offered as slash choices by ``shop add`` / ``shop edit`` (mirrors ``RARITIES``).
+RarityChoice = Literal['common', 'uncommon', 'rare', 'epic', 'legendary']
 
 
 class Economy(Cog):
@@ -109,39 +124,39 @@ class Economy(Cog):
             user_id, guild_id, day, [(q.key, q.kind, q.goal, q.reward) for q in quests])
         return await self.bot.db.economy.get_quests(user_id, guild_id, day)
 
-    async def _bump_quests(self, ctx: Context, kind: str, amount: int = 1) -> None:
-        """Advance today's quests of ``kind``; pays and announces any that complete."""
-        assert ctx.guild is not None
+    async def _advance_quests(self, user_id: int, guild_id: int, kind: str, amount: int = 1) -> str | None:
+        """Advance today's quests of ``kind``; pays completed ones and returns their announcement (or ``None``)."""
         today = datetime.datetime.now(datetime.UTC).date()
-        await self._ensure_quests(ctx.author.id, ctx.guild.id, today)
-        completed = await self.bot.db.economy.advance_quests(ctx.author.id, ctx.guild.id, today, kind, amount)
+        await self._ensure_quests(user_id, guild_id, today)
+        completed = await self.bot.db.economy.advance_quests(user_id, guild_id, today, kind, amount)
         if not completed:
-            return
+            return None
 
-        board = {q.key: q for q in generate_daily_quests(ctx.guild.id, ctx.author.id, today)}
+        board = {q.key: q for q in generate_daily_quests(guild_id, user_id, today)}
         total = sum(row['reward'] for row in completed)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        balance = await self.bot.db.get_user_balance(user_id, guild_id)
         await balance.add(cash=total)
-
-        lines = '\n'.join(
+        return '\n'.join(
             f'\N{SCROLL} **Quest complete:** {board[row["quest"]].description if row["quest"] in board else row["quest"]} '
             f'— {Emojis.Economy.cash} **{fnumb(row["reward"])}**'
             for row in completed
         )
-        await ctx.send(lines)
-        await self._sync_achievements(ctx)
 
-    async def _sync_achievements(self, ctx: Context, *, announce: bool = True) -> None:
-        """Award any newly qualified achievements for the invoker (idempotent).
+    async def _bump_quests(self, ctx: Context, kind: str, amount: int = 1) -> None:
+        """Advance today's quests of ``kind``; pays and announces any that complete."""
+        assert ctx.guild is not None
+        lines = await self._advance_quests(ctx.author.id, ctx.guild.id, kind, amount)
+        if lines:
+            await ctx.send(lines)
+            await self._sync_achievements(ctx)
+
+    async def _award_achievements(self, user_id: int, guild_id: int) -> str | None:
+        """Award any newly qualified achievements (idempotent); returns the unlock text, or ``None``.
 
         Assembles the :class:`EconomySnapshot` from the database, diffs the
-        qualifying set against what is already earned, pays the rewards and —
-        unless ``announce`` is off — posts an unlock notice.
+        qualifying set against what is already earned and pays the rewards.
         """
-        assert ctx.guild is not None
-        user_id, guild_id = ctx.author.id, ctx.guild.id
         db = self.bot.db
-
         balance = await db.get_user_balance(user_id, guild_id)
         daily = await db.economy.get_daily(user_id, guild_id)
         job_row = await db.economy.get_job(user_id, guild_id)
@@ -156,21 +171,21 @@ class Economy(Cog):
             items_owned=await db.economy.count_items(user_id, guild_id),
         )
         new_ids = await db.economy.award_achievements(user_id, guild_id, evaluate_achievements(snapshot))
-        if not new_ids:
-            return
-
         unlocked = [a for a in (get_achievement(aid) for aid in new_ids) if a is not None]
+        if not unlocked:
+            return None
         reward = sum(a.reward for a in unlocked)
         if reward:
             await balance.add(cash=reward)
-        if announce and unlocked:
-            lines = '\n'.join(f'{a.emoji} **{a.name}** — {a.description}' for a in unlocked)
-            view = make_notice(
-                '\N{TROPHY} Achievement unlocked!',
-                f'{lines}\n\nReward: {Emojis.Economy.cash} **{fnumb(reward)}**',
-                accent=Accent.success,
-            )
-            await ctx.send(view=view)
+        lines = '\n'.join(f'{a.emoji} **{a.name}** — {a.description}' for a in unlocked)
+        return f'{lines}\n\nReward: {Emojis.Economy.cash} **{fnumb(reward)}**'
+
+    async def _sync_achievements(self, ctx: Context, *, announce: bool = True) -> None:
+        """Award any newly qualified achievements for the invoker and, unless ``announce`` is off, post them."""
+        assert ctx.guild is not None
+        text = await self._award_achievements(ctx.author.id, ctx.guild.id)
+        if announce and text:
+            await ctx.send(view=make_notice('\N{TROPHY} Achievement unlocked!', text, accent=Accent.success))
 
     async def job_autocomplete(
         self, _interaction: discord.Interaction, current: str
@@ -394,12 +409,16 @@ class Economy(Cog):
 
         user = member or ctx.author
         balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)  # type: ignore[union-attr]
-        embed = discord.Embed(description="Server Leaderboard Rank: x", colour=helpers.Colour.white())
-        embed.set_author(name=f"{user.display_name}'s Balance", icon_url=get_asset_url(user))
-        embed.add_field(name="Cash", value=f"{Emojis.Economy.cash} **{fnumb(balance.cash)}**")
-        embed.add_field(name="Bank", value=f"{Emojis.Economy.cash} **{fnumb(balance.bank)}**")
-        embed.add_field(name="Total", value=f"{Emojis.Economy.cash} **{fnumb(balance.total)}**")
-        await ctx.send(embed=embed)
+        everyone = await ctx.db.get_guild_balances(ctx.guild.id)  # type: ignore[union-attr]
+        richer = sum(1 for other in everyone if other.user_id != user.id and other.total > balance.total)
+        rank = f'**#{richer + 1:,}** of {max(len(everyone), 1):,}'
+        cash = Emojis.Economy.cash
+        await ctx.send(view=make_notice(
+            f"{user.display_name}'s Balance",
+            f'{cash} **Cash** {fnumb(balance.cash)}\n{cash} **Bank** {fnumb(balance.bank)}\n'
+            f'{cash} **Net worth** {fnumb(balance.total)}\n\N{TROPHY} Server rank {rank}',
+            thumbnail=get_asset_url(user),
+        ))
 
     @balance.command("leaderboard", alias="top", description="Shows the leaderboard of the server", guild_only=True)
     async def leaderboard(self, ctx: Context) -> None:
@@ -424,7 +443,7 @@ class Economy(Cog):
         )
         await LinePaginator.start(ctx, entries=users, embed=embed, location='description')
 
-    @command("daily", description="Claim your daily reward and build a streak.", guild_only=True, hybrid=True)
+    @command("daily", description="Claim your daily reward and build a streak.", guild_only=True, hybrid=True, extras={"example": "daily"})
     async def daily(self, ctx: Context) -> None:
         """Claim your daily reward. Claim on consecutive days to grow your streak bonus."""
         assert ctx.guild is not None
@@ -505,28 +524,233 @@ class Economy(Cog):
             f"You claimed your monthly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
         )
 
-    @group("shop", fallback="list", description="Browse the server shop.", guild_only=True, hybrid=True)
-    async def shop(self, ctx: Context) -> None:
-        """Browse the items available in the server shop."""
-        assert ctx.guild is not None
-        items = await self.bot.db.economy.get_items(ctx.guild.id)
-        if not items:
-            await ctx.send_info("The shop is empty. Admins can add items with `shop add`.")
-            return
+    # -- items: shared actions (commands and the item browser both call these) --
 
-        entries = []
-        for item in items:
-            line = (
-                f"**{item['name']}** • {Emojis.Economy.cash} {fnumb(item['price'])}\n"
-                f"{item['description'] or '*No description.*'}"
+    @staticmethod
+    def _valid_emoji(value: str) -> bool:
+        """Whether ``value`` is a custom emoji or plausibly a unicode one (no plain words)."""
+        emoji = discord.PartialEmoji.from_str(value.strip())
+        if emoji.id:
+            return True
+        return 0 < len(value.strip()) <= 8 and not any(c.isascii() and c.isalnum() for c in value)
+
+    async def daily_deals(self, guild_id: int) -> dict[int, int]:
+        """Today's (UTC) sale for the guild: ``item_id -> percent off``."""
+        items = await self.bot.db.economy.get_items(guild_id)
+        return daily_sale(guild_id, datetime.datetime.now(datetime.UTC).date(), [i['id'] for i in items])
+
+    @staticmethod
+    def _parse_until(text: str) -> datetime.datetime:
+        """A future moment from ``text`` ("2d", "next friday") as naive UTC; raises ``commands.BadArgument``."""
+        return timetools.ensure_utc(timetools.FutureTime(text).dt).replace(tzinfo=None)
+
+    async def trade_action(
+        self, a: discord.Member, b: discord.Member, offer_a: TradeOffer, offer_b: TradeOffer
+    ) -> tuple[bool, str]:
+        """Run a confirmed trade in one transaction; returns ``(ok, message)``."""
+        guild_id = a.guild.id
+        await self.bot.db.get_user_balance(a.id, guild_id)  # make sure both wallets exist
+        await self.bot.db.get_user_balance(b.id, guild_id)
+        result = await self.bot.db.economy.execute_trade(
+            guild_id, a.id, b.id, list(offer_a.items.items()), offer_a.cash, list(offer_b.items.items()), offer_b.cash
+        )
+        if result != 'ok':
+            return False, trade_failure_message(result)
+        return True, f'\N{HANDSHAKE} Trade complete between **{a.display_name}** and **{b.display_name}**.'
+
+    async def buy_item_action(self, member: discord.Member, item_id: int, quantity: int) -> tuple[bool, str]:
+        """Buy ``quantity`` of a shop item for ``member``; returns ``(ok, message)``."""
+        guild_id = member.guild.id
+        item = await self.bot.db.economy.get_item_by_id(guild_id, item_id)
+        if item is None:
+            return False, 'That item is no longer in the shop.'
+        if item['required_role_id'] and not member.get_role(item['required_role_id']):
+            return False, f'**{item["name"]}** is reserved for members with <@&{item["required_role_id"]}>.'
+
+        balance = await self.bot.db.get_user_balance(member.id, guild_id)  # also creates the wallet row
+        percent = (await self.daily_deals(guild_id)).get(item_id, 0)
+        unit = sale_price(item['price'], percent) if percent else item['price']
+        status, item = await self.bot.db.economy.buy_item(member.id, guild_id, item_id, quantity, unit)
+        outcome = PurchaseStatus(status)
+        if outcome is not PurchaseStatus.ok:
+            owned = await self.bot.db.economy.get_quantity(member.id, guild_id, item_id)
+            error = purchase_error(
+                outcome, name=item['name'] if item else 'That item', stock=item['stock'] if item else None,
+                limit=item['max_per_user'] if item else None, owned=owned,
+                cost=unit * quantity if item else 0, cash=balance.cash,
             )
-            effect_line = self._effect_line(ctx.guild, item)
-            if effect_line:
-                line += f"\n\N{SMALL BLUE DIAMOND} {effect_line}"
-            entries.append(line)
-        embed = discord.Embed(title="Server Shop", description="", colour=helpers.Colour.white())
-        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
-        await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
+            return False, error or 'The purchase failed.'
+
+        assert item is not None
+        message = f'Bought **{quantity}× {item_emoji(item)} {item["name"]}** for {Emojis.Economy.cash} **{fnumb(unit * quantity)}**.'
+        if percent:
+            message += f' (-{percent}% today)'
+        if unlocked := await self._award_achievements(member.id, guild_id):
+            message += f'\n\N{TROPHY} {unlocked}'
+        return True, message
+
+    async def sell_item_action(self, member: discord.Member, item_id: int, quantity: int) -> tuple[bool, str]:
+        """Sell ``quantity`` of an owned item back for :func:`sell_price` each; returns ``(ok, message)``."""
+        guild_id = member.guild.id
+        item = await self.bot.db.economy.get_item_by_id(guild_id, item_id)
+        if item is None:
+            return False, 'That item no longer exists.'
+        payout = sell_price(item['price']) * quantity
+        left = await self.bot.db.economy.sell_item(member.id, guild_id, item_id, quantity, payout)
+        if left is None:
+            owned = await self.bot.db.economy.get_quantity(member.id, guild_id, item_id)
+            return False, f'You only own **{owned}× {item["name"]}**.'
+        return True, (
+            f'Sold **{quantity}× {item_emoji(item)} {item["name"]}** for {Emojis.Economy.cash} **{fnumb(payout)}**. '
+            f'You have **{left}** left.'
+        )
+
+    async def gift_item_action(
+        self, member: discord.Member, recipient: discord.Member, item_id: int, quantity: int
+    ) -> tuple[bool, str]:
+        """Move ``quantity`` of an item from ``member`` to ``recipient``; returns ``(ok, message)``."""
+        guild_id = member.guild.id
+        if recipient.bot:
+            return False, 'Cannot gift items to a bot.'
+        if recipient.id == member.id:
+            return False, 'You cannot gift items to yourself.'
+        item = await self.bot.db.economy.get_item_by_id(guild_id, item_id)
+        if item is None:
+            return False, 'That item no longer exists.'
+        if item['max_per_user'] is not None:
+            held = await self.bot.db.economy.get_quantity(recipient.id, guild_id, item_id)
+            if held + quantity > item['max_per_user']:
+                return False, f'**{recipient.display_name}** can hold at most **{item["max_per_user"]}× {item["name"]}**.'
+
+        if not await self.bot.db.economy.transfer_item(member.id, recipient.id, guild_id, item_id, quantity):
+            owned = await self.bot.db.economy.get_quantity(member.id, guild_id, item_id)
+            return False, f'You only own **{owned}× {item["name"]}**.'
+
+        message = f'\N{WRAPPED PRESENT} You gifted **{quantity}× {item_emoji(item)} {item["name"]}** to **{recipient.display_name}**.'
+        if quests := await self._advance_quests(member.id, guild_id, 'gift', quantity):
+            message += f'\n{quests}'
+        return True, message
+
+    async def use_item_action(self, member: discord.Member, item_id: int, quantity: int = 1) -> tuple[bool, str]:
+        """Use an item (see :meth:`_use_item`), then take its ``remove_role`` and append its reply message."""
+        ok, message = await self._use_item(member, item_id, quantity)
+        item = await self.bot.db.economy.get_item_by_id(member.guild.id, item_id) if ok else None
+        if item is None:
+            return ok, message
+        if item.get('remove_role_id') and (role := member.guild.get_role(item['remove_role_id'])) in member.roles:
+            try:
+                await member.remove_roles(role, reason=f'Used shop item {item["name"]}')
+                message += f'\nThe **{role.name}** role was removed.'
+            except discord.HTTPException:
+                message += f'\n\N{WARNING SIGN} I couldn\'t remove the **{role.name}** role - check my role hierarchy.'
+        if item.get('reply_message'):
+            message += f'\n{item["reply_message"]}'
+        return True, message
+
+    async def _use_item(self, member: discord.Member, item_id: int, quantity: int = 1) -> tuple[bool, str]:
+        """Use (consume ``quantity`` of) an owned item and apply its effect; returns ``(ok, message)``.
+
+        The units are taken atomically *before* the effect applies, so two quick uses
+        of the last one cannot both pay out; a role grant that fails refunds it.
+        Only ``cash`` and ``lootbox`` items can be used in bulk.
+        """
+        guild = member.guild
+        item = await self.bot.db.economy.get_item_by_id(guild.id, item_id)
+        if item is None:
+            return False, 'That item no longer exists.'
+
+        effect: str = item['effect'] or 'none'
+        value: int = item['effect_value'] or 0
+        duration: int = item['duration_minutes'] or 0
+        if validate_item_effect(effect, value or None, duration or None) is not None:
+            # Misconfigured (e.g. pre-dates validation) - fall back to a plain collectible.
+            effect = 'none'
+        if quantity > 1 and effect not in ('cash', 'lootbox'):
+            return False, f'**{item["name"]}** can only be used one at a time.'
+
+        role: discord.Role | None = None
+        if effect == 'role':
+            role = guild.get_role(value)
+            if role is None:
+                return False, 'The role this item grants no longer exists — ask an admin to fix the item.'
+            if role in member.roles:
+                return False, f'You already have the **{role.name}** role; the item was not consumed.'
+
+        left = await self.bot.db.economy.consume_item(member.id, guild.id, item_id, quantity)
+        if left is None:
+            owned = await self.bot.db.economy.get_quantity(member.id, guild.id, item_id)
+            if quantity > 1 and owned:
+                return False, f'You only own **{owned}× {item["name"]}**.'
+            return False, f'You don\'t own any **{item["name"]}**.'
+        name = f'{item_emoji(item)} **{item["name"]}**' if quantity == 1 else f'**{quantity}× {item_emoji(item)} {item["name"]}**'
+        tail = f'You have **{left}** left.'
+
+        if effect == 'cash':
+            balance = await self.bot.db.get_user_balance(member.id, guild.id)
+            await balance.add(cash=value * quantity)
+            return True, f'You redeemed {name} for {Emojis.Economy.cash} **{fnumb(value * quantity)}**. {tail}'
+        if effect == 'lootbox':
+            payout = sum(roll_lootbox(value) for _ in range(quantity))
+            balance = await self.bot.db.get_user_balance(member.id, guild.id)
+            await balance.add(cash=payout)
+            flavour = (
+                '\N{PARTY POPPER} Jackpot!' if payout >= value * quantity * 2
+                else 'Unlucky...' if payout < value * quantity // 2
+                else 'Not bad!'
+            )
+            return True, f'You opened {name} and found {Emojis.Economy.cash} **{fnumb(payout)}**. {flavour} {tail}'
+        if role is not None:
+            try:
+                await member.add_roles(role, reason=f'Used shop item {item["name"]}')
+            except discord.HTTPException:
+                await self.bot.db.economy.add_to_inventory(member.id, guild.id, item_id, 1)
+                return False, f'I couldn\'t grant **{role.name}** — check my role hierarchy and permissions. The item was refunded.'
+            return True, f'You used {name} and received the **{role.name}** role. {tail}'
+        if effect in ('xp_boost', 'loot_boost'):
+            kind = 'xp' if effect == 'xp_boost' else 'loot'
+            expires = await self.bot.db.economy.add_boost(member.id, guild.id, kind, boost_multiplier(value), duration)
+            when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), 'R')
+            return True, f'You activated {name}: **+{value}%** {BOOST_LABELS[kind]}, ending {when}. {tail}'
+        if effect == 'rob_shield':
+            expires = await self.bot.db.economy.add_boost(member.id, guild.id, 'shield', 1.0, duration)
+            when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), 'R')
+            return True, f'\N{SHIELD} You activated {name}: rob attempts against you are blocked until {when}. {tail}'
+        return True, f'You used {name}. Nothing obvious happened — must be a collectible. {tail}'
+
+    async def _send_result(self, ctx: Context, result: tuple[bool, str]) -> None:
+        ok, message = result
+        await (ctx.send_success(message) if ok else ctx.send_error(message))
+
+    async def _open_hub(self, ctx: Context, page: str, member: discord.Member | None = None) -> None:
+        """Open the economy hub on ``page`` (``member`` shows someone else's data read-only)."""
+        assert ctx.guild is not None
+        hub = EconomyHub(self, ctx, page=page, target=member)
+        await hub.build()
+        hub.message = await ctx.send(view=hub)
+
+    async def _send_browser(self, ctx: Context, browser: ItemBrowser) -> None:
+        await browser.build()
+        browser.message = await ctx.send(view=browser)
+
+    # -- items: commands --------------------------------------------------------
+
+    @group("shop", fallback="list", description="Browse and buy from the server shop.", guild_only=True, hybrid=True, extras={"example": "shop"})
+    async def shop(self, ctx: Context) -> None:
+        """Browse the server shop: filter by category, open an item, buy with one click."""
+        assert isinstance(ctx.author, discord.Member)
+        await self._send_browser(ctx, ItemBrowser(self, ctx.author, mode='shop'))
+
+    @command("item", description="Show what an item does, what it costs and how many you own.", guild_only=True, hybrid=True, extras={"example": "item Lucky Charm"})
+    @describe(name="The item to look up.")
+    @app_commands.autocomplete(name=shop_item_autocomplete)  # type: ignore
+    async def item(self, ctx: Context, *, name: str) -> None:
+        """Open an item's card with its price, effect, stock and the actions you can take."""
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
+        item = await self.bot.db.economy.get_item(ctx.guild.id, name)
+        if item is None:
+            await ctx.send_error(f"No item named **{name}** exists in the shop.")
+            return
+        await self._send_browser(ctx, ItemBrowser(self, ctx.author, mode='shop', item_id=item['id']))
 
     @shop.command(
         "add",
@@ -541,6 +765,14 @@ class Economy(Cog):
         value="Effect payload: the cash amount (cash/lootbox) or the bonus percent (boosts).",
         duration="How long boost effects last, in minutes.",
         role="The role a role item grants.",
+        emoji="An emoji shown before the item's name.",
+        rarity="Cosmetic rarity tier (sorting and colour).",
+        stock="Limited stock; leave empty for unlimited.",
+        limit="Most one member may hold at once; leave empty for unlimited.",
+        required_role="Only members with this role may buy it.",
+        available_for='How long it stays on sale, e.g. "7d" or "2 weeks"; leave empty for always.',
+        remove_role="A role taken away from the member when the item is used.",
+        reply_message="An extra line shown when the item is used.",
         description="A description.",
     )
     async def shop_add(
@@ -552,6 +784,14 @@ class Economy(Cog):
         value: commands.Range[int, 1] | None = None,
         duration: commands.Range[int, 1] | None = None,
         role: discord.Role | None = None,
+        emoji: str | None = None,
+        rarity: RarityChoice = "common",
+        stock: commands.Range[int, 0, MAX_ITEM_STOCK] | None = None,
+        limit: commands.Range[int, 1] | None = None,
+        required_role: discord.Role | None = None,
+        available_for: str | None = None,
+        remove_role: discord.Role | None = None,
+        reply_message: commands.Range[str, 1, REPLY_LIMIT] | None = None,
         *,
         description: str | None = None,
     ) -> None:
@@ -564,6 +804,10 @@ class Economy(Cog):
         - **xp_boost**: +`value`% leveling XP for `duration` minutes.
         - **loot_boost**: +`value`% fish/hunt payouts for `duration` minutes.
         - **rob_shield**: blocks rob attempts against the user for `duration` minutes.
+
+        Emoji, rarity, stock, per-member limit, a required role, an end date
+        (`available_for`), a role to remove on use and a reply message are optional
+        and can be changed later with `shop edit`.
         """
         assert ctx.guild is not None
         effect_value = value
@@ -579,23 +823,136 @@ class Economy(Cog):
                 return
             effect_value = role.id
 
-        error = validate_item_effect(effect, effect_value, duration)
+        error = validate_item_effect(effect, effect_value, duration) or validate_item_meta(
+            name, rarity=rarity, reply_message=reply_message
+        )
+        until = None
+        if available_for is not None:
+            try:
+                until = self._parse_until(available_for)
+            except commands.BadArgument:
+                error = error or 'Could not parse `available_for`. Try something like "7d" or "2 weeks".'
+        if emoji is not None and not self._valid_emoji(emoji):
+            error = error or "That doesn't look like an emoji."
         if error:
             await ctx.send_error(error)
             return
 
         record = await self.bot.db.economy.create_item(
-            ctx.guild.id, name, description, price, effect, effect_value, duration
+            ctx.guild.id, name.strip(), description, price, effect, effect_value, duration
         )
         if record is None:
             await ctx.send_error(f"An item named **{name}** already exists.")
             return
+        meta = {
+            "emoji": emoji.strip() if emoji else None,
+            "rarity": rarity,
+            "stock": stock,
+            "max_per_user": limit,
+            "required_role_id": required_role.id if required_role and not required_role.is_default() else None,
+            "available_until": until,
+            "remove_role_id": remove_role.id if remove_role and not remove_role.is_default() else None,
+            "reply_message": reply_message,
+        }
+        record = await self.bot.db.economy.update_item(ctx.guild.id, record["id"], meta) or record
 
         effect_line = self._effect_line(ctx.guild, record)
         await ctx.send_success(
-            f"Added **{name}** to the shop for {Emojis.Economy.cash} **{fnumb(price)}**."
+            f"Added {item_emoji(record)} **{record['name']}** to the shop for {Emojis.Economy.cash} **{fnumb(price)}**."
             + (f"\n\N{SMALL BLUE DIAMOND} {effect_line}" if effect_line else "")
         )
+
+    @shop.command(
+        "edit",
+        description="Change a shop item's price, look, stock or limits.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.admin,
+    )
+    @describe(
+        name="The item to edit.",
+        new_name="Rename the item.",
+        price="The new purchase price.",
+        emoji="A new emoji (type 'none' to remove it).",
+        rarity="The new rarity tier.",
+        stock="Units left for sale; -1 makes it unlimited.",
+        limit="Most one member may hold; 0 removes the limit.",
+        required_role="Only members with this role may buy it; pick @everyone to open it to all.",
+        available_for="Stay on sale for this long from now, e.g. '7d' ('none' = always).",
+        remove_role="Role taken away on use; pick @everyone to stop removing one.",
+        reply_message="Extra line shown on use ('none' removes it).",
+        description="The new description (type 'none' to remove it).",
+    )
+    @app_commands.autocomplete(name=shop_item_autocomplete)  # type: ignore
+    async def shop_edit(
+        self,
+        ctx: Context,
+        name: str,
+        new_name: str | None = None,
+        price: commands.Range[int, 1] | None = None,
+        emoji: str | None = None,
+        rarity: RarityChoice | None = None,
+        stock: commands.Range[int, -1, MAX_ITEM_STOCK] | None = None,
+        limit: commands.Range[int, 0] | None = None,
+        required_role: discord.Role | None = None,
+        available_for: str | None = None,
+        remove_role: discord.Role | None = None,
+        reply_message: str | None = None,
+        *,
+        description: str | None = None,
+    ) -> None:
+        """Edit a shop item in place — owned copies keep working, unlike remove + add."""
+        assert ctx.guild is not None
+        item = await self.bot.db.economy.get_item(ctx.guild.id, name)
+        if item is None:
+            await ctx.send_error(f"No item named **{name}** exists.")
+            return
+
+        values: dict[str, Any] = {}
+        if new_name is not None:
+            values["name"] = new_name.strip()
+        if price is not None:
+            values["price"] = price
+        if emoji is not None:
+            if emoji.lower() != "none" and not self._valid_emoji(emoji):
+                await ctx.send_error("That doesn't look like an emoji.")
+                return
+            values["emoji"] = None if emoji.lower() == "none" else emoji.strip()
+        if rarity is not None:
+            values["rarity"] = rarity
+        if stock is not None:
+            values["stock"] = None if stock < 0 else stock
+        if limit is not None:
+            values["max_per_user"] = limit or None
+        if required_role is not None:
+            values["required_role_id"] = None if required_role.is_default() else required_role.id
+        if available_for is not None:
+            try:
+                values["available_until"] = None if available_for.lower() == "none" else self._parse_until(available_for)
+            except commands.BadArgument:
+                await ctx.send_error('Could not parse `available_for`. Try "7d", "2 weeks" or "none".')
+                return
+        if remove_role is not None:
+            values["remove_role_id"] = None if remove_role.is_default() else remove_role.id
+        if reply_message is not None:
+            values["reply_message"] = None if reply_message.lower() == "none" else reply_message
+        if description is not None:
+            values["description"] = None if description.lower() == "none" else description
+
+        if not values:
+            await ctx.send_error("Nothing to change — pass at least one field.")
+            return
+        if error := validate_item_meta(
+            values.get("name"), rarity=values.get("rarity"), reply_message=values.get("reply_message")
+        ):
+            await ctx.send_error(error)
+            return
+
+        record = await self.bot.db.economy.update_item(ctx.guild.id, item["id"], values)
+        if record is None:
+            await ctx.send_error(f"An item named **{values.get('name')}** already exists.")
+            return
+        changed = ", ".join(f"`{key}`" for key in values)
+        await ctx.send_success(f"Updated {item_emoji(record)} **{record['name']}** ({changed}).")
 
     @shop.command(
         "remove",
@@ -609,188 +966,84 @@ class Economy(Cog):
     async def shop_remove(self, ctx: Context, *, name: str) -> None:
         """Remove an item from the server shop (also clears it from inventories)."""
         assert ctx.guild is not None
-        record = await self.bot.db.economy.delete_item(ctx.guild.id, name)
-        if record is None:
+        item = await self.bot.db.economy.get_item(ctx.guild.id, name)
+        if item is None:
             await ctx.send_error(f"No item named **{name}** exists.")
             return
-        await ctx.send_success(f"Removed **{record['name']}** from the shop.")
+        confirm = await ctx.confirm(
+            f"Remove **{item['name']}** from the shop? Every copy members own is deleted too. "
+            f"To just stop selling it, use `shop edit {item['name']} stock:0` instead."
+        )
+        if not confirm:
+            await ctx.send_info("Nothing was removed.")
+            return
+        await self.bot.db.economy.delete_item(ctx.guild.id, item["name"])
+        await ctx.send_success(f"Removed **{item['name']}** from the shop.")
 
-    @command("buy", description="Buy an item from the shop.", guild_only=True, hybrid=True)
+    @command("buy", description="Buy an item from the shop.", guild_only=True, hybrid=True, extras={"example": "buy Lucky Charm 2"})
     @describe(name="The item to buy.", quantity="How many to buy.")
     @app_commands.autocomplete(name=shop_item_autocomplete)  # type: ignore
     async def buy(self, ctx: Context, name: str, quantity: commands.Range[int, 1] = 1) -> None:
         """Buy an item from the shop with your cash."""
-        assert ctx.guild is not None
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
         item = await self.bot.db.economy.get_item(ctx.guild.id, name)
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists in the shop.")
             return
+        await self._send_result(ctx, await self.buy_item_action(ctx.author, item["id"], quantity))
 
-        total = item["price"] * quantity
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        if balance.cash < total:
-            await ctx.send_error(
-                f"You need {Emojis.Economy.cash} **{fnumb(total)}** but only have **{fnumb(balance.cash)}**."
-            )
-            return
-
-        await balance.remove(cash=total)
-        await self.bot.db.economy.add_to_inventory(ctx.author.id, ctx.guild.id, item["id"], quantity)
-        await ctx.send_success(
-            f"Bought **{quantity}× {item['name']}** for {Emojis.Economy.cash} **{fnumb(total)}**."
-        )
-        await self._sync_achievements(ctx)
-
-    @command("sell", description="Sell an item back to the shop.", guild_only=True, hybrid=True)
+    @command("sell", description="Sell an item back to the shop.", guild_only=True, hybrid=True, extras={"example": "sell Lucky Charm 1"})
     @describe(name="The item to sell.", quantity="How many to sell.")
     @app_commands.autocomplete(name=owned_item_autocomplete)  # type: ignore
     async def sell(self, ctx: Context, name: str, quantity: commands.Range[int, 1] = 1) -> None:
         """Sell an item from your inventory back for half its price."""
-        assert ctx.guild is not None
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
         item = await self.bot.db.economy.get_item(ctx.guild.id, name)
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists in the shop.")
             return
+        await self._send_result(ctx, await self.sell_item_action(ctx.author, item["id"], quantity))
 
-        owned = await self.bot.db.economy.get_quantity(ctx.author.id, ctx.guild.id, item["id"])
-        if owned < quantity:
-            await ctx.send_error(f"You only own **{owned}× {item['name']}**.")
-            return
-
-        payout = sell_price(item["price"]) * quantity
-        await self.bot.db.economy.remove_from_inventory(ctx.author.id, ctx.guild.id, item["id"], quantity)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=payout)
-        await ctx.send_success(
-            f"Sold **{quantity}× {item['name']}** for {Emojis.Economy.cash} **{fnumb(payout)}**."
-        )
-
-    @command("inventory", aliases=["inv"], description="Show your or another member's items.", guild_only=True, hybrid=True)
+    @command("inventory", aliases=["inv"], description="Show your or another member's items.", guild_only=True, hybrid=True, extras={"example": "inventory @member"})
     @describe(member="The member whose inventory to show.")
     async def inventory(
         self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None
     ) -> None:
-        """Show the items a member owns."""
-        assert ctx.guild is not None
-        user = member or ctx.author
-        rows = await self.bot.db.economy.get_inventory(user.id, ctx.guild.id)
-        if not rows:
-            await ctx.send_info(f"**{user.display_name}** doesn't own any items.")
-            return
+        """Your items in one card: filter, open an item, then use, sell or gift it.
 
-        total_value = sum(sell_price(row["price"]) * row["quantity"] for row in rows)
-        total_items = sum(row["quantity"] for row in rows)
+        Viewing someone else's inventory is read-only.
+        """
+        assert isinstance(ctx.author, discord.Member)
+        await self._send_browser(ctx, ItemBrowser(self, ctx.author, mode='inventory', target=member))
 
-        entries = []
-        for row in rows:
-            unit = sell_price(row["price"])
-            line_value = unit * row["quantity"]
-            line = (
-                f"**{row['name']}**  ×{row['quantity']}\n"
-                f"\N{SMALL ORANGE DIAMOND} {Emojis.Economy.cash} **{fnumb(line_value)}** "
-                f"*(sell {fnumb(unit)} each)*"
-            )
-            effect_line = self._effect_line(ctx.guild, row)
-            if effect_line:
-                line += f"\n\N{SMALL BLUE DIAMOND} {effect_line}"
-            entries.append(line)
-
-        boosts = await self.bot.db.economy.get_active_boosts(user.id, ctx.guild.id)
-        boost_lines = "".join(f"{boost_display_line(row)}\n" for row in boosts)
-
-        embed = discord.Embed(
-            description=(
-                f"{Emojis.Economy.cash} Total sell value: **{fnumb(total_value)}**\n"
-                f"\N{PACKAGE} **{pluralize(total_items):item}** across "
-                f"**{pluralize(len(rows)):unique type}**\n"
-                f"{boost_lines}\n"
-            ),
-            colour=helpers.Colour.white(),
-        )
-        embed.set_author(name=f"{user.display_name}'s Inventory", icon_url=get_asset_url(user))
-        embed.set_thumbnail(url=get_asset_url(user))
-        await LinePaginator.start(ctx, entries=entries, embed=embed, location="description")
-
-    @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True, bot_permissions=[discord.Permissions.manage_roles])
-    @describe(name="The item to use.")
+    @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True, extras={"example": "use Lootbox"}, bot_permissions=[discord.Permissions.manage_roles])
+    @describe(name="The item to use.", quantity="How many to use (vouchers and lootboxes only).")
     @app_commands.autocomplete(name=owned_item_autocomplete)  # type: ignore
-    async def use(self, ctx: Context, *, name: str) -> None:
-        """Use (consume one of) an item you own — what happens depends on the item's effect.
+    async def use(self, ctx: Context, name: str, quantity: commands.Range[int, 1, 100] = 1) -> None:
+        """Use (consume) an item you own — what happens depends on the item's effect.
 
         Vouchers redeem for cash, lootboxes roll a random payout, role items grant
-        their role, and boost items activate a timed XP or loot multiplier.
+        their role, and boost items activate a timed XP or loot multiplier. Only
+        vouchers and lootboxes can be used several at once.
         """
-        assert ctx.guild is not None
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
         item = await self.bot.db.economy.get_item(ctx.guild.id, name)
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists in the shop.")
             return
+        await self._send_result(ctx, await self.use_item_action(ctx.author, item["id"], quantity))
 
-        owned = await self.bot.db.economy.get_quantity(ctx.author.id, ctx.guild.id, item["id"])
-        if owned < 1:
-            await ctx.send_error(f"You don't own any **{item['name']}**.")
+    @command("trade", description="Trade items and cash with another member.", guild_only=True, hybrid=True, extras={"example": "trade @member"})
+    @describe(member="Who to trade with.")
+    async def trade(self, ctx: Context, member: Annotated[discord.Member, converter.MemberConverter]) -> None:
+        """Open a two-sided trade: both of you add items or cash, both confirm, then it happens at once."""
+        assert isinstance(ctx.author, discord.Member)
+        if error := trade_error(ctx.author.id, member.id, partner_is_bot=member.bot):
+            await ctx.send_error(error)
             return
-
-        effect: str = item.get("effect") or "none"
-        value: int = item.get("effect_value") or 0
-        duration: int = item.get("duration_minutes") or 0
-        if validate_item_effect(effect, value or None, duration or None) is not None:
-            # Misconfigured (e.g. pre-dates validation) - fall back to a plain collectible.
-            effect = "none"
-
-        left = f"You have **{owned - 1}** left."
-
-        if effect == "cash":
-            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-            await balance.add(cash=value)
-            message = f"You redeemed **{item['name']}** for {Emojis.Economy.cash} **{fnumb(value)}**. {left}"
-        elif effect == "lootbox":
-            payout = roll_lootbox(value)
-            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-            await balance.add(cash=payout)
-            flavour = (
-                "\N{PARTY POPPER} Jackpot!" if payout >= value * 2
-                else "Unlucky..." if payout < value // 2
-                else "Not bad!"
-            )
-            message = (
-                f"You opened **{item['name']}** and found {Emojis.Economy.cash} **{fnumb(payout)}**. {flavour} {left}"
-            )
-        elif effect == "role":
-            assert isinstance(ctx.author, discord.Member)
-            role = ctx.guild.get_role(value)
-            if role is None:
-                await ctx.send_error("The role this item grants no longer exists — ask an admin to fix the item.")
-                return
-            if role in ctx.author.roles:
-                await ctx.send_error(f"You already have the **{role.name}** role; the item was not consumed.")
-                return
-            try:
-                await ctx.author.add_roles(role, reason=f"Used shop item {item['name']}")
-            except discord.HTTPException:
-                await ctx.send_error(f"I couldn't grant **{role.name}** — check my role hierarchy and permissions.")
-                return
-            message = f"You used **{item['name']}** and received the **{role.name}** role. {left}"
-        elif effect in ("xp_boost", "loot_boost"):
-            kind = "xp" if effect == "xp_boost" else "loot"
-            expires = await self.bot.db.economy.add_boost(
-                ctx.author.id, ctx.guild.id, kind, boost_multiplier(value), duration
-            )
-            when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), "R")
-            message = (
-                f"You activated **{item['name']}**: **+{value}%** {BOOST_LABELS[kind]}, ending {when}. {left}"
-            )
-        elif effect == "rob_shield":
-            expires = await self.bot.db.economy.add_boost(ctx.author.id, ctx.guild.id, "shield", 1.0, duration)
-            when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), "R")
-            message = (
-                f"\N{SHIELD} You activated **{item['name']}**: rob attempts against you are blocked until {when}. {left}"
-            )
-        else:
-            message = f"You used **{item['name']}**. Nothing obvious happened — must be a collectible. {left}"
-
-        await self.bot.db.economy.remove_from_inventory(ctx.author.id, ctx.guild.id, item["id"], 1)
-        await ctx.send_success(message)
+        view = TradeView(self, ctx.author, member)
+        await view.build()
+        view.message = await ctx.send(view=view)
 
     # -- earning activities ----------------------------------------------
 
@@ -919,7 +1172,7 @@ class Economy(Cog):
         view = SearchView(ctx.author, options, resolve)
         view.message = await ctx.send("\N{RIGHT-POINTING MAGNIFYING GLASS} **Where do you want to search?**", view=view)
 
-    @command("work", description="Work a shift at your job.", guild_only=True)
+    @command("work", description="Work a shift at your job.", guild_only=True, extras={"example": "work"})
     @cooldown(1, WORK_COOLDOWN, commands.BucketType.member)
     async def work(self, ctx: Context) -> None:
         """Work a shift at your current job.
@@ -959,31 +1212,8 @@ class Economy(Cog):
 
     @group("job", fallback="info", description="View and manage your job.", guild_only=True, hybrid=True)
     async def job(self, ctx: Context) -> None:
-        """Show your current job, lifetime shifts and progress to the next rung."""
-        assert ctx.guild is not None
-        row = await self.bot.db.economy.get_job(ctx.author.id, ctx.guild.id)
-        current = get_job(row["job_id"] if row else None)
-        shifts = row["shifts"] if row else 0
-
-        embed = discord.Embed(colour=helpers.Colour.white())
-        embed.set_author(name=f"{ctx.author.display_name}'s Career", icon_url=get_asset_url(ctx.author))
-        embed.add_field(name="Job", value=f"{current.emoji} **{current.name}**")
-        embed.add_field(name="Pay per Shift", value=f"{Emojis.Economy.cash} {fnumb(current.pay_min)}-{fnumb(current.pay_max)}")
-        embed.add_field(name="Lifetime Shifts", value=f"**{fnumb(shifts)}**")
-
-        nxt = next((j for j in JOB_LADDER if j.shifts_required > shifts), None)
-        if nxt is not None:
-            embed.add_field(
-                name="Next Unlock",
-                value=(
-                    f"{nxt.emoji} **{nxt.name}** — {progress_bar(shifts, nxt.shifts_required)} "
-                    f"{shifts}/{nxt.shifts_required} shifts"
-                ),
-                inline=False,
-            )
-        else:
-            embed.add_field(name="Next Unlock", value="You've reached the top of the ladder. \N{ROCKET}", inline=False)
-        await ctx.send(embed=embed)
+        """Show your current job, lifetime shifts and progress to the next rung; switch jobs from the menu."""
+        await self._open_hub(ctx, 'job')
 
     @job.command("list", description="Show the career ladder.", guild_only=True)
     async def job_list(self, ctx: Context) -> None:
@@ -1002,44 +1232,41 @@ class Economy(Cog):
                 f"{Emojis.Economy.cash} {fnumb(ladder_job.pay_min)}-{fnumb(ladder_job.pay_max)}/shift "
                 f"*(needs {ladder_job.shifts_required} shifts)*"
             )
+        await ctx.send(view=make_notice(
+            "Career Ladder", "\n".join(lines),
+            footer=f"You have worked {fnumb(shifts)} shifts. Apply with `job apply <name>`.",
+        ))
 
-        embed = discord.Embed(
-            title="Career Ladder",
-            description="\n".join(lines),
-            colour=helpers.Colour.white(),
+    async def job_apply_action(self, member: discord.Member, name: str) -> tuple[bool, str]:
+        """Switch ``member`` to the job called ``name`` (id or name) if unlocked; returns ``(ok, message)``."""
+        wanted = name.strip().lower()
+        target = next((j for j in JOB_LADDER if j.id == wanted or j.name.lower() == wanted), None)
+        if target is None:
+            return False, f"No job named **{name}** exists. See `job list`."
+
+        row = await self.bot.db.economy.get_job(member.id, member.guild.id)
+        shifts = row["shifts"] if row else 0
+        if row and row["job_id"] == target.id:
+            return False, f"You already work as **{target.name}**."
+        if target.shifts_required > shifts:
+            return False, f"**{target.name}** requires **{target.shifts_required}** lifetime shifts — you have **{shifts}**."
+
+        await self.bot.db.economy.set_job(member.id, member.guild.id, target.id)
+        message = (
+            f"{target.emoji} You are now employed as **{target.name}** "
+            f"({Emojis.Economy.cash} {fnumb(target.pay_min)}-{fnumb(target.pay_max)} per shift)."
         )
-        embed.set_footer(text=f"You have worked {fnumb(shifts)} shifts. Apply with `job apply <name>`.")
-        await ctx.send(embed=embed)
+        if unlocked := await self._award_achievements(member.id, member.guild.id):
+            message += f"\n\N{TROPHY} {unlocked}"
+        return True, message
 
     @job.command("apply", description="Apply for a job on the ladder.", guild_only=True)
     @describe(name="The job to apply for.")
     @app_commands.autocomplete(name=job_autocomplete)  # type: ignore
     async def job_apply(self, ctx: Context, *, name: str) -> None:
         """Apply for a job you've unlocked with lifetime shifts."""
-        assert ctx.guild is not None
-        wanted = name.strip().lower()
-        target = next((j for j in JOB_LADDER if j.id == wanted or j.name.lower() == wanted), None)
-        if target is None:
-            await ctx.send_error(f"No job named **{name}** exists. See `job list`.")
-            return
-
-        row = await self.bot.db.economy.get_job(ctx.author.id, ctx.guild.id)
-        shifts = row["shifts"] if row else 0
-        if row and row["job_id"] == target.id:
-            await ctx.send_error(f"You already work as **{target.name}**.")
-            return
-        if target.shifts_required > shifts:
-            await ctx.send_error(
-                f"**{target.name}** requires **{target.shifts_required}** lifetime shifts — you have **{shifts}**."
-            )
-            return
-
-        await self.bot.db.economy.set_job(ctx.author.id, ctx.guild.id, target.id)
-        await ctx.send_success(
-            f"{target.emoji} You are now employed as **{target.name}** "
-            f"({Emojis.Economy.cash} {fnumb(target.pay_min)}-{fnumb(target.pay_max)} per shift)."
-        )
-        await self._sync_achievements(ctx)
+        assert isinstance(ctx.author, discord.Member)
+        await self._send_result(ctx, await self.job_apply_action(ctx.author, name))
 
     @job.command("quit", description="Quit your job.", guild_only=True)
     async def job_quit(self, ctx: Context) -> None:
@@ -1205,22 +1432,7 @@ class Economy(Cog):
     @describe(member="The member whose perks to view.")
     async def perks(self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None) -> None:
         """View active boosts and perks for yourself or another member."""
-        assert ctx.guild is not None
-        user = member or ctx.author
-        boosts = await self.bot.db.economy.get_active_boosts(user.id, ctx.guild.id)
-        if not boosts:
-            await ctx.send_info(f"**{user.display_name}** has no active perks.")
-            return
-
-        lines = [boost_display_line(row) for row in boosts]
-
-        embed = discord.Embed(
-            title=f"{user.display_name}'s Active Perks",
-            description="\n".join(lines),
-            colour=helpers.Colour.white(),
-        )
-        embed.set_thumbnail(url=get_asset_url(user))
-        await ctx.send(embed=embed)
+        await self._open_hub(ctx, "perks", member)
 
     # -- gifting ------------------------------------------------------------
 
@@ -1235,29 +1447,12 @@ class Economy(Cog):
         quantity: commands.Range[int, 1] = 1,
     ) -> None:
         """Gift items you own to another member (no cash involved)."""
-        assert ctx.guild is not None
-        if member.bot:
-            await ctx.send_error("Cannot gift items to a bot.")
-            return
-        if member.id == ctx.author.id:
-            await ctx.send_error("You cannot gift items to yourself.")
-            return
-
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
         item = await self.bot.db.economy.get_item(ctx.guild.id, name)
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists in the shop.")
             return
-
-        moved = await self.bot.db.economy.transfer_item(ctx.author.id, member.id, ctx.guild.id, item["id"], quantity)
-        if not moved:
-            owned = await self.bot.db.economy.get_quantity(ctx.author.id, ctx.guild.id, item["id"])
-            await ctx.send_error(f"You only own **{owned}× {item['name']}**.")
-            return
-
-        await ctx.send_success(
-            f"\N{WRAPPED PRESENT} You gifted **{quantity}× {item['name']}** to **{member.display_name}**."
-        )
-        await self._bump_quests(ctx, "gift", quantity)
+        await self._send_result(ctx, await self.gift_item_action(ctx.author, member, item["id"], quantity))
 
     # -- prestige ------------------------------------------------------------
 
@@ -1309,107 +1504,24 @@ class Economy(Cog):
         self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None
     ) -> None:
         """Show a member's achievement badges — earned and still locked."""
-        assert ctx.guild is not None
-        user = member or ctx.author
-        if user.id == ctx.author.id:
+        if member is None or member.id == ctx.author.id:
             # Catch up on anything qualified but not yet awarded before displaying.
             await self._sync_achievements(ctx, announce=False)
-
-        earned_rows = await self.bot.db.economy.get_achievements(user.id, ctx.guild.id)
-        earned = {row["achievement"]: row["earned_at"] for row in earned_rows}
-
-        entries = []
-        for achievement in ACHIEVEMENTS:
-            if achievement.id in earned:
-                when = discord.utils.format_dt(earned[achievement.id].replace(tzinfo=datetime.UTC), "d")
-                entries.append(f"{achievement.emoji} **{achievement.name}** — {achievement.description} *(earned {when})*")
-            else:
-                entries.append(f"\N{LOCK} *{achievement.name}* — {achievement.description}")
-
-        embed = discord.Embed(
-            description=f"Unlocked **{len(earned)}/{len(ACHIEVEMENTS)}** badges.\n\n",
-            colour=helpers.Colour.white(),
-        )
-        embed.set_author(name=f"{user.display_name}'s Achievements", icon_url=get_asset_url(user))
-        await LinePaginator.start(ctx, entries=entries, embed=embed, location="description")
+        await self._open_hub(ctx, "achievements", member)
 
     # -- daily quests ------------------------------------------------------------
 
     @command("quests", aliases=["quest"], description="View your daily quest board.", guild_only=True, hybrid=True)
     async def quests(self, ctx: Context) -> None:
         """Show today's quests: three rotating tasks with cash rewards, reset daily (UTC)."""
-        assert ctx.guild is not None
-        today = datetime.datetime.now(datetime.UTC).date()
-        rows = await self._ensure_quests(ctx.author.id, ctx.guild.id, today)
-        board = {q.key: q for q in generate_daily_quests(ctx.guild.id, ctx.author.id, today)}
-
-        lines = []
-        for row in rows:
-            quest = board.get(row["quest"])
-            description = quest.description if quest else row["quest"]
-            if row["completed"]:
-                lines.append(f"\N{WHITE HEAVY CHECK MARK} ~~{description}~~ — {Emojis.Economy.cash} **{fnumb(row['reward'])}**")
-            else:
-                lines.append(
-                    f"\N{SCROLL} **{description}**\n"
-                    f"`{progress_bar(row['progress'], row['goal'])}` {fnumb(row['progress'])}/{fnumb(row['goal'])} "
-                    f"— {Emojis.Economy.cash} **{fnumb(row['reward'])}**"
-                )
-
-        resets = datetime.datetime.combine(
-            today + datetime.timedelta(days=1), datetime.time(), tzinfo=datetime.UTC)
-        embed = discord.Embed(
-            title="Daily Quests",
-            description="\n".join(lines),
-            colour=helpers.Colour.white(),
-        )
-        embed.set_footer(text="New quests every day (UTC).")
-        embed.add_field(name="Resets", value=discord.utils.format_dt(resets, "R"))
-        await ctx.send(embed=embed)
+        await self._open_hub(ctx, "quests")
 
     # -- pets ----------------------------------------------------------------------
 
     @group("pet", fallback="info", description="Manage your pet companion.", guild_only=True, hybrid=True)
     async def pet(self, ctx: Context) -> None:
-        """Show your pet: species, hunger and unclaimed passive earnings."""
-        assert ctx.guild is not None
-        row = await self.bot.db.economy.get_pet(ctx.author.id, ctx.guild.id)
-        if row is None:
-            await ctx.send_info(
-                "You don't have a pet. Adopt one with `pet adopt` — see the species and prices with `pet shop`.")
-            return
-
-        species = get_species(row["species"])
-        if species is None:
-            await ctx.send_error("Your pet's species no longer exists — ask the developer what happened.")
-            return
-
-        now = ctx.message.created_at
-        last_fed = row["last_fed"].replace(tzinfo=datetime.UTC)
-        last_claim = row["last_claim"].replace(tzinfo=datetime.UTC)
-        claim = compute_pet_claim(species, last_claim, last_fed, now=now)
-        hunger_labels = {
-            "fed": "\N{SMILING FACE WITH SMILING EYES} Well fed",
-            "hungry": "\N{FACE WITH OPEN MOUTH} Hungry (earning half rate)",
-            "starving": "\N{FACE SCREAMING IN FEAR} Starving (earning nothing!)",
-        }
-
-        embed = discord.Embed(colour=helpers.Colour.white())
-        embed.set_author(name=f"{ctx.author.display_name}'s Pet", icon_url=get_asset_url(ctx.author))
-        embed.add_field(name="Pet", value=f"{species.emoji} **{row['name']}** ({species.name})")
-        embed.add_field(name="Hunger", value=hunger_labels[claim.hunger.value])
-        embed.add_field(
-            name="Earnings",
-            value=(
-                f"{Emojis.Economy.cash} **{fnumb(claim.amount)}** unclaimed "
-                f"*(rate {fnumb(species.hourly_rate)}/h, stores up to {species.storage_hours}h)*"
-            ),
-            inline=False,
-        )
-        embed.add_field(name="Feeding Cost", value=f"{Emojis.Economy.cash} {fnumb(species.feed_cost)}")
-        embed.add_field(name="Adopted", value=discord.utils.format_dt(row["adopted_at"].replace(tzinfo=datetime.UTC), "d"))
-        embed.set_footer(text="Feed with `pet feed`, collect with `pet claim`.")
-        await ctx.send(embed=embed)
+        """Show your pet: species, hunger and unclaimed earnings, with Feed and Claim buttons."""
+        await self._open_hub(ctx, "pet")
 
     @pet.command("shop", description="Show the adoptable species.", guild_only=True)
     async def pet_shop(self, ctx: Context) -> None:
@@ -1420,9 +1532,10 @@ class Economy(Cog):
             f"feeding costs {fnumb(species.feed_cost)}"
             for species in PET_SPECIES
         ]
-        embed = discord.Embed(title="Pet Adoption Centre", description="\n".join(lines), colour=helpers.Colour.white())
-        embed.set_footer(text="Adopt with `pet adopt <species> [name]` — one pet per member.")
-        await ctx.send(embed=embed)
+        await ctx.send(view=make_notice(
+            "Pet Adoption Centre", "\n".join(lines),
+            footer="Adopt with `pet adopt <species> [name]` — one pet per member.",
+        ))
 
     @pet.command("adopt", description="Adopt a pet.", guild_only=True)
     @describe(species="The species to adopt.", name="Your pet's name (defaults to the species name).")
@@ -1453,46 +1566,37 @@ class Economy(Cog):
         )
         await self._sync_achievements(ctx)
 
-    @pet.command("feed", description="Feed your pet.", guild_only=True)
-    async def pet_feed(self, ctx: Context) -> None:
-        """Feed your pet so it keeps earning at full rate."""
-        assert ctx.guild is not None
-        row = await self.bot.db.economy.get_pet(ctx.author.id, ctx.guild.id)
+    async def pet_feed_action(self, member: discord.Member) -> tuple[bool, str]:
+        """Feed ``member``'s pet; returns ``(ok, message)``."""
+        row = await self.bot.db.economy.get_pet(member.id, member.guild.id)
         if row is None:
-            await ctx.send_error("You don't have a pet to feed.")
-            return
+            return False, "You don't have a pet to feed."
         species = get_species(row["species"])
         if species is None:
-            await ctx.send_error("Your pet's species no longer exists.")
-            return
+            return False, "Your pet's species no longer exists."
 
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        balance = await self.bot.db.get_user_balance(member.id, member.guild.id)
         if balance.cash < species.feed_cost:
-            await ctx.send_error(
+            return False, (
                 f"Feeding **{row['name']}** costs {Emojis.Economy.cash} **{fnumb(species.feed_cost)}** — "
                 f"you only have **{fnumb(balance.cash)}** in cash."
             )
-            return
 
         await balance.remove(cash=species.feed_cost)
-        now = ctx.message.created_at.replace(tzinfo=None)
-        await self.bot.db.economy.update_pet(ctx.author.id, ctx.guild.id, {"last_fed": now})
-        await ctx.send_success(f"{species.emoji} **{row['name']}** happily munches away. Fully fed!")
+        await self.bot.db.economy.update_pet(
+            member.id, member.guild.id, {"last_fed": discord.utils.utcnow().replace(tzinfo=None)})
+        return True, f"{species.emoji} **{row['name']}** happily munches away. Fully fed!"
 
-    @pet.command("claim", description="Collect your pet's earnings.", guild_only=True)
-    async def pet_claim(self, ctx: Context) -> None:
-        """Collect the cash your pet gathered since the last claim."""
-        assert ctx.guild is not None
-        row = await self.bot.db.economy.get_pet(ctx.author.id, ctx.guild.id)
+    async def pet_claim_action(self, member: discord.Member) -> tuple[bool, str]:
+        """Collect ``member``'s pet earnings; returns ``(ok, message)``."""
+        row = await self.bot.db.economy.get_pet(member.id, member.guild.id)
         if row is None:
-            await ctx.send_error("You don't have a pet.")
-            return
+            return False, "You don't have a pet."
         species = get_species(row["species"])
         if species is None:
-            await ctx.send_error("Your pet's species no longer exists.")
-            return
+            return False, "Your pet's species no longer exists."
 
-        now = ctx.message.created_at
+        now = discord.utils.utcnow()
         claim = compute_pet_claim(
             species,
             row["last_claim"].replace(tzinfo=datetime.UTC),
@@ -1501,21 +1605,30 @@ class Economy(Cog):
         )
         if claim.amount <= 0:
             if claim.hunger.value == "starving":
-                await ctx.send_error(f"**{row['name']}** is starving and gathered nothing. Feed them first!")
-            else:
-                await ctx.send_info(f"**{row['name']}** hasn't gathered anything yet. Check back later.")
-            return
+                return False, f"**{row['name']}** is starving and gathered nothing. Feed them first!"
+            return False, f"**{row['name']}** hasn't gathered anything yet. Check back later."
 
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
+        scale = await self._payout_scale(member.id, member.guild.id)
         amount = round(claim.amount * scale)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        balance = await self.bot.db.get_user_balance(member.id, member.guild.id)
         await balance.add(cash=amount)
-        await self.bot.db.economy.update_pet(
-            ctx.author.id, ctx.guild.id, {"last_claim": now.replace(tzinfo=None)})
-        await ctx.send_success(
+        await self.bot.db.economy.update_pet(member.id, member.guild.id, {"last_claim": now.replace(tzinfo=None)})
+        return True, (
             f"{species.emoji} **{row['name']}** brought you {Emojis.Economy.cash} "
             f"**{fnumb(amount)}** ({claim.hours:.1f}h of gathering).{self._scale_suffix(scale)}"
         )
+
+    @pet.command("feed", description="Feed your pet.", guild_only=True)
+    async def pet_feed(self, ctx: Context) -> None:
+        """Feed your pet so it keeps earning at full rate."""
+        assert isinstance(ctx.author, discord.Member)
+        await self._send_result(ctx, await self.pet_feed_action(ctx.author))
+
+    @pet.command("claim", description="Collect your pet's earnings.", guild_only=True)
+    async def pet_claim(self, ctx: Context) -> None:
+        """Collect the cash your pet gathered since the last claim."""
+        assert isinstance(ctx.author, discord.Member)
+        await self._send_result(ctx, await self.pet_claim_action(ctx.author))
 
     @pet.command("rename", description="Rename your pet.", guild_only=True)
     @describe(name="The new name.")
@@ -1563,15 +1676,16 @@ class Economy(Cog):
         assert ctx.guild is not None
         settings = await self._settings(ctx.guild.id)
         max_bet = f"{Emojis.Economy.cash} {fnumb(settings.max_bet)}" if settings.max_bet else "*uncapped*"
-
-        embed = discord.Embed(title="Economy Settings", colour=helpers.Colour.white())
-        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
-        embed.add_field(name="Payout Multiplier", value=f"**x{settings.payout_multiplier:g}**")
-        embed.add_field(name="Robbing", value="Enabled" if settings.rob_enabled else "Disabled")
-        embed.add_field(name="Daily Base", value=f"{Emojis.Economy.cash} {fnumb(settings.daily_base)}")
-        embed.add_field(name="Max Casino Bet", value=max_bet)
-        embed.set_footer(text="economy-config multiplier/rob/daily-base/max-bet")
-        await ctx.send(embed=embed)
+        icon = get_asset_url(ctx.guild)  # type: ignore[arg-type]
+        await ctx.send(view=make_notice(
+            "Economy Settings",
+            f"**Payout multiplier** x{settings.payout_multiplier:g}\n"
+            f"**Robbing** {'Enabled' if settings.rob_enabled else 'Disabled'}\n"
+            f"**Daily base** {Emojis.Economy.cash} {fnumb(settings.daily_base)}\n"
+            f"**Max casino bet** {max_bet}",
+            thumbnail=icon or None,
+            footer="economy-config multiplier/rob/daily-base/max-bet",
+        ))
 
     @economy_config.command(
         "multiplier",

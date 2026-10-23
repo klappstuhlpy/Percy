@@ -7,7 +7,7 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.services.economy import GuildEconomySettings, validate_item_effect
+from app.services.economy import GuildEconomySettings, item_category, validate_item_effect, validate_item_meta
 from app.utils import fnumb, get_asset_url
 from config import Emojis
 
@@ -28,11 +28,65 @@ class CreateItemBody(BaseModel):
     effect: str | None = None
     effect_value: int | None = None
     duration_minutes: int | None = None
+    emoji: str | None = None
+    rarity: str = 'common'
+    stock: int | None = None
+    max_per_user: int | None = None
+    required_role_id: int | None = None
+    available_until: datetime.datetime | None = None
+    remove_role_id: int | None = None
+    reply_message: str | None = None
+
+
+class PatchItemBody(BaseModel):
+    """Partial item update; only the fields sent change. Send ``null`` to clear a nullable column."""
+
+    name: str | None = None
+    price: int | None = None
+    description: str | None = None
+    emoji: str | None = None
+    rarity: str | None = None
+    stock: int | None = None
+    max_per_user: int | None = None
+    required_role_id: int | None = None
+    available_until: datetime.datetime | None = None
+    remove_role_id: int | None = None
+    reply_message: str | None = None
+
+
+#: Columns ``PATCH /economy/items/{id}`` may write (the effect is fixed once owned copies exist).
+_ITEM_FIELDS = (
+    'name', 'price', 'description', 'emoji', 'rarity', 'stock', 'max_per_user', 'required_role_id',
+    'available_until', 'remove_role_id', 'reply_message',
+)
+
+
+def _naive_utc(value: datetime.datetime | None) -> datetime.datetime | None:
+    """Timestamps are stored naive UTC; an aware value from the API is converted first."""
+    if value is not None and value.tzinfo is not None:
+        return value.astimezone(datetime.UTC).replace(tzinfo=None)
+    return value
 
 
 class PatchBalanceBody(BaseModel):
     cash: int | None = None
     bank: int | None = None
+
+
+class AdjustBalanceBody(BaseModel):
+    """Signed deltas; the result of either column must stay >= 0."""
+
+    cash: int = 0
+    bank: int = 0
+
+
+class GiveItemBody(BaseModel):
+    item_id: int
+    quantity: int = 1
+
+
+#: Sanity cap on a single delta/grant so a typo cannot overflow the BIGINT columns.
+_MAX_DELTA = 10**12
 
 
 class CreateLotteryBody(BaseModel):
@@ -79,6 +133,15 @@ async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
             'effect': r.get('effect') or 'none',
             'effect_value': r.get('effect_value'),
             'duration_minutes': r.get('duration_minutes'),
+            'emoji': r.get('emoji'),
+            'rarity': r.get('rarity') or 'common',
+            'category': item_category(r.get('effect')).id,
+            'stock': r.get('stock'),
+            'max_per_user': r.get('max_per_user'),
+            'required_role_id': str(r['required_role_id']) if r.get('required_role_id') else None,
+            'available_until': r['available_until'].isoformat() if r.get('available_until') else None,
+            'remove_role_id': str(r['remove_role_id']) if r.get('remove_role_id') else None,
+            'reply_message': r.get('reply_message'),
         }
         for r in items
     ]
@@ -141,7 +204,10 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='name is required')
 
-    error = validate_item_effect(effect, effect_value, duration_minutes)
+    error = validate_item_effect(effect, effect_value, duration_minutes) or validate_item_meta(
+        name, rarity=body.rarity, stock=body.stock, max_per_user=body.max_per_user, price=body.price,
+        reply_message=body.reply_message,
+    )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
@@ -149,6 +215,36 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
         guild.id, name, description, body.price, effect, effect_value, duration_minutes
     )
     if result is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='an item with that name already exists')
+    meta = {
+        key: getattr(body, key)
+        for key in ('emoji', 'rarity', 'stock', 'max_per_user', 'required_role_id', 'remove_role_id', 'reply_message')
+    }
+    meta['available_until'] = _naive_utc(body.available_until)
+    await bot.db.economy.update_item(guild.id, result['id'], meta)
+    return {'ok': True, 'id': result['id']}
+
+
+@router.patch("/economy/items/{item_id}")
+async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: int, body: PatchItemBody) -> dict:
+    values = {key: getattr(body, key) for key in _ITEM_FIELDS if key in body.model_fields_set}
+    if not values:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no fields to update')
+    if values.get('name', '') is None or values.get('price', 1) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='name and price cannot be cleared')
+    if 'available_until' in values:
+        values['available_until'] = _naive_utc(values['available_until'])
+    if 'rarity' in values and values['rarity'] is None:
+        values['rarity'] = 'common'
+    error = validate_item_meta(
+        values.get('name'), rarity=values.get('rarity'), stock=values.get('stock'),
+        max_per_user=values.get('max_per_user'), price=values.get('price'), reply_message=values.get('reply_message'),
+    )
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if await bot.db.economy.get_item_by_id(guild.id, item_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
+    if await bot.db.economy.update_item(guild.id, item_id, values) is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='an item with that name already exists')
     return {'ok': True}
 
@@ -250,4 +346,80 @@ async def create_lottery(guild: GuildDep, bot: BotDep, body: CreateLotteryBody) 
 @router.delete("/economy/lottery")
 async def delete_lottery(guild: GuildDep, bot: BotDep) -> dict:
     await bot.db.economy.delete_lottery(guild.id)
+    return {'ok': True}
+
+
+# ---------------------------------------------------------------------------
+# Public-API support: single-member reads, atomic adjust, inventory, delete-by-id
+# ---------------------------------------------------------------------------
+
+
+def _balance_payload(user_id: int, row) -> dict:
+    cash, bank = (row['cash'], row['bank']) if row else (0, 0)
+    return {'user_id': str(user_id), 'cash': cash, 'bank': bank, 'total': cash + bank}
+
+
+@router.get("/economy/balances/{user_id}")
+async def get_economy_balance(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+    """One member's wallet; a member with no row is a zero wallet (and no row is created)."""
+    return _balance_payload(user_id, await bot.db.users.find_balance_record(user_id, guild.id))
+
+
+@router.post("/economy/balances/{user_id}/adjust")
+async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, body: AdjustBalanceBody) -> dict:
+    if body.cash == 0 and body.bank == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify cash or bank')
+    if abs(body.cash) > _MAX_DELTA or abs(body.bank) > _MAX_DELTA:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='amount too large')
+    row = await bot.db.users.adjust_balance(user_id, guild.id, body.cash, body.bank)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='balance cannot go negative')
+    return _balance_payload(user_id, row)
+
+
+@router.get("/economy/inventory/{user_id}")
+async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+    rows = await bot.db.economy.get_inventory(user_id, guild.id)
+    return {
+        'user_id': str(user_id),
+        'items': [
+            {
+                'item_id': r['item_id'],
+                'name': r['name'],
+                'quantity': r['quantity'],
+                'emoji': r.get('emoji'),
+                'rarity': r.get('rarity') or 'common',
+                'effect': r.get('effect') or 'none',
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/economy/inventory/{user_id}")
+async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: int, body: GiveItemBody) -> dict:
+    if not 1 <= body.quantity <= 10_000:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='quantity must be between 1 and 10000')
+    result, owned = await bot.db.economy.give_item(user_id, guild.id, body.item_id, body.quantity)
+    if result == 'missing':
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
+    if result == 'limit':
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='per-user item limit reached')
+    return {'ok': True, 'item_id': body.item_id, 'quantity': owned}
+
+
+@router.delete("/economy/inventory/{user_id}/{item_id}")
+async def take_economy_item(
+    guild: GuildDep, bot: BotDep, user_id: int, item_id: int, quantity: int = Query(default=1, ge=1, le=10_000)
+) -> dict:
+    left = await bot.db.economy.consume_item(user_id, guild.id, item_id, quantity)
+    if left is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='member does not own that many')
+    return {'ok': True, 'item_id': item_id, 'quantity': left}
+
+
+@router.delete("/economy/items/by-id/{item_id}")
+async def delete_economy_item_by_id(guild: GuildDep, bot: BotDep, item_id: int) -> dict:
+    if await bot.db.economy.delete_item_by_id(guild.id, item_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
     return {'ok': True}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 
@@ -141,8 +141,7 @@ class _HubSelect(discord.ui.Select['EconomyHub']):
     async def callback(self, interaction: discord.Interaction) -> None:
         assert self.view is not None
         self.view.page = self.values[0]
-        await self.view.build()
-        await interaction.edit_original_response(view=self.view)
+        await self.view.refresh(interaction)
 
 
 class EconomyHub(LayoutView):
@@ -151,14 +150,24 @@ class EconomyHub(LayoutView):
     A select menu swaps between pages (overview, quests, career, pet,
     achievements, perks); every switch re-reads the database so the card
     always shows live numbers. Invoker-locked, times out quietly.
+
+    ``page`` opens on a given section (the ``quests``/``pet``/... commands do
+    this). ``target`` shows another member's data read-only: only the page
+    they asked for, with no switcher and no action buttons.
     """
 
-    def __init__(self, cog: Economy, ctx: Context) -> None:
+    def __init__(
+        self, cog: Economy, ctx: Context, *, page: str = 'overview', target: discord.Member | None = None
+    ) -> None:
         super().__init__(timeout=180.0, members=ctx.author, disable_on_timeout=True)
         self.cog = cog
         self.ctx = ctx
-        self.page = 'overview'
+        self.user: discord.Member = target or ctx.author  # type: ignore[assignment]
+        self.own = self.user.id == ctx.author.id
+        self.page = page if page in {p[0] for p in _HUB_PAGES} else 'overview'
         self.message: discord.Message | None = None
+        #: One-line feedback from the last button, shown at the bottom of the card.
+        self.notice: str | None = None
 
     # -- plumbing -----------------------------------------------------------
 
@@ -166,16 +175,53 @@ class EconomyHub(LayoutView):
         """(Re)build the layout for the current page."""
         builder = getattr(self, f'_page_{self.page}')
         container: discord.ui.Container = await builder()
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_HubSelect(self.page)))
+        if self.notice is not None:
+            container.add_item(discord.ui.TextDisplay(self.notice))
+            self.notice = None
+        if self.own:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.ActionRow(_HubSelect(self.page)))
         self.clear_items()
         self.add_item(container)
+
+    async def refresh(self, interaction: discord.Interaction) -> None:
+        await self.build()
+        await interaction.response.edit_message(view=self)
+
+    def _button(
+        self, label: str, callback: Callable[[discord.Interaction], Awaitable[None]], *,
+        style: discord.ButtonStyle = discord.ButtonStyle.secondary, emoji: str | None = None,
+    ) -> discord.ui.Button:
+        button: discord.ui.Button = discord.ui.Button(label=label, style=style, emoji=emoji)
+        button.callback = callback  # type: ignore[assignment]
+        return button
+
+    def _acting(
+        self, action: Callable[[discord.Member], Awaitable[tuple[bool, str]]]
+    ) -> Callable[[discord.Interaction], Awaitable[None]]:
+        """A button callback that runs a cog ``*_action`` and shows its message."""
+        async def callback(interaction: discord.Interaction) -> None:
+            ok, message = await action(self.user)
+            self.notice = f'{Emojis.success if ok else Emojis.error} {message}'
+            await self.refresh(interaction)
+        return callback
+
+    def _browse(self, mode: Literal['shop', 'inventory']) -> Callable[[discord.Interaction], Awaitable[None]]:
+        async def callback(interaction: discord.Interaction) -> None:
+            from app.cogs.economy.item_ui import ItemBrowser  # circular at module level
+
+            browser = ItemBrowser(self.cog, self.user, mode=mode)
+            await browser.build()
+            browser.message = self.message
+            self.stop()
+            await interaction.response.edit_message(view=browser)
+        return callback
 
     def _container(self, body: str) -> discord.ui.Container:
         """A container opened with the member's header section."""
         container = discord.ui.Container(accent_colour=helpers.Colour.brand())
         container.add_item(
-            discord.ui.Section(body, accessory=discord.ui.Thumbnail(get_asset_url(self.ctx.author)))
+            discord.ui.Section(body, accessory=discord.ui.Thumbnail(get_asset_url(self.user)))
         )
         return container
 
@@ -183,7 +229,7 @@ class EconomyHub(LayoutView):
 
     async def _page_overview(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
-        user_id = self.ctx.author.id
+        user_id = self.user.id
         db = self.cog.bot.db
         today = datetime.datetime.now(datetime.UTC).date()
 
@@ -212,7 +258,7 @@ class EconomyHub(LayoutView):
         scale_line = f'\N{CHART WITH UPWARDS TREND} Payout multiplier: **x{scale:.2f}**\n' if scale != 1.0 else ''
 
         container = self._container(
-            f'## {Emojis.Economy.cash} {self.ctx.author.display_name}\'s Economy\n'
+            f'## {Emojis.Economy.cash} {self.user.display_name}\'s Economy\n'
             f'Everything about your standing on **{self.ctx.guild.name}** in one card.'  # type: ignore[union-attr]
         )
         container.add_item(discord.ui.Separator())
@@ -231,13 +277,18 @@ class EconomyHub(LayoutView):
             f'\N{TROPHY} Badges: **{len(earned)}/{len(ACHIEVEMENTS)}** unlocked\n'
             f'\N{HIGH VOLTAGE SIGN} Active boosts: **{len(boosts)}**'
         ))
+        if self.own:
+            container.add_item(discord.ui.ActionRow(
+                self._button('Open inventory', self._browse('inventory'), emoji='\N{SCHOOL SATCHEL}'),
+                self._button('Open shop', self._browse('shop'), emoji='\N{CONVENIENCE STORE}'),
+            ))
         return container
 
     async def _page_quests(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
         today = datetime.datetime.now(datetime.UTC).date()
-        rows = await self.cog._ensure_quests(self.ctx.author.id, guild_id, today)
-        board = {q.key: q for q in generate_daily_quests(guild_id, self.ctx.author.id, today)}
+        rows = await self.cog._ensure_quests(self.user.id, guild_id, today)
+        board = {q.key: q for q in generate_daily_quests(guild_id, self.user.id, today)}
 
         lines = []
         for row in rows:
@@ -262,7 +313,7 @@ class EconomyHub(LayoutView):
 
     async def _page_job(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
-        row = await self.cog.bot.db.economy.get_job(self.ctx.author.id, guild_id)
+        row = await self.cog.bot.db.economy.get_job(self.user.id, guild_id)
         current = get_job(row['job_id'] if row else None)
         shifts = row['shifts'] if row else 0
 
@@ -292,12 +343,27 @@ class EconomyHub(LayoutView):
         )
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay('\n'.join(ladder_lines)))
-        container.add_item(discord.ui.TextDisplay('-# Work with `work`, switch with `job apply <name>`.'))
+        container.add_item(discord.ui.TextDisplay('-# Work with `work`.'))
+        options = [
+            discord.SelectOption(
+                label=j.name, value=j.id, emoji=j.emoji, description=f'{fnumb(j.pay_min)}-{fnumb(j.pay_max)} per shift')
+            for j in JOB_LADDER if j.shifts_required <= shifts and j.id != current.id
+        ]
+        if self.own and options:
+            select: discord.ui.Select = discord.ui.Select(placeholder='Switch to an unlocked job…', options=options)
+
+            async def apply(interaction: discord.Interaction) -> None:
+                ok, message = await self.cog.job_apply_action(self.user, select.values[0])
+                self.notice = f'{Emojis.success if ok else Emojis.error} {message}'
+                await self.refresh(interaction)
+
+            select.callback = apply  # type: ignore[assignment]
+            container.add_item(discord.ui.ActionRow(select))
         return container
 
     async def _page_pet(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
-        row = await self.cog.bot.db.economy.get_pet(self.ctx.author.id, guild_id)
+        row = await self.cog.bot.db.economy.get_pet(self.user.id, guild_id)
         container = self._container('## \N{PAW PRINTS} Pet')
         container.add_item(discord.ui.Separator())
 
@@ -327,16 +393,22 @@ class EconomyHub(LayoutView):
             f'*(rate {fnumb(species.hourly_rate)}/h, stores up to {species.storage_hours}h)*\n'
             f'Feeding costs {Emojis.Economy.cash} **{fnumb(species.feed_cost)}**'
         ))
-        container.add_item(discord.ui.TextDisplay('-# Feed with `pet feed`, collect with `pet claim`.'))
+        if self.own:
+            container.add_item(discord.ui.ActionRow(
+                self._button('Feed', self._acting(self.cog.pet_feed_action), emoji='\N{MEAT ON BONE}'),
+                self._button('Claim', self._acting(self.cog.pet_claim_action), style=discord.ButtonStyle.success,
+                             emoji=Emojis.Economy.cash),
+            ))
         return container
 
     async def _page_achievements(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
-        earned_rows = await self.cog.bot.db.economy.get_achievements(self.ctx.author.id, guild_id)
-        earned = {row['achievement'] for row in earned_rows}
+        earned_rows = await self.cog.bot.db.economy.get_achievements(self.user.id, guild_id)
+        earned = {row['achievement']: row['earned_at'] for row in earned_rows}
 
         lines = [
-            f'{a.emoji} **{a.name}** — {a.description}' if a.id in earned
+            f'{a.emoji} **{a.name}** — {a.description} '
+            f'*(earned {discord.utils.format_dt(earned[a.id].replace(tzinfo=datetime.UTC), "d")})*' if a.id in earned
             else f'\N{LOCK} *{a.name}* — {a.description}'
             for a in ACHIEVEMENTS
         ]
@@ -350,8 +422,8 @@ class EconomyHub(LayoutView):
     async def _page_perks(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
         db = self.cog.bot.db
-        boosts = await db.economy.get_active_boosts(self.ctx.author.id, guild_id)
-        prestige = await db.economy.get_prestige(self.ctx.author.id, guild_id)
+        boosts = await db.economy.get_active_boosts(self.user.id, guild_id)
+        prestige = await db.economy.get_prestige(self.user.id, guild_id)
         settings = await self.cog._settings(guild_id)
 
         lines = [boost_display_line(row) for row in boosts] or ['*No active boosts — usable shop items grant them.*']
@@ -362,7 +434,7 @@ class EconomyHub(LayoutView):
 
         level = prestige
         requirement = prestige_requirement(level)
-        balance = await self.ctx.db.get_user_balance(self.ctx.author.id, guild_id)
+        balance = await self.ctx.db.get_user_balance(self.user.id, guild_id)
 
         container = self._container('## \N{HIGH VOLTAGE SIGN} Perks & Boosts')
         container.add_item(discord.ui.Separator())

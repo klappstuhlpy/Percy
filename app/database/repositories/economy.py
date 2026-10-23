@@ -1,20 +1,28 @@
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING, Any
+
+import asyncpg
 
 from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
-    import datetime
     from collections.abc import Sequence
-
-    import asyncpg
 
 __all__ = (
     'EconomyRepository',
     'LevelingRepository',
 )
+
+
+class _TradeFailed(Exception):
+    """Raised inside the trade transaction to roll it back."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 # -- Economy (shop, inventory, boosts, dailies, lottery) --------------------
@@ -66,6 +74,17 @@ class EconomyRepository(BaseRepository):
         """
         return await self.fetchrow(query, guild_id, name, description, price, effect, effect_value, duration_minutes)
 
+    async def get_item_by_id(self, guild_id: int, item_id: int) -> asyncpg.Record | None:
+        """Fetches a single shop item by id (scoped to the guild)."""
+        return await self.fetchrow('SELECT * FROM economy_items WHERE guild_id = $1 AND id = $2;', guild_id, item_id)
+
+    async def update_item(self, guild_id: int, item_id: int, values: dict[str, Any]) -> asyncpg.Record | None:
+        """Updates a shop item's columns (caller whitelists ``values``); ``None`` on a name clash or missing item."""
+        try:
+            return await self.update_returning('economy_items', ('guild_id', 'id'), (guild_id, item_id), values)
+        except asyncpg.UniqueViolationError:
+            return None
+
     async def delete_item(self, guild_id: int, name: str) -> asyncpg.Record | None:
         """Deletes a shop item by name, returning the deleted row (or ``None``)."""
         query = """
@@ -81,7 +100,7 @@ class EconomyRepository(BaseRepository):
         """Fetches a member's owned items joined with their shop metadata."""
         query = """
             SELECT i.item_id, i.quantity, e.name, e.description, e.price,
-                   e.effect, e.effect_value, e.duration_minutes
+                   e.effect, e.effect_value, e.duration_minutes, e.emoji, e.rarity
             FROM economy_inventory i
             JOIN economy_items e ON e.id = i.item_id
             WHERE i.user_id = $1 AND i.guild_id = $2 AND i.quantity > 0
@@ -117,6 +136,125 @@ class EconomyRepository(BaseRepository):
             RETURNING quantity;
         """
         return await self.fetchval(query, user_id, guild_id, item_id, quantity) or 0
+
+    async def consume_item(self, user_id: int, guild_id: int, item_id: int, quantity: int = 1) -> int | None:
+        """Atomically takes ``quantity`` of an item; returns what is left, or ``None`` if the member lacks them.
+
+        Unlike :meth:`remove_from_inventory` this never clamps, so two concurrent
+        uses/sells of the last unit cannot both succeed.
+        """
+        return await self.fetchval(
+            """
+            UPDATE economy_inventory SET quantity = quantity - $4
+            WHERE user_id = $1 AND guild_id = $2 AND item_id = $3 AND quantity >= $4
+            RETURNING quantity;
+            """,
+            user_id, guild_id, item_id, quantity,
+        )
+
+    async def delete_item_by_id(self, guild_id: int, item_id: int) -> asyncpg.Record | None:
+        """Deletes a shop item by id, returning the deleted row (or ``None``)."""
+        return await self.fetchrow(
+            'DELETE FROM economy_items WHERE guild_id = $1 AND id = $2 RETURNING *;', guild_id, item_id)
+
+    async def give_item(self, user_id: int, guild_id: int, item_id: int, quantity: int) -> tuple[str, int]:
+        """Grants ``quantity`` of an item for free, honouring ``max_per_user``.
+
+        Returns ``(status, owned)`` with status ``ok``, ``missing`` or ``limit``. Stock is untouched: a grant is
+        not a sale.
+        """
+        async with self.acquire() as conn, conn.transaction():
+            item = await conn.fetchrow(
+                'SELECT max_per_user FROM economy_items WHERE guild_id = $1 AND id = $2 FOR UPDATE;', guild_id, item_id)
+            if item is None:
+                return 'missing', 0
+            owned = await conn.fetchval(
+                'SELECT quantity FROM economy_inventory WHERE user_id = $1 AND guild_id = $2 AND item_id = $3;',
+                user_id, guild_id, item_id,
+            ) or 0
+            if item['max_per_user'] is not None and owned + quantity > item['max_per_user']:
+                return 'limit', owned
+            total = await conn.fetchval(
+                """
+                INSERT INTO economy_inventory (user_id, guild_id, item_id, quantity)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, guild_id, item_id)
+                    DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity
+                RETURNING quantity;
+                """,
+                user_id, guild_id, item_id, quantity,
+            )
+            return 'ok', total
+
+    async def buy_item(
+        self, user_id: int, guild_id: int, item_id: int, quantity: int, unit_price: int | None = None
+    ) -> tuple[str, asyncpg.Record | None]:
+        """Purchases ``quantity`` of an item in one transaction: expiry, stock, holding limit and cash.
+
+        ``unit_price`` is the effective price per unit (a daily sale lowers it); it
+        defaults to the item's list price.
+
+        Returns ``(status, item)`` where ``status`` is a
+        :class:`~app.services.economy.PurchaseStatus` value. The item row is locked
+        so concurrent buyers cannot oversell limited stock; cash is only debited
+        when the member can afford it. The member's balance row must already exist.
+        """
+        async with self.acquire() as conn, conn.transaction():
+            item = await conn.fetchrow(
+                'SELECT * FROM economy_items WHERE guild_id = $1 AND id = $2 FOR UPDATE;', guild_id, item_id)
+            if item is None:
+                return 'missing', None
+            now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+            if item['available_until'] is not None and item['available_until'] <= now:
+                return 'expired', item
+            if item['stock'] is not None and item['stock'] < quantity:
+                return 'sold_out', item
+            if item['max_per_user'] is not None:
+                owned = await conn.fetchval(
+                    'SELECT quantity FROM economy_inventory WHERE user_id = $1 AND guild_id = $2 AND item_id = $3;',
+                    user_id, guild_id, item_id,
+                ) or 0
+                if owned + quantity > item['max_per_user']:
+                    return 'limit', item
+            paid = await conn.fetchval(
+                """
+                UPDATE economy SET cash = cash - $3
+                WHERE user_id = $1 AND guild_id = $2 AND cash >= $3
+                RETURNING cash;
+                """,
+                user_id, guild_id, (item['price'] if unit_price is None else unit_price) * quantity,
+            )
+            if paid is None:
+                return 'funds', item
+            await conn.execute(
+                """
+                INSERT INTO economy_inventory (user_id, guild_id, item_id, quantity)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, guild_id, item_id)
+                    DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity;
+                """,
+                user_id, guild_id, item_id, quantity,
+            )
+            if item['stock'] is not None:
+                await conn.execute('UPDATE economy_items SET stock = stock - $2 WHERE id = $1;', item_id, quantity)
+            return 'ok', item
+
+    async def sell_item(self, user_id: int, guild_id: int, item_id: int, quantity: int, payout: int) -> int | None:
+        """Atomically removes ``quantity`` of an item and credits ``payout`` cash; ``None`` if the member lacks them."""
+        async with self.acquire() as conn, conn.transaction():
+            left = await conn.fetchval(
+                """
+                UPDATE economy_inventory SET quantity = quantity - $4
+                WHERE user_id = $1 AND guild_id = $2 AND item_id = $3 AND quantity >= $4
+                RETURNING quantity;
+                """,
+                user_id, guild_id, item_id, quantity,
+            )
+            if left is None:
+                return None
+            await conn.execute(
+                'UPDATE economy SET cash = cash + $3 WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id, payout)
+            return left
 
     # -- timed boosts -------------------------------------------------------
 
@@ -417,6 +555,70 @@ class EconomyRepository(BaseRepository):
                 to_user_id, guild_id, item_id, quantity,
             )
             return True
+
+    async def execute_trade(
+        self,
+        guild_id: int,
+        a_id: int,
+        b_id: int,
+        a_items: Sequence[tuple[int, int]],
+        a_cash: int,
+        b_items: Sequence[tuple[int, int]],
+        b_cash: int,
+    ) -> str:
+        """Atomically swaps two members' offers; returns ``'ok'`` or the failure (``cash``/``items``/``limit``).
+
+        Both wallets are locked in id order first (no deadlock between opposite
+        trades). Every debit is conditional (``cash >= n`` / ``quantity >= n``), all
+        removals happen before any credit, and a receiver's ``max_per_user`` is
+        checked against that final state. Any shortfall rolls the whole trade back.
+        """
+        gives = ((a_id, b_id, a_items, a_cash), (b_id, a_id, b_items, b_cash))
+        try:
+            async with self.acquire() as conn, conn.transaction():
+                await conn.fetch(
+                    'SELECT 1 FROM economy WHERE guild_id = $1 AND user_id = ANY($2::bigint[]) ORDER BY user_id FOR UPDATE;',
+                    guild_id, [a_id, b_id],
+                )
+                for giver, _, _, cash in gives:
+                    if cash and await conn.fetchval(
+                        'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
+                        giver, guild_id, cash,
+                    ) is None:
+                        raise _TradeFailed('cash')
+                for giver, _, items, _ in gives:
+                    for item_id, quantity in items:
+                        if await conn.fetchval(
+                            """
+                            UPDATE economy_inventory SET quantity = quantity - $4
+                            WHERE user_id = $1 AND guild_id = $2 AND item_id = $3 AND quantity >= $4
+                            RETURNING quantity;
+                            """,
+                            giver, guild_id, item_id, quantity,
+                        ) is None:
+                            raise _TradeFailed('items')
+                for _, receiver, items, cash in gives:
+                    if cash:
+                        await conn.execute(
+                            'UPDATE economy SET cash = cash + $3 WHERE user_id = $1 AND guild_id = $2;', receiver, guild_id, cash)
+                    for item_id, quantity in items:
+                        limit = await conn.fetchval(
+                            'SELECT max_per_user FROM economy_items WHERE guild_id = $1 AND id = $2;', guild_id, item_id)
+                        held = await conn.fetchval(
+                            """
+                            INSERT INTO economy_inventory (user_id, guild_id, item_id, quantity)
+                            VALUES ($1, $2, $3, $4)
+                            ON CONFLICT (user_id, guild_id, item_id)
+                                DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity
+                            RETURNING quantity;
+                            """,
+                            receiver, guild_id, item_id, quantity,
+                        )
+                        if limit is not None and held > limit:
+                            raise _TradeFailed('limit')
+        except _TradeFailed as failure:
+            return failure.reason
+        return 'ok'
 
     async def count_items(self, user_id: int, guild_id: int) -> int:
         """The total number of items (summed quantities) a member owns."""
