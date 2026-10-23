@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-23
+
+### Added
+
+- The Economy page's shop lists every item with emoji, rarity, category, price, stock, limit, role gate and sale end, and one dialog adds or edits an item with all of Percy's item options. Percy's built-in items are marked and can't be edited.
+- Homepage screenshots open large when clicked, and screenshots of different sizes sit centred next to each other.
+
+### Fixed
+
+- Shop errors from Percy (for example a duplicate name) are shown as they are instead of a generic failure.
+- Role ids in the shop no longer lose precision in the browser.
+
 ## [0.13.0] - 2026-10-23
 
 ### Added
