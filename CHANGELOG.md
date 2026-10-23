@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-23
+
+### Added
+
+- Tools: a fishing rod, a hunting rifle and a shovel are for sale in every shop. Each lasts a
+  number of uses, and the item card shows how many are left.
+- With the matching tool, `fish`, `hunt` and `dig` can also find items — fish, hides, relics
+  and more, from common to legendary — which you can sell, gift or trade.
+- Net worth in `balance` and the economy hub includes what your items sell for.
+- Internal API: shop items carry `builtin_key` and `for_sale`.
+
+### Changed
+
+- Without the matching tool, `fish`, `hunt` and `dig` pay 60% and find no items.
+- Percy's built-in items can't be edited, removed or renamed, and their names can't be used
+  for new items.
+
 ## [2.13.0] - 2026-10-23
 
 ### Added
