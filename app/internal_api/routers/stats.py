@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import asdict
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -225,13 +226,30 @@ async def get_public_commands(bot: BotDep) -> dict:
             continue
 
         cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
-        commands.append({
-            'name': cmd.qualified_name,
-            'cog': cog_name,
-            'description': cmd.short_doc or '',
-            'signature': cmd.signature or None,
-        })
+        commands.append(public_command_payload(cmd, cog_name))
     return {'commands': commands}
+
+
+def public_command_payload(cmd: Any, cog_name: str) -> dict:
+    """One command's public-facing shape (docs page); pure, so it is testable without a bot."""
+    spec = getattr(cmd, 'permissions', None)
+    cooldown = getattr(getattr(cmd, '_buckets', None), '_cooldown', None)
+    extras = getattr(cmd, 'extras', None) or {}
+    examples = extras.get('examples')
+    return {
+        'name': cmd.qualified_name,
+        'cog': cog_name,
+        'description': cmd.short_doc or '',
+        'signature': cmd.signature or None,
+        'aliases': list(cmd.aliases),
+        'slash': getattr(cmd, 'app_command', None) is not None,
+        'user_permissions': sorted(spec.user) if spec is not None else [],
+        'bot_permissions': sorted(spec.bot) if spec is not None else [],
+        'cooldown': {'rate': cooldown.rate, 'per': cooldown.per} if cooldown is not None else None,
+        'example': extras.get('example') or (examples[0] if examples else None),
+        'help': (cmd.help or '').strip() or None,
+        'parent': cmd.parent.qualified_name if cmd.parent else None,
+    }
 
 
 @router.get("/feature-flags")

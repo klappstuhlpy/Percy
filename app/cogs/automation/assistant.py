@@ -295,6 +295,7 @@ class AssistantMixin:
         'ask',
         aliases=['ai', 'chat'],
         description='Ask the AI assistant a question.',
+        extras={'example': 'ask how do I set up leveling?'},
     )
     @cooldown(1, 12)
     @describe(prompt='What you want to ask.')

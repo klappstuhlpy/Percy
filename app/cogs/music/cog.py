@@ -620,7 +620,7 @@ class Music(Cog):
             await player.panel.channel.send("The host has stopped listening to Spotify.")
             await player.disconnect()
 
-    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True, bot_permissions=[discord.Permissions.connect, discord.Permissions.speak])
+    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True, extras={"example": "play never gonna give you up"}, bot_permissions=[discord.Permissions.connect, discord.Permissions.speak])
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[

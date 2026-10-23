@@ -1895,6 +1895,7 @@ class Moderation(Cog):
     @command(
         "mute",
         description="Mutes members indefinitely using the configured mute role.",
+        extras={"example": "mute @member"},
         hybrid=True,
         guild_only=True,
         bot_permissions=[discord.Permissions.manage_roles],

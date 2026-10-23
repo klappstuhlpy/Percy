@@ -113,6 +113,7 @@ class ModLog(Cog):
     @command(
         'warn',
         description='Warn a member and record it in their moderation history.',
+        extras={'example': 'warn @member spamming in #general'},
         guild_only=True,
         hybrid=True,
         user_permissions=PermissionTemplate.kick,
