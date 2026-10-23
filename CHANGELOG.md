@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-23
+
+### Added
+
+- `shop` and `inventory` are now one interactive card: filter by category, open an item, and
+  buy, use, sell or gift it with a button. Someone else's inventory is read-only.
+- `item <name>` shows one item's price, effect, stock and what you can do with it.
+- `trade @member` swaps items and cash between two members. Both sides confirm, any change
+  resets both confirmations, and the trade happens completely or not at all.
+- Daily deals: up to two shop items per server are 10–40% off each day.
+- Shop items can have an emoji, a rarity, limited stock, a per-member limit, a required role,
+  an end date, a role removed on use and a reply message. `shop edit` changes any of them in
+  place, so owned copies keep working.
+- `use <item> <quantity>` uses several vouchers or lootboxes at once.
+- The economy hub can open your inventory and the shop, switch jobs, and feed or collect from
+  your pet. `perks`, `quests`, `achievements`, `job` and `pet` open the matching hub page.
+- Internal API: member balance, inventory and level endpoints, item fields and `PATCH` for
+  items, and richer `/commands/public` data for the new commands page.
+
+### Changed
+
+- `balance`, `job list`, `pet shop` and `economy-config` use the new card style, and `balance`
+  shows your real server rank.
+- `shop remove` asks for confirmation, since it also deletes every copy members own.
+
+### Fixed
+
+- Selling or using your last item twice in quick succession no longer pays out twice, and two
+  buyers can no longer oversell limited stock.
+- A role item whose role can't be granted is refunded instead of consumed.
+
 ## [2.12.0] - 2026-10-22
 
 ### Changed
