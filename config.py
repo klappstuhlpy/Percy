@@ -272,7 +272,7 @@ class Emojis:
     lotteryslots: ClassVar[str] = '<:lotteryslots:1519095850578739231>'
 
     class Music:
-        play: ClassVar[str] = '<:play:1322362137993023519>'
+        play: ClassVar[str] = '<:play:1563655761232527440>'
         pause: ClassVar[str] = '<:pause:1563655759605268640>'
         close: ClassVar[str] = '<:close:1563655993114624060>'
 
@@ -282,7 +282,7 @@ class Emojis:
         favourite: ClassVar[str] = '<:favourite:1563653128887337131>'
         history: ClassVar[str] = '<:history:1563653130300694629>'
         lyrics: ClassVar[str] = '<:lyrics:1563653131823222794>'
-        previous: ClassVar[str] = '<:previous:1563653131823222794>'
+        previous: ClassVar[str] = '<:previous:1563653133064736778>'
         skip: ClassVar[str] = '<:skip:1563653135522594987>'
 
         volume: ClassVar[str] = '<:volume:1563653139750457476>'

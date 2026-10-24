@@ -686,10 +686,9 @@ class Player(wavelink.Player):
 
         title = added.name if is_playlist else added.title
         url = added.url if is_playlist else added.uri
-        description = f'**[{title}]({url})**'
 
         mess = (
-            f"{Emojis.Music.queue_add} Queued ``{description}`` ({length})\n"
+            f"{Emojis.Music.queue_add} Queued **``[{title}]({url})``** ({convert_duration(length)})\n"
             f"-# Position in queue: {position}"
         )
 

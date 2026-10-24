@@ -160,8 +160,7 @@ class PlayerPanel(LayoutView):
 
             now_playing = (
                 f"## Now Playing\n"
-                f"[{track.title}]({track.uri})\n"
-                f"{artist}\n\n"
+                f"[{track.title}]({track.uri}) - {artist}\n\n"
                 f"**Bound:** {self.player.channel.mention}\n"
                 f"**Queue:** {queue_pos}/{queue_total}"
             )
@@ -205,7 +204,7 @@ class PlayerPanel(LayoutView):
             else:
                 current_position = max(position, 0.0)
                 container.add_item(discord.ui.TextDisplay(f"`{convert_duration(current_position)}` / `{convert_duration(track.length)}`"))
-                container.add_item(discord.ui.TextDisplay(ProgressBar(0, track.length, current_position, key_full=50)))
+                container.add_item(discord.ui.TextDisplay(ProgressBar(0, track.length, current_position, key_full=14)))
 
             container.add_item(discord.ui.TextDisplay(f"**{self.player.volume}%** " + ProgressBar(0, 100, self.player.volume)))
             container.add_item(discord.ui.Separator())
