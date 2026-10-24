@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Death: `hunt`, `search` (when it goes wrong) and a failed `crime` can kill you, and you lose all your cash. A Lifesaver (3,000 in the shop) is used up instead and saves you automatically.
 - Chat drops: admins can switch on `economy-config drops`. Now and then a drop appears in chat; the first member to press Grab within 30 seconds wins the coins or item.
 - `deposit` and `withdraw` take `all`, `max`, `half` and shorthand like `2k`.
+- Music: Voice Channel status change when playing music.
 
 ### Changed
 

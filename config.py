@@ -285,6 +285,8 @@ class Emojis:
         previous: ClassVar[str] = '<:previous:1563653133064736778>'
         skip: ClassVar[str] = '<:skip:1563653135522594987>'
 
+        note: ClassVar[str] = '<:music:1322338453937193000>'
+
         volume: ClassVar[str] = '<:volume:1563653139750457476>'
 
         shuffle_off: ClassVar[str] = '<:shuffle:1563653134427889784>'
