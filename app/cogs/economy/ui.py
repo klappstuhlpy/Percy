@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 import discord
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from app.cogs.economy.cog import Economy
     from app.core.models import Context
     from app.services.economy import Challenge, SearchLocation
+
+log = logging.getLogger(__name__)
 
 __all__ = ('BOOST_LABELS', 'DropView', 'EconomyHub', 'SearchView', 'WorkChallengeView', 'boost_display_line', 'progress_bar')
 
@@ -183,11 +186,19 @@ class DropView(discord.ui.View):
             await interaction.response.send_message('Too slow - someone already grabbed it.', ephemeral=True)
             return
         self.winner = interaction.user
+        await interaction.response.defer()  # the award hits the DB; answer within 3 s regardless
+        assert isinstance(interaction.user, discord.Member)
+        try:
+            text = await self._award(interaction.user)
+        except Exception:
+            log.exception('Chat drop award failed')
+            self.winner = None  # let someone else retry
+            await interaction.followup.send('Something went wrong paying out the drop - try again.', ephemeral=True)
+            return
         self.stop()
         button.disabled = True
         button.label = 'Grabbed'
-        assert isinstance(interaction.user, discord.Member)
-        await interaction.response.edit_message(content=await self._award(interaction.user), view=self)
+        await interaction.edit_original_response(content=text, view=self)
 
     async def on_timeout(self) -> None:
         for child in self.children:

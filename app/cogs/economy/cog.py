@@ -192,9 +192,11 @@ class Economy(Cog):
         now = datetime.datetime.now(datetime.UTC)
         last = self._last_drop.get(message.guild.id)
         # Cheap in-memory gate first; the settings lookup only happens on a would-be drop.
-        if not should_drop(last, now) or not await self._drops_enabled(message.guild.id):
+        if not should_drop(last, now):
             return
-        self._last_drop[message.guild.id] = now
+        self._last_drop[message.guild.id] = now  # before the await, so concurrent messages can't both drop
+        if not await self._drops_enabled(message.guild.id):
+            return
         drop = roll_chat_drop()
         view = DropView(lambda member: self._award_drop(member, drop))
         prize = f'{Emojis.Economy.cash} coins' if drop.item is None else f'{drop.item.emoji} an item'
