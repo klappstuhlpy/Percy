@@ -1672,8 +1672,9 @@ class Balance(BaseRecord, table="economy", pk=("user_id", "guild_id")):
     guild_id: int
     cash: int
     bank: int
+    bank_space: int
 
-    __slots__ = ('bank', 'bot', 'cash', 'guild_id', 'user_id')
+    __slots__ = ('bank', 'bank_space', 'bot', 'cash', 'guild_id', 'user_id')
 
     @property
     def total(self) -> int:

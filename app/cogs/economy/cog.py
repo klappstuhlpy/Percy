@@ -52,6 +52,7 @@ from app.services.economy import (
     PurchaseStatus,
     SearchLocation,
     TradeOffer,
+    bank_room,
     boost_multiplier,
     builtin_error,
     compute_daily,
@@ -75,6 +76,7 @@ from app.services.economy import (
     prestige_requirement,
     purchase_error,
     resolve_search,
+    roll_bank_space,
     roll_drop,
     roll_loot,
     roll_lootbox,
@@ -393,6 +395,14 @@ class Economy(Cog):
             await ctx.send_error("Cannot deposit more than your balance.")
             return
 
+        capped = (await self._settings(ctx.guild.id)).bank_cap  # type: ignore[union-attr]
+        if capped:
+            room = bank_room(balance.bank, balance.bank_space)
+            if room == 0:
+                await ctx.send_error(f"Your bank is full: it holds up to {Emojis.Economy.cash} **{fnumb(balance.bank_space)}**.")
+                return
+            value = min(value, room)
+
         await balance.remove(cash=value)
         await balance.add(bank=value)
         await ctx.send_success(f"Successfully deposited {Emojis.Economy.cash} **{fnumb(value)}** into your bank.")
@@ -451,12 +461,14 @@ class Economy(Cog):
         balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)  # type: ignore[union-attr]
         everyone = await ctx.db.get_guild_balances(ctx.guild.id)  # type: ignore[union-attr]
         items = await ctx.db.economy.inventory_value(user.id, ctx.guild.id)  # type: ignore[union-attr]
+        capped = (await self._settings(ctx.guild.id)).bank_cap  # type: ignore[union-attr]
+        bank = f'{fnumb(balance.bank)} / {fnumb(balance.bank_space)}' if capped else fnumb(balance.bank)
         richer = sum(1 for other in everyone if other.user_id != user.id and other.total > balance.total)
         rank = f'**#{richer + 1:,}** of {max(len(everyone), 1):,}'
         cash = Emojis.Economy.cash
         await ctx.send(view=make_notice(
             f"{user.display_name}'s Balance",
-            f'{cash} **Cash** {fnumb(balance.cash)}\n{cash} **Bank** {fnumb(balance.bank)}\n'
+            f'{cash} **Cash** {fnumb(balance.cash)}\n{cash} **Bank** {bank}\n'
             f'{cash} **Items** {fnumb(items)}\n{cash} **Net worth** {fnumb(balance.total + items)}\n'
             f'\N{TROPHY} Server rank {rank}',
             thumbnail=get_asset_url(user),
@@ -507,7 +519,7 @@ class Economy(Cog):
         scale = await self._payout_scale(ctx.author.id, ctx.guild.id, settings=settings)
         amount = round(result.amount * scale)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
+        await balance.add(cash=amount, bank_space=roll_bank_space())
         await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now, result.streak)
 
         await ctx.send_success(
@@ -755,6 +767,10 @@ class Economy(Cog):
             expires = await self.bot.db.economy.add_boost(member.id, guild.id, kind, boost_multiplier(value), duration)
             when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), 'R')
             return True, f'You activated {name}: **+{value}%** {BOOST_LABELS[kind]}, ending {when}. {tail}'
+        if effect == 'bank_space':
+            balance = await self.bot.db.get_user_balance(member.id, guild.id)
+            await balance.add(bank_space=value)
+            return True, f'You used {name}: your bank can now hold **{fnumb(value)}** more. {tail}'
         if effect == 'rob_shield':
             expires = await self.bot.db.economy.add_boost(member.id, guild.id, 'shield', 1.0, duration)
             when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), 'R')
@@ -1302,7 +1318,7 @@ class Economy(Cog):
         shifts = await self.bot.db.economy.add_shift(ctx.author.id, ctx.guild.id, job.id)
 
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
+        await balance.add(cash=amount, bank_space=roll_bank_space())
 
         message = (
             f"{job.emoji} You worked a shift as **{job.name}** and earned "
@@ -1829,9 +1845,10 @@ class Economy(Cog):
             f"**Payout multiplier** x{settings.payout_multiplier:g}\n"
             f"**Robbing** {'Enabled' if settings.rob_enabled else 'Disabled'}\n"
             f"**Daily base** {Emojis.Economy.cash} {fnumb(settings.daily_base)}\n"
-            f"**Max casino bet** {max_bet}",
+            f"**Max casino bet** {max_bet}\n"
+            f"**Bank cap** {'On' if settings.bank_cap else 'Off'}",
             thumbnail=icon or None,
-            footer="economy-config multiplier/rob/daily-base/max-bet",
+            footer="economy-config multiplier/rob/bank-cap/daily-base/max-bet",
         ))
 
     @economy_config.command(
@@ -1859,6 +1876,19 @@ class Economy(Cog):
         assert ctx.guild is not None
         await self.bot.db.economy.update_settings(ctx.guild.id, {"rob_enabled": enabled})
         await ctx.send_success(f"Robbing is now **{'enabled' if enabled else 'disabled'}**.")
+
+    @economy_config.command(
+        "bank-cap",
+        description="Limit how much members can keep in the bank.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.admin,
+    )
+    @describe(enabled="Whether deposits are limited by each member's bank space.")
+    async def economy_config_bank_cap(self, ctx: Context, enabled: bool) -> None:
+        """Toggle the bank space limit for this server."""
+        assert ctx.guild is not None
+        await self.bot.db.economy.update_settings(ctx.guild.id, {"bank_cap": enabled})
+        await ctx.send_success(f"The bank cap is now **{'on' if enabled else 'off'}**.")
 
     @economy_config.command(
         "daily-base",

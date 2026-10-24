@@ -110,6 +110,7 @@ class PatchSettingsBody(BaseModel):
     rob_enabled: bool | None = None
     daily_base: int | None = None
     max_bet: int | None = None
+    bank_cap: bool | None = None
 
 
 def _settings_payload(settings: GuildEconomySettings) -> dict:
@@ -118,6 +119,7 @@ def _settings_payload(settings: GuildEconomySettings) -> dict:
         'rob_enabled': settings.rob_enabled,
         'daily_base': settings.daily_base,
         'max_bet': settings.max_bet,
+        'bank_cap': settings.bank_cap,
     }
 
 
@@ -181,6 +183,9 @@ async def patch_economy_settings(guild: GuildDep, bot: BotDep, body: PatchSettin
 
     if body.rob_enabled is not None:
         updates['rob_enabled'] = body.rob_enabled
+
+    if body.bank_cap is not None:
+        updates['bank_cap'] = body.bank_cap
 
     if body.daily_base is not None:
         if not 10 <= body.daily_base <= 100_000:

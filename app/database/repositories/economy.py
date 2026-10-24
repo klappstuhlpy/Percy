@@ -54,18 +54,20 @@ class EconomyRepository(BaseRepository):
         call. If an admin already uses the name, the built-in is stored as ``"<name> ✦"`` instead.
         """
         query = """
-            INSERT INTO economy_items (guild_id, name, description, price, effect, emoji, rarity, builtin_key, for_sale)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO economy_items
+                (guild_id, name, description, price, effect, emoji, rarity, builtin_key, for_sale, effect_value)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (guild_id, builtin_key) WHERE builtin_key IS NOT NULL DO UPDATE SET
                 name = EXCLUDED.name, description = EXCLUDED.description, price = EXCLUDED.price,
-                emoji = EXCLUDED.emoji, rarity = EXCLUDED.rarity, for_sale = EXCLUDED.for_sale
+                emoji = EXCLUDED.emoji, rarity = EXCLUDED.rarity, for_sale = EXCLUDED.for_sale,
+                effect = EXCLUDED.effect, effect_value = EXCLUDED.effect_value
             RETURNING *;
         """
         for name in (item.name, f'{item.name} ✦'):
             try:
                 return await self.fetchrow(
                     query, guild_id, name, item.description or None, item.price, item.effect, item.emoji,
-                    item.rarity, item.key, item.for_sale,
+                    item.rarity, item.key, item.for_sale, item.effect_value,
                 )
             except asyncpg.UniqueViolationError:
                 continue

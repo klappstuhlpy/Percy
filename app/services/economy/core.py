@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 __all__ = (
+    'BANKNOTE_SPACE',
+    'BANK_SPACE_DEFAULT',
+    'BANK_SPACE_GROWTH',
     'BOOST_MAX_DURATION_MINUTES',
     'BOOST_MAX_PERCENT',
     'DAILY_BASE',
@@ -43,6 +46,7 @@ __all__ = (
     'GuildEconomySettings',
     'LootEntry',
     'PeriodicResult',
+    'bank_room',
     'boost_multiplier',
     'compute_daily',
     'compute_periodic',
@@ -51,6 +55,7 @@ __all__ = (
     'pick_weighted_winner',
     'prestige_multiplier',
     'prestige_requirement',
+    'roll_bank_space',
     'roll_loot',
     'roll_lootbox',
     'sell_price',
@@ -146,6 +151,7 @@ class GuildEconomySettings:
     rob_enabled: bool = True
     daily_base: int = DAILY_BASE
     max_bet: int | None = None
+    bank_cap: bool = True
 
     @classmethod
     def from_record(cls, record: Mapping[str, Any] | None) -> GuildEconomySettings:
@@ -157,6 +163,7 @@ class GuildEconomySettings:
             rob_enabled=record['rob_enabled'],
             daily_base=record['daily_base'],
             max_bet=record['max_bet'],
+            bank_cap=record.get('bank_cap', True),
         )
 
 
@@ -293,10 +300,32 @@ def roll_loot(table: Sequence[LootEntry], *, rng: random.Random | None = None) -
     return Catch(entry.name, entry.emoji, amount)
 
 
+# -- bank space ---------------------------------------------------------------
+
+#: Bank capacity every member starts with.
+BANK_SPACE_DEFAULT = 10_000
+#: Range of bank space gained from each ``work`` shift and ``daily`` claim.
+BANK_SPACE_GROWTH = (25, 150)
+#: Bank space one Banknote adds.
+BANKNOTE_SPACE = 5_000
+#: Largest per-use bank space an admin-made item may grant.
+BANK_SPACE_MAX_ITEM = 1_000_000
+
+
+def bank_room(bank: int, space: int) -> int:
+    """How much more fits in a bank holding ``bank`` with capacity ``space`` (never negative)."""
+    return max(space - bank, 0)
+
+
+def roll_bank_space(*, rng: random.Random | None = None) -> int:
+    """Bank space earned by one shift or daily claim, uniform in :data:`BANK_SPACE_GROWTH`."""
+    return (rng or random).randint(*BANK_SPACE_GROWTH)
+
+
 # -- item effects ----------------------------------------------------------
 
 #: Every effect a shop item can carry; ``none`` items are plain collectibles.
-ITEM_EFFECTS: tuple[str, ...] = ('none', 'cash', 'lootbox', 'role', 'xp_boost', 'loot_boost', 'rob_shield')
+ITEM_EFFECTS: tuple[str, ...] = ('none', 'cash', 'lootbox', 'role', 'xp_boost', 'loot_boost', 'rob_shield', 'bank_space')
 
 #: Highest bonus percent a boost item may grant (+500% = x6).
 BOOST_MAX_PERCENT = 500
@@ -345,6 +374,8 @@ def validate_item_effect(effect: str, value: int | None, duration_minutes: int |
         duration_minutes is None or not 1 <= duration_minutes <= BOOST_MAX_DURATION_MINUTES
     ):
         return f'Shield items need a **duration** between 1 and {BOOST_MAX_DURATION_MINUTES} minutes.'
+    if effect == 'bank_space' and (value is None or not 1 <= value <= BANK_SPACE_MAX_ITEM):
+        return f'Bank space items need a **value** between 1 and {BANK_SPACE_MAX_ITEM:,} (the space added per use).'
     if effect == 'role' and value is None:
         return 'Role items need a **role** to grant.'
     return None
@@ -368,6 +399,8 @@ def describe_effect(effect: str, value: int | None, duration_minutes: int | None
         return f'Boost: +{value}% fishing & hunting payouts for {duration_minutes} minutes.'
     if effect == 'rob_shield':
         return f'Shield: blocks rob attempts against you for {duration_minutes} minutes.'
+    if effect == 'bank_space':
+        return f'Bank: adds {value:,} bank space per use.'
     return None
 
 

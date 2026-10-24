@@ -11,6 +11,8 @@ import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.services.economy.core import BANKNOTE_SPACE
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Any
@@ -50,6 +52,7 @@ class CatalogueItem:
     rarity: str
     price: int
     effect: str = 'none'
+    effect_value: int | None = None
     for_sale: bool = False
     tool_for: str | None = None
     durability: int | None = None
@@ -65,6 +68,10 @@ CATALOGUE: tuple[CatalogueItem, ...] = (
                   tool_for='hunt', durability=20, description='Needed for full `hunt` payouts and item drops.'),
     CatalogueItem('shovel', 'Shovel', '\N{PICK}', 'uncommon', 500, for_sale=True,
                   tool_for='dig', durability=25, description='Needed for full `dig` payouts and item drops.'),
+    # Bank
+    CatalogueItem('banknote', 'Banknote', '💵', 'rare', 2_500, effect='bank_space',
+                  effect_value=BANKNOTE_SPACE, for_sale=True,
+                  description='Use it to add bank space.'),
     # Fish
     CatalogueItem('sardine', 'Sardine', '\N{FISH}', 'common', 30, drop_from='fish', description='A shiny little fish.'),
     CatalogueItem('salmon', 'Salmon', '\N{TROPICAL FISH}', 'uncommon', 90, drop_from='fish'),

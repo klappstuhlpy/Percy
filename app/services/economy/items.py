@@ -88,7 +88,7 @@ class Category:
 
 #: Browsing categories in display order, derived from the item's effect (no extra column).
 CATEGORIES: tuple[Category, ...] = (
-    Category('consumable', 'Consumables', '\N{WRAPPED PRESENT}', ('cash', 'lootbox')),
+    Category('consumable', 'Consumables', '\N{WRAPPED PRESENT}', ('cash', 'lootbox', 'bank_space')),
     Category('boost', 'Boosts', '\N{HIGH VOLTAGE SIGN}', ('xp_boost', 'loot_boost', 'rob_shield')),
     Category('role', 'Role Items', '\N{MILITARY MEDAL}', ('role',)),
     Category('collectible', 'Collectibles', '\N{GEM STONE}', ('none',)),

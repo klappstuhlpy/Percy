@@ -348,3 +348,40 @@ def test_work_challenges_invariants() -> None:
             shown = c.prompt.split('**')[1].lower()
             assert shown != c.answer and sorted(shown) == sorted(c.answer)
     assert seen == set(CHALLENGE_KINDS)
+
+
+# -- bank space --------------------------------------------------------------
+
+
+def test_bank_room_never_negative() -> None:
+    from app.services.economy import BANK_SPACE_DEFAULT, bank_room
+
+    assert bank_room(0, BANK_SPACE_DEFAULT) == 10_000
+    assert bank_room(9_000, 10_000) == 1_000
+    assert bank_room(12_000, 10_000) == 0
+
+
+def test_roll_bank_space_in_range() -> None:
+    from app.services.economy import BANK_SPACE_GROWTH, roll_bank_space
+
+    rng = random.Random(1)
+    assert all(BANK_SPACE_GROWTH[0] <= roll_bank_space(rng=rng) <= BANK_SPACE_GROWTH[1] for _ in range(200))
+
+
+def test_bank_space_effect_validates_and_describes() -> None:
+    from app.services.economy import describe_effect, get_catalogue_item
+
+    assert validate_item_effect('bank_space', 5_000, None) is None
+    assert validate_item_effect('bank_space', None, None) is not None
+    assert validate_item_effect('bank_space', 0, None) is not None
+    assert '5,000' in (describe_effect('bank_space', 5_000, None) or '')
+    banknote = get_catalogue_item('banknote')
+    assert banknote is not None and banknote.for_sale and banknote.price == 2_500
+    assert validate_item_effect(banknote.effect, banknote.effect_value, None) is None
+
+
+def test_settings_bank_cap_defaults_on() -> None:
+    assert GuildEconomySettings.from_record(None).bank_cap is True
+    row = {'payout_multiplier': 1.0, 'rob_enabled': True, 'daily_base': 250, 'max_bet': None}
+    assert GuildEconomySettings.from_record(row).bank_cap is True
+    assert GuildEconomySettings.from_record({**row, 'bank_cap': False}).bank_cap is False
