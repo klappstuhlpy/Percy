@@ -100,6 +100,7 @@ from app.services.economy import (
     roll_loot,
     roll_lootbox,
     sale_price,
+    sale_proceeds,
     sell_price,
     should_drop,
     split_cooldowns,
@@ -1228,7 +1229,6 @@ class Economy(Cog):
 
     @market.command("sell", description="List items for sale; they are held until sold or cancelled.", guild_only=True)
     @describe(item="The item to list.", quantity="How many to list.", price_each="Asking price per item.")
-    @app_commands.autocomplete(item=owned_item_autocomplete)  # type: ignore
     async def market_sell(self, ctx: Context, item: str, quantity: commands.Range[int, 1], price_each: commands.Range[int, 1]) -> None:
         """List items on the market. They leave your inventory until bought or cancelled."""
         assert ctx.guild is not None
@@ -1260,26 +1260,24 @@ class Economy(Cog):
         """Buy some or all of a listing with your cash."""
         assert ctx.guild is not None
         db = self.bot.db.economy
-        if quantity is None:
-            rows = [r for r in await db.market_listings(ctx.guild.id) if r['id'] == listing_id]
-            if not rows:
-                await ctx.send_error("That listing no longer exists.")
-                return
-            quantity = rows[0]['quantity']
-        status, info = await db.market_buy(ctx.guild.id, ctx.author.id, listing_id, quantity, MARKET_TAX)
+        status, info = await db.market_buy(ctx.guild.id, ctx.author.id, listing_id, quantity, sale_proceeds)
         if status == 'missing':
             await ctx.send_error("That listing no longer exists.")
         elif status == 'own':
             await ctx.send_error("You cannot buy your own listing; use `market cancel` instead.")
         elif status == 'quantity':
             await ctx.send_error(f"Only **{info['available']}** left in that listing.")
+        elif status == 'limit':
+            await ctx.send_error("That would put you over the holding limit for this item.")
         elif status == 'cash':
             await ctx.send_error(f"You need {Emojis.Economy.cash} **{fnumb(info['gross'])}** in cash for that.")
+        elif status != 'ok':
+            await ctx.send_error("The sale could not be completed.")
         else:
             record = await db.get_item_by_id(ctx.guild.id, info['item_id'])
             name = f"{item_emoji(record)} {record['name']}" if record else 'items'
             await ctx.send_success(
-                f"Bought **{quantity}× {name}** for {Emojis.Economy.cash} **{fnumb(info['gross'])}**."
+                f"Bought **{info['quantity']}× {name}** for {Emojis.Economy.cash} **{fnumb(info['gross'])}**."
             )
 
     @market.command("cancel", description="Cancel one of your listings and get the items back.", guild_only=True)

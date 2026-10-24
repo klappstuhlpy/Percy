@@ -9,7 +9,7 @@ from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from app.services.economy import CatalogueItem
 
@@ -725,6 +725,20 @@ class EconomyRepository(BaseRepository):
 
     # -- player market ------------------------------------------------------
 
+    @staticmethod
+    async def _lock_wallets(conn: asyncpg.Connection, guild_id: int, user_ids: list[int]) -> None:
+        """Makes sure each member has a wallet row, then locks them in id order (no deadlock between opposite buys)."""
+        for user_id in user_ids:
+            await conn.execute(
+                'INSERT INTO economy (user_id, guild_id, cash, bank) SELECT $1, $2, 0, 0 '
+                'WHERE NOT EXISTS (SELECT 1 FROM economy WHERE user_id = $1 AND guild_id = $2);',
+                user_id, guild_id,
+            )
+        await conn.fetch(
+            'SELECT 1 FROM economy WHERE guild_id = $1 AND user_id = ANY($2::bigint[]) ORDER BY user_id FOR UPDATE;',
+            guild_id, user_ids,
+        )
+
     async def market_list(
         self, guild_id: int, seller_id: int, item_id: int, quantity: int, price_each: int, max_listings: int
     ) -> asyncpg.Record | str:
@@ -735,8 +749,7 @@ class EconomyRepository(BaseRepository):
         Like trades, escrow carries no tool durability: a returned or bought tool comes back fresh.
         """
         async with self.acquire() as conn, conn.transaction():
-            await conn.execute(
-                'SELECT 1 FROM economy WHERE guild_id = $1 AND user_id = $2 FOR UPDATE;', guild_id, seller_id)
+            await self._lock_wallets(conn, guild_id, [seller_id])
             open_count = await conn.fetchval(
                 'SELECT COUNT(*) FROM economy_market WHERE guild_id = $1 AND seller_id = $2;', guild_id, seller_id)
             if open_count >= max_listings:
@@ -798,50 +811,65 @@ class EconomyRepository(BaseRepository):
             return row
 
     async def market_buy(
-        self, guild_id: int, buyer_id: int, listing_id: int, quantity: int, tax_rate: float
+        self, guild_id: int, buyer_id: int, listing_id: int, quantity: int | None, gross_net: Callable[[int, int], tuple[int, int, int]]
     ) -> tuple[str, dict[str, Any]]:
-        """Buys ``quantity`` from a listing in one transaction.
+        """Buys ``quantity`` (``None`` = the whole listing) from a listing in one transaction.
 
-        Returns ``('ok', info)`` with ``seller_id``/``item_id``/``gross``/``tax``/``net``, or a failure code
-        (``missing``, ``own``, ``quantity``, ``cash``) with a (possibly empty) info dict. The listing row is
-        locked (``FOR UPDATE``) so two buyers cannot take the same units; the buyer's debit is conditional.
+        ``gross_net(price_each, quantity)`` returns ``(gross, tax, net)`` (``sale_proceeds``). Returns
+        ``('ok', info)`` with ``seller_id``/``item_id``/``quantity``/``gross``/``tax``/``net``, or a failure code
+        (``missing``, ``own``, ``quantity``, ``cash``, ``limit``) with a (possibly empty) info dict. The listing row
+        is locked (``FOR UPDATE``) so two buyers cannot take the same units, both wallets are locked in id order,
+        the buyer's debit is conditional and the buyer's ``max_per_user`` is enforced; any failure rolls back.
         """
-        async with self.acquire() as conn, conn.transaction():
-            row = await conn.fetchrow(
-                'SELECT * FROM economy_market WHERE id = $1 AND guild_id = $2 FOR UPDATE;', listing_id, guild_id)
-            if row is None:
-                return 'missing', {}
-            if row['seller_id'] == buyer_id:
-                return 'own', {}
-            if quantity > row['quantity']:
-                return 'quantity', {'available': row['quantity']}
-            gross = row['price_each'] * quantity
-            tax = int(gross * tax_rate)
-            net = gross - tax
-            paid = await conn.fetchval(
-                'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
-                buyer_id, guild_id, gross,
-            )
-            if paid is None:
-                return 'cash', {'gross': gross}
-            await conn.execute(
-                'UPDATE economy SET cash = cash + $3 WHERE user_id = $1 AND guild_id = $2;',
-                row['seller_id'], guild_id, net,
-            )
-            if quantity == row['quantity']:
-                await conn.execute('DELETE FROM economy_market WHERE id = $1;', listing_id)
-            else:
-                await conn.execute(
-                    'UPDATE economy_market SET quantity = quantity - $2 WHERE id = $1;', listing_id, quantity)
-            await conn.execute(
-                """
-                INSERT INTO economy_inventory (user_id, guild_id, item_id, quantity) VALUES ($1, $2, $3, $4)
-                ON CONFLICT (user_id, guild_id, item_id)
-                    DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity;
-                """,
-                buyer_id, guild_id, row['item_id'], quantity,
-            )
-            return 'ok', {'seller_id': row['seller_id'], 'item_id': row['item_id'], 'gross': gross, 'tax': tax, 'net': net}
+        try:
+            async with self.acquire() as conn, conn.transaction():
+                row = await conn.fetchrow(
+                    'SELECT * FROM economy_market WHERE id = $1 AND guild_id = $2 FOR UPDATE;', listing_id, guild_id)
+                if row is None:
+                    return 'missing', {}
+                if row['seller_id'] == buyer_id:
+                    return 'own', {}
+                quantity = row['quantity'] if quantity is None else quantity
+                if quantity > row['quantity']:
+                    return 'quantity', {'available': row['quantity']}
+                gross, tax, net = gross_net(row['price_each'], quantity)
+                await self._lock_wallets(conn, guild_id, sorted([buyer_id, row['seller_id']]))
+                paid = await conn.fetchval(
+                    'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
+                    buyer_id, guild_id, gross,
+                )
+                if paid is None:
+                    raise _TradeFailed('cash')
+                credited = await conn.execute(
+                    'UPDATE economy SET cash = cash + $3 WHERE user_id = $1 AND guild_id = $2;',
+                    row['seller_id'], guild_id, net,
+                )
+                if credited != 'UPDATE 1':
+                    raise _TradeFailed('seller')
+                if quantity == row['quantity']:
+                    await conn.execute('DELETE FROM economy_market WHERE id = $1;', listing_id)
+                else:
+                    await conn.execute(
+                        'UPDATE economy_market SET quantity = quantity - $2 WHERE id = $1;', listing_id, quantity)
+                limit = await conn.fetchval(
+                    'SELECT max_per_user FROM economy_items WHERE guild_id = $1 AND id = $2;', guild_id, row['item_id'])
+                held = await conn.fetchval(
+                    """
+                    INSERT INTO economy_inventory (user_id, guild_id, item_id, quantity) VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id, guild_id, item_id)
+                        DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity
+                    RETURNING quantity;
+                    """,
+                    buyer_id, guild_id, row['item_id'], quantity,
+                )
+                if limit is not None and held > limit:
+                    raise _TradeFailed('limit')
+        except _TradeFailed as failure:
+            return failure.reason, {'gross': gross}
+        return 'ok', {
+            'seller_id': row['seller_id'], 'item_id': row['item_id'], 'quantity': quantity,
+            'gross': gross, 'tax': tax, 'net': net,
+        }
 
     async def count_items(self, user_id: int, guild_id: int) -> int:
         """The total number of items (summed quantities) a member owns."""
