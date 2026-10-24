@@ -681,15 +681,13 @@ class Music(Cog):
             else:
                 await player.queue.put_wait(result)
 
-        short: bool = True
         if player.playing and flags.force:
             await player.skip()
         elif not player.playing:
             await player.play(player.queue.get(), volume=70)
         else:
-            short = False
             await player.refresh_panel()
-        await player.send_track_add(result, ctx, short=short)
+        await player.send_track_add(result, ctx)
 
     @command(
         description="Adds a track/playlist to the queue by choosing from a set of examples.",

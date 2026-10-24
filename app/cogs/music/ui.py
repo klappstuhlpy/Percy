@@ -22,6 +22,7 @@ from app.utils import (
     pluralize,
     truncate,
 )
+from app.utils.formats import ProgressBar
 from config import Emojis
 
 from .models import DJMode, PlayerState, Playlist, ShuffleMode, is_dj
@@ -35,18 +36,17 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 EMOJI_KEYS: dict[str, dict[ShuffleMode, str] | dict[bool, str] | dict[QueueMode, str] | str] = {
-    "shuffle": {ShuffleMode.on: "<:shuffleTrue:1322338138932248667>", ShuffleMode.off: "<:shuffleNone:1322338127511293962>"},
-    "pause_play": {True: "⏸️", False: "▶️"},
+    "shuffle": {ShuffleMode.on: Emojis.Music.shuffle_on, ShuffleMode.off: Emojis.Music.shuffle_off},
+    "pause_play": {True: Emojis.Music.pause, False: Emojis.Music.play},
     "loop": {
-        QueueMode.loop: "<:repeatOne:1322338199472701451>",
-        QueueMode.loop_all: "<:repeatAll:1322338180191621180>",
-        QueueMode.normal: "<:repeatNone:1322338189998030952>",
+        QueueMode.loop: Emojis.Music.repeat_one,
+        QueueMode.loop_all: Emojis.Music.repeat_all,
+        QueueMode.normal: Emojis.Music.repeat_off,
     },
-    "like": "<:liked:1322338435238858883>",
     # Music Sources
-    "youtube": "<:youTube:1322362145865728020>",
-    "spotify": "<:spotify:1322362153474330646>",
-    "soundcloud": "<:soundcloud:1322362137993023519>",
+    "youtube": Emojis.Music.youtube,
+    "spotify": Emojis.Music.spotify,
+    "soundcloud": Emojis.Music.soundcloud,
 }
 
 
@@ -97,25 +97,30 @@ class PlayerPanel(LayoutView):
             style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["shuffle"][ShuffleMode.off], disabled=True
         )
         self.on_shuffle.callback = self._on_shuffle
-        self.on_back = discord.ui.Button(style=discord.ButtonStyle.blurple, emoji="⏮️", disabled=True)
+
+        self.on_back = discord.ui.Button(style=discord.ButtonStyle.grey, emoji=Emojis.Music.previous, disabled=True)
         self.on_back.callback = self._on_back
+
         self.on_pause_play = discord.ui.Button(
-            style=discord.ButtonStyle.blurple, emoji=EMOJI_KEYS["pause_play"][False], disabled=True
+            style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["pause_play"][False], disabled=True
         )
         self.on_pause_play.callback = self._on_pause_play
-        self.on_forward = discord.ui.Button(style=discord.ButtonStyle.blurple, emoji="⏭", disabled=True)
-        self.on_forward.callback = self._on_forward
+
+        self.on_skip = discord.ui.Button(style=discord.ButtonStyle.grey, emoji=Emojis.Music.skip, disabled=True)
+        self.on_skip.callback = self._on_forward
+
         self.on_loop = discord.ui.Button(
             style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["loop"][QueueMode.normal], disabled=True
         )
         self.on_loop.callback = self._on_loop
-        self.on_stop = discord.ui.Button(style=discord.ButtonStyle.red, emoji="⏹️", label="Stop", disabled=True)
+
+        self.on_stop = discord.ui.Button(style=discord.ButtonStyle.grey, emoji=Emojis.Music.close, disabled=True)
         self.on_stop.callback = self._on_stop
-        self.on_volume = discord.ui.Button(
-            style=discord.ButtonStyle.grey, emoji="🔊", label="Adjust Volume", disabled=True
-        )
+
+        self.on_volume = discord.ui.Button(style=discord.ButtonStyle.grey, emoji=Emojis.Music.volume, disabled=True)
         self.on_volume.callback = self._on_volume
-        self.on_like = discord.ui.Button(style=discord.ButtonStyle.green, emoji=EMOJI_KEYS["like"], disabled=True)
+
+        self.on_like = discord.ui.Button(style=discord.ButtonStyle.grey, emoji=Emojis.Music.favourite, disabled=True)
         self.on_like.callback = self._on_like
 
         self.update_buttons()
@@ -129,13 +134,7 @@ class PlayerPanel(LayoutView):
         """
         self.update_buttons()
         self.clear_items()
-        self._bar_files: list[discord.File] = []
         self.add_item(self.build_container())
-
-    async def _respond_with_rebuild(self, interaction: discord.Interaction) -> None:
-        """Edit the interaction response with the rebuilt view and attached bar files."""
-        files = self._bar_files or []
-        await interaction.response.edit_message(view=self, attachments=files)
 
     def build_container(self) -> discord.ui.Container:
         """Builds the Components V2 now-playing card for the panel."""
@@ -161,10 +160,10 @@ class PlayerPanel(LayoutView):
 
             now_playing = (
                 f"## Now Playing\n"
-                f"**Track:** [{track.title}]({track.uri})\n"
-                f"**Artist:** {artist}\n"
-                f"**Bound to:** {self.player.channel.mention}\n"
-                f"**Position in Queue:** {queue_pos}/{queue_total}"
+                f"[{track.title}]({track.uri})\n"
+                f"{artist}\n\n"
+                f"**Bound:** {self.player.channel.mention}\n"
+                f"**Queue:** {queue_pos}/{queue_total}"
             )
 
             if artwork := track.artwork:
@@ -176,15 +175,20 @@ class PlayerPanel(LayoutView):
             if track.album and track.album.name:
                 album = f"[{track.album.name}]({track.album.url})" if track.album.url else track.album.name
                 details.append(f"**Album:** {album}")
+
             if track.playlist:
                 playlist = (
                     f"[{track.playlist.name}]({track.playlist.url})" if track.playlist.url else track.playlist.name
                 )
                 details.append(f"**Playlist:** {playlist}")
+
             if self.player.queue.listen_together is not MISSING:
                 user = self.player.guild.get_member(self.player.queue.listen_together)
                 user_mention = user.mention if user is not None else "Unknown"
-                details.append(f"**Listening-together with:** {user_mention}'s Spotify")
+                details.append(f"**Listening-together:** {user_mention}'s Spotify")
+
+            if track.recommended:
+                details.append(f"-# Recommended via: {EMOJI_KEYS[track.source]} **`{track.source.title()}`**")
 
             if details:
                 container.add_item(discord.ui.TextDisplay("\n".join(details)))
@@ -197,54 +201,22 @@ class PlayerPanel(LayoutView):
             container.add_item(discord.ui.Separator())
 
             if effectively_stream:
-                live_file = self.bot.render.progress_bar(0, variant='live', filename='live.png')
-                self._bar_files.append(live_file)
-                container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(live_file)))
+                container.add_item(discord.ui.TextDisplay(ProgressBar(0, 100, 0)))
             else:
-                pos_ratio = round((position / track.length) * 50) if track.length > 0 else 0
-                pos_file = self.bot.render.progress_bar(pos_ratio, variant='position', filename='pos.png')
-                self._bar_files.append(pos_file)
-                container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(pos_file)))
-                container.add_item(discord.ui.TextDisplay(
-                    f"`{convert_duration(max(position, 0.0))}` / `{convert_duration(track.length)}`"
-                ))
+                current_position = max(position, 0.0)
+                container.add_item(discord.ui.TextDisplay(f"`{convert_duration(current_position)}` / `{convert_duration(track.length)}`"))
+                container.add_item(discord.ui.TextDisplay(ProgressBar(0, track.length, current_position, key_full=50)))
 
-            vol_ratio = round((self.player.volume / 100) * 50)
-            vol_file = self.bot.render.progress_bar(vol_ratio, variant='volume', filename='vol.png')
-            self._bar_files.append(vol_file)
-            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(vol_file)))
-            container.add_item(discord.ui.TextDisplay(f"🔊 **{self.player.volume}%**"))
-
+            container.add_item(discord.ui.TextDisplay(f"**{self.player.volume}%** " + ProgressBar(0, 100, self.player.volume)))
             container.add_item(discord.ui.Separator())
 
-            loop_mode = self.player.queue.mode.name.replace("_", " ").upper()
-            shuffle = {
-                ShuffleMode.off: "<:off1:1322338488443736257> **``Off``**",
-                ShuffleMode.on: "<:on1:1322338500300771458> **``On``**",
-            }.get(self.player.queue.shuffle)
-
-            container.add_item(discord.ui.TextDisplay(
-                f"**Loop:** `{loop_mode}` {Emojis.empty} • {Emojis.empty} **Shuffle:** {shuffle}"
-            ))
-
-            extras: list[str] = []
-            if track.recommended:
-                extras.append(f"**Recommended via:** {EMOJI_KEYS[track.source]} **`{track.source.title()}`**")
-            if not effectively_stream and not self.player.queue.is_empty and (upcoming := self.player.queue.peek(0)):
-                remaining_ms = max(track.length - position, 0)
-                eta = discord.utils.utcnow() + datetime.timedelta(milliseconds=remaining_ms)
-                extras.append(f"**Next Track:** [{upcoming.title}]({upcoming.uri}) {discord.utils.format_dt(eta, 'R')}")
-            if extras:
-                container.add_item(discord.ui.TextDisplay("\n".join(extras)))
-
-            container.add_item(discord.ui.Separator())
-
+            container.add_item(discord.ui.TextDisplay("-# Playback Controls"))
             container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
-            mode = "Auto-Playing" if self.player.autoplay != 2 else "Manual-Playing"
-            container.add_item(discord.ui.TextDisplay(f"-# {mode} • last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')} • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
+            mode = "Autoplay • " if self.player.autoplay != 2 else ""
+            container.add_item(discord.ui.TextDisplay(f"-# {mode}last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')} • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
         else:
             heading = (
                 "## Music Player Panel\n"
@@ -261,6 +233,7 @@ class PlayerPanel(LayoutView):
 
             container.add_item(discord.ui.Separator())
 
+            container.add_item(discord.ui.TextDisplay("-# Playback Controls"))
             container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
@@ -458,11 +431,10 @@ class PlayerPanel(LayoutView):
         if self.msg is MISSING and not self.__is_temporary__:
             await self.get_player_message()
 
-        files = getattr(self, '_bar_files', None) or []
         if self.msg is not MISSING:
-            await self.msg.edit(view=self, attachments=files)
+            await self.msg.edit(view=self)
         else:
-            self.msg = await self.channel.send(view=self, files=files)
+            self.msg = await self.channel.send(view=self)
 
         return self.msg
 
@@ -481,27 +453,27 @@ class PlayerPanel(LayoutView):
         self.player.queue.shuffle = TOGGLE.get(self.player.queue.shuffle)
 
         self._rebuild()
-        await self._respond_with_rebuild(interaction)
+        await interaction.response.edit_message(view=self)
 
     async def _on_back(self, interaction: discord.Interaction) -> None:
         if not await self._require_dj(interaction):
             return
 
         self._rebuild()
-        await self._respond_with_rebuild(interaction)
+        await interaction.response.edit_message(view=self)
         await self.player.back()
 
     async def _on_pause_play(self, interaction: discord.Interaction) -> None:
         await self.player.pause(not self.player.paused)
         self._rebuild()
-        await self._respond_with_rebuild(interaction)
+        await interaction.response.edit_message(view=self)
 
     async def _on_forward(self, interaction: discord.Interaction) -> None:
         if not await self._require_dj(interaction):
             return
 
         self._rebuild()
-        await self._respond_with_rebuild(interaction)
+        await interaction.response.edit_message(view=self)
         await self.player.skip()
 
     async def _on_loop(self, interaction: discord.Interaction) -> None:
@@ -516,7 +488,7 @@ class PlayerPanel(LayoutView):
         self.player.queue.mode = TRANSITIONS.get(self.player.queue.mode)
 
         self._rebuild()
-        await self._respond_with_rebuild(interaction)
+        await interaction.response.edit_message(view=self)
 
     async def _on_stop(self, interaction: discord.Interaction) -> None:
         if not await self._require_dj(interaction):
@@ -1111,7 +1083,7 @@ class LiveLyricsView(LayoutView):
 
         track = self.player.current or self._track
         title = self.result.title or (track.title if track else "Unknown")
-        header = f"## 🎤 Live Lyrics\n**{title}**"
+        header = f"## {Emojis.Music.lyrics} Live Lyrics\n**{title}**"
         if track is not None and track.artwork:
             container.add_item(discord.ui.Section(header, accessory=discord.ui.Thumbnail(track.artwork)))
         else:

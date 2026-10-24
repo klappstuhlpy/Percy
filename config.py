@@ -271,6 +271,41 @@ class Emojis:
     blackjack: ClassVar[str] = '<:blackjack:1519095618772008980>'
     lotteryslots: ClassVar[str] = '<:lotteryslots:1519095850578739231>'
 
+    class Music:
+        play: ClassVar[str] = '<:play:1322362137993023519>'
+        pause: ClassVar[str] = '<:pause:1563655759605268640>'
+        close: ClassVar[str] = '<:close:1563655993114624060>'
+
+        queue: ClassVar[str] = '<:queue:1563650712607658005>'
+        queue_add: ClassVar[str] = '<:queue_add:1563648847400411176>'
+
+        favourite: ClassVar[str] = '<:favourite:1563653128887337131>'
+        history: ClassVar[str] = '<:history:1563653130300694629>'
+        lyrics: ClassVar[str] = '<:lyrics:1563653131823222794>'
+        previous: ClassVar[str] = '<:previous:1563653131823222794>'
+        skip: ClassVar[str] = '<:skip:1563653135522594987>'
+
+        volume: ClassVar[str] = '<:volume:1563653139750457476>'
+
+        shuffle_off: ClassVar[str] = '<:shuffle:1563653134427889784>'
+        shuffle_on: ClassVar[str] = '<:shuffle_on:1322338138932248667>'
+
+        repeat_one: ClassVar[str] = '<:repeatOne:1322338199472701451>'
+        repeat_all: ClassVar[str] = '<:repeatAll:1322338180191621180>'
+        repeat_off: ClassVar[str] = '<:repeatNone:1322338189998030952>'
+
+        youtube: ClassVar[str] = '<:youTube:1322362145865728020>'
+        spotify: ClassVar[str] = '<:spotify:1322362153474330646>'
+        soundcloud: ClassVar[str] = '<:soundcloud:1322362137993023519>'
+
+    class ProgressBar:
+        leftindicator: ClassVar[str] = '<:progressbarindicatorleft:1563639470828298310>'
+        leftfull: ClassVar[str] = '<:progressbarleftfull:1563639472422133920>'
+        full: ClassVar[str] = '<:progressbarfull:1563639468131352656>'
+        empty: ClassVar[str] = '<:progressbarempty:1563639466709622965>'
+        indicator: ClassVar[str] = '<:progressbarindicator:1563639469507088394>'
+        rightempty: ClassVar[str] = '<:progressbarrightempty:1563639473877684335>'
+
     class Arrows:
         right: ClassVar[str] = '<a:vega_arrow_right:1322337825198313512>'
         left: ClassVar[str] = '<a:vega_arrow_left:1322337776812949514>'

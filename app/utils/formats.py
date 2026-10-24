@@ -15,6 +15,8 @@ from typing import Any, BinaryIO, TypeVar
 import dateparser as _dateparser
 import discord
 
+from config import Emojis
+
 T = TypeVar("T")
 
 try:
@@ -660,23 +662,23 @@ def txt(path: str | Path) -> str:
 
 
 def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: int = 14) -> str:
-    """Render a styled Unicode progress bar using filled/empty parallelograms.
+    """Render a styled Discord progress bar using custom emojis with an indicator."""
+    emojis = Emojis.ProgressBar
 
-    Example output: ``▰▰▰▰▰▰▱▱▱▱▱▱▱▱``
-    """
     span = key_max - key_min
-    if span <= 0:
-        return '▱' * key_full
+    if span <= 0 or key_full < 2:
+        return emojis.empty * key_full
+
     ratio = max(0.0, min((key_current - key_min) / span, 1.0))
-    filled = round(ratio * key_full)
-    return '▰' * filled + '▱' * (key_full - filled)
+    idx = round(ratio * (key_full - 1))
 
-
-def PlayerStamp(length: float, position: float) -> str:
-    """Render a track position bar with timestamps: ``01:23 ▰▰▰▰▱▱▱▱▱▱ 04:12``"""
-    from app.utils.timetools import convert_duration
-
-    pos_str = convert_duration(max(position, 0.0))
-    len_str = convert_duration(length)
-    bar = ProgressBar(0, length, position)
-    return f"{pos_str} {bar} {len_str}"
+    if idx <= 0:
+        return emojis.leftindicator + emojis.empty * (key_full - 2) + emojis.rightempty
+    elif idx >= key_full - 1:
+        return emojis.leftfull + emojis.full * (key_full - 1)
+    else:
+        left_part = emojis.leftfull + emojis.full * (idx - 1)
+        mid_part = emojis.indicator
+        empty_count = key_full - 1 - idx - 1
+        right_part = emojis.empty * empty_count + emojis.rightempty
+        return left_part + mid_part + right_part

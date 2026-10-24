@@ -247,16 +247,6 @@ class TestPagify:
         assert all(len(p) <= 500 for p in pages)
 
 
-class TestPlayerStamp:
-    def test_basic_stamp(self) -> None:
-        # 30s position into a 60s track (values in milliseconds).
-        result = formats.PlayerStamp(60_000, 30_000)
-        assert result.startswith('00:30')
-        assert result.endswith('01:00')
-        assert '▰' in result
-        assert '▱' in result
-
-
 def test_join_lines_limited_truncates_with_a_count() -> None:
     lines = [f"`member{i}`: {'x' * 50}" for i in range(100)]
     out = formats.join_lines_limited(lines, 500)

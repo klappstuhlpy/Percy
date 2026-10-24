@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `rob` respects passive mode.
+- Updated music player panel with new emojis, reduced some text and cleaned up.; Set the default music volume to 60% for new sessions;
+  Switched back the volume and track progression bars from generated images to custom emojis.
 
 ## [2.14.0] - 2026-10-23
 

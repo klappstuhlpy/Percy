@@ -49,6 +49,8 @@ class Player(wavelink.Player):
     def __init__(self, client: discord.Client = MISSING, channel: Connectable = MISSING) -> None:
         super().__init__(client, channel)
 
+        self._volume = 60
+
         self.panel: PlayerPanel = MISSING
         self.queue: Queue = Queue()
 
@@ -666,7 +668,6 @@ class Player(wavelink.Player):
             self,
             added: wavelink.Playable | wavelink.Playlist,
             obj: Context | discord.Interaction | None = None,
-            short: bool = False
     ) -> discord.Message | None | Any:
         """Sends a message when a track is added to the queue.
 
@@ -682,44 +683,23 @@ class Player(wavelink.Player):
         is_playlist = isinstance(added, wavelink.Playlist)
         position = self.queue.all.index(added.tracks[0] if is_playlist else added) + 1
         length = sum(track.length for track in added.tracks) if is_playlist else added.length
-        playing_in = sum(track.length for track in self.queue[:position] if not track.is_stream)
+
         title = added.name if is_playlist else added.title
         url = added.url if is_playlist else added.uri
         description = f'**[{title}]({url})**'
 
-        if short:
-            embed = discord.Embed(
-                description=f'{Emojis.success} Started playing {description}',
-                color=helpers.Colour.white()
-            )
-        else:
-            embed = discord.Embed(
-                title=f'Added {'Playlist' if is_playlist else 'Track'}',
-                description=description,
-                color=helpers.Colour.white()
-            )
-            embed.add_field(name='ETA', value=discord.utils.format_dt(
-                discord.utils.utcnow() + datetime.timedelta(milliseconds=playing_in), 'R'))
-            embed.add_field(name='Track length', value=convert_duration(length))
-            embed.add_field(name='\u200b', value='\u200b')
-            embed.add_field(name='Position in Queue', value=f'**#{position}/{len(self.queue.all)}**')
-
-            if added.artwork:
-                embed.set_thumbnail(url=added.artwork)
-
-        if not obj:
-            return await self.panel.channel.send(embed=embed)
-
-        if not short:
-            embed.set_footer(text=f"Requested by {obj.user}", icon_url=obj.user.display_avatar.url)
+        mess = (
+            f"{Emojis.Music.queue_add} Queued ``{description}`` ({length})\n"
+            f"-# Position in queue: {position}"
+        )
 
         if isinstance(obj, Context):
-            return await obj.send(embed=embed, delete_after=15)
+            return await obj.send(mess, delete_after=15)
         else:
             if obj and obj.response.is_done():
-                return await obj.followup.send(embed=embed, delete_after=15)
+                return await obj.followup.send(mess, delete_after=15)
             else:
-                return await obj.response.send_message(embed=embed, delete_after=15)
+                return await obj.response.send_message(mess, delete_after=15)
 
     @classmethod
     def preview_container(cls, guild: discord.Guild) -> discord.ui.Container:
