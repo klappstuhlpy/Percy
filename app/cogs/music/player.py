@@ -49,8 +49,6 @@ class Player(wavelink.Player):
     def __init__(self, client: discord.Client = MISSING, channel: Connectable = MISSING) -> None:
         super().__init__(client, channel)
 
-        self._volume = 60
-
         self.panel: PlayerPanel = MISSING
         self.queue: Queue = Queue()
 
