@@ -1482,7 +1482,7 @@ class Economy(Cog):
         view = SearchView(ctx.author, options, resolve)
         view.message = await ctx.send("\N{RIGHT-POINTING MAGNIFYING GLASS} **Where do you want to search?**", view=view)
 
-    @command("postmemes", aliases=["pm"], description="Post a meme online and hope it goes viral.", guild_only=True)
+    @command("postmemes", description="Post a meme online and hope it goes viral.", guild_only=True)
     @cooldown(1, POSTMEME_COOLDOWN)
     async def postmemes(self, ctx: Context) -> None:
         """Pick one of three meme formats to post.
