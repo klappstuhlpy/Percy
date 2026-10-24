@@ -451,10 +451,12 @@ pub async fn guild_polls(State(app): State<AppState>, session: Session, Path(gui
         percy.get_guild_roles(guild_id),
         percy.get_polls(guild_id),
     );
-    let polls = polls.unwrap_or(PollsResponse {
+    let mut polls = polls.unwrap_or(PollsResponse {
         polls: Vec::new(),
         total: 0,
     });
+    // Newest first; ISO timestamps order lexically, unpublished (None) sink to the bottom.
+    polls.polls.sort_by(|a, b| b.published.cmp(&a.published));
     let active_count = polls.polls.iter().filter(|p| !p.ended).count();
     let ended_count = polls.polls.iter().filter(|p| p.ended).count();
 
