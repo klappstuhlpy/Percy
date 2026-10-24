@@ -211,7 +211,7 @@ class PlayerPanel(LayoutView):
             container.add_item(discord.ui.Separator())
 
             container.add_item(discord.ui.TextDisplay("-# Playback Controls"))
-            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
+            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_skip, self.on_loop))
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
@@ -234,7 +234,7 @@ class PlayerPanel(LayoutView):
             container.add_item(discord.ui.Separator())
 
             container.add_item(discord.ui.TextDisplay("-# Playback Controls"))
-            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
+            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_skip, self.on_loop))
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
@@ -274,7 +274,7 @@ class PlayerPanel(LayoutView):
                 self.disabled_state(),
                 EMOJI_KEYS["pause_play"][bool(not self.player.paused and self.player.playing)],
             ),
-            (self.on_forward, self.disabled_state(not self.player.upcoming), None),
+            (self.on_skip, self.disabled_state(not self.player.upcoming), None),
             (self.on_loop, self.disabled_state(), EMOJI_KEYS["loop"][self.player.queue.mode]),  # type: ignore
             (self.on_stop, self.disabled_state(), None),
             (self.on_volume, self.disabled_state(), None),
