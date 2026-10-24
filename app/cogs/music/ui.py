@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 EMOJI_KEYS: dict[str, dict[ShuffleMode, str] | dict[bool, str] | dict[QueueMode, str] | str] = {
     "shuffle": {ShuffleMode.on: Emojis.Music.shuffle_on, ShuffleMode.off: Emojis.Music.shuffle_off},
-    "pause_play": {True: Emojis.Music.pause, False: Emojis.Music.play},
+    "pause_play": {False: Emojis.Music.pause, True: Emojis.Music.play},
     "loop": {
         QueueMode.loop: Emojis.Music.repeat_one,
         QueueMode.loop_all: Emojis.Music.repeat_all,
