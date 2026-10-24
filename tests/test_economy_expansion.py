@@ -439,5 +439,6 @@ def test_vote_claimable() -> None:
     assert vote_claimable(voted, live, None, NOW)
     assert vote_claimable(voted, live, voted - datetime.timedelta(days=1), NOW)
     assert not vote_claimable(voted, live, voted + datetime.timedelta(minutes=5), NOW)  # already claimed
+    assert not vote_claimable(voted, live, voted, NOW)  # claim stamped at the vote instant
     assert not vote_claimable(voted, NOW - datetime.timedelta(seconds=1), None, NOW)  # expired
     assert not vote_claimable(None, None, None, NOW)  # never voted

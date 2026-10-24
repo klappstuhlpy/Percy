@@ -444,14 +444,22 @@ class EconomyRepository(BaseRepository):
         return await self.fetchval(
             'SELECT last_vote_claim FROM economy_dailies WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
 
-    async def set_vote_claim(self, user_id: int, guild_id: int, when: datetime.datetime) -> None:
-        """Records a member's latest vote-reward claim."""
-        query = """
+    async def claim_vote(
+        self, user_id: int, guild_id: int, voted_at: datetime.datetime, now: datetime.datetime
+    ) -> bool:
+        """Atomically stamp a vote claim; ``True`` only for the one caller that wins (not yet claimed since ``voted_at``)."""
+        won = await self.fetchval(
+            """
             INSERT INTO economy_dailies (user_id, guild_id, last_claim, streak, last_vote_claim)
-            VALUES ($1, $2, NULL, 0, $3)
-            ON CONFLICT (user_id, guild_id) DO UPDATE SET last_vote_claim = EXCLUDED.last_vote_claim;
-        """
-        await self.execute(query, user_id, guild_id, ensure_utc(when).replace(tzinfo=None))
+            VALUES ($1, $2, NULL, 0, $4)
+            ON CONFLICT (user_id, guild_id) DO UPDATE SET last_vote_claim = EXCLUDED.last_vote_claim
+                WHERE economy_dailies.last_vote_claim IS NULL OR economy_dailies.last_vote_claim < $3
+            RETURNING 1;
+            """,
+            user_id, guild_id,
+            ensure_utc(voted_at).replace(tzinfo=None), ensure_utc(now).replace(tzinfo=None),
+        )
+        return won is not None
 
     # -- leaderboards: (user_id, value) rows, highest first, one query each -----
 

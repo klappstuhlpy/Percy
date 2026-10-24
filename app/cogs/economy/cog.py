@@ -696,11 +696,16 @@ class Economy(Cog):
                 await ctx.send_error("You have no active vote. Use `vote` to see where to vote, then claim here.")
             return
 
+        assert voted is not None
+        # The stamp is the gate: only the invocation that wins the atomic update gets paid.
+        if not await self.bot.db.economy.claim_vote(ctx.author.id, ctx.guild.id, voted, now):
+            await ctx.send_error("You already claimed the reward for your current vote. Vote again to claim more!")
+            return
+
         scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
         amount = round(VOTE_REWARD * scale)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount)
-        await self.bot.db.economy.set_vote_claim(ctx.author.id, ctx.guild.id, now)
         await ctx.send_success(
             f"Thanks for voting! You claimed {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
         )
