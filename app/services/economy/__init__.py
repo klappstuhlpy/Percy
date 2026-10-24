@@ -3,7 +3,7 @@
 - :mod:`~app.services.economy.core` — dailies, weekly/monthly, shop pricing,
   loot tables, item effects, lottery draws, prestige math.
 - :mod:`~app.services.economy.jobs` — the career ladder behind ``work``/``job``.
-- :mod:`~app.services.economy.activities` — ``beg``/``dig``/``search`` tables.
+- :mod:`~app.services.economy.activities` — ``beg``/``dig``/``search``/``postmemes`` tables.
 - :mod:`~app.services.economy.pets` — pet species, hunger and passive earnings.
 - :mod:`~app.services.economy.quests` — deterministic daily quest boards.
 - :mod:`~app.services.economy.achievements` — milestone badges.
@@ -30,6 +30,8 @@ from app.services.economy.activities import (
     BEG_TABLE,
     DIG_COOLDOWN,
     DIG_TABLE,
+    MEME_FORMATS,
+    POSTMEME_COOLDOWN,
     SEARCH_COOLDOWN,
     SEARCH_LOCATIONS,
     SearchLocation,
@@ -66,6 +68,7 @@ from app.services.economy.core import (
     LOOTBOX_BANDS,
     MONTHLY_AMOUNT,
     MONTHLY_COOLDOWN,
+    PASSIVE_COOLDOWN,
     PRESTIGE_BASE_REQUIREMENT,
     PRESTIGE_MAX_LEVEL,
     PRESTIGE_STEP,
@@ -81,6 +84,7 @@ from app.services.economy.core import (
     compute_daily,
     compute_periodic,
     describe_effect,
+    parse_amount,
     pick_weighted_winner,
     prestige_multiplier,
     prestige_requirement,
@@ -178,10 +182,13 @@ __all__ = (
     'LOOTBOX_BANDS',
     'MAX_ITEM_STOCK',
     'MAX_TRADE_LINES',
+    'MEME_FORMATS',
     'MONTHLY_AMOUNT',
     'MONTHLY_COOLDOWN',
     'NO_TOOL_PAYOUT',
+    'PASSIVE_COOLDOWN',
     'PET_SPECIES',
+    'POSTMEME_COOLDOWN',
     'PRESTIGE_BASE_REQUIREMENT',
     'PRESTIGE_MAX_LEVEL',
     'PRESTIGE_STEP',
@@ -242,6 +249,7 @@ __all__ = (
     'item_expired',
     'name_reserved_error',
     'next_unlock',
+    'parse_amount',
     'pick_search_options',
     'pick_weighted_winner',
     'prestige_multiplier',

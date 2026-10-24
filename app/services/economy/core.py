@@ -31,6 +31,7 @@ __all__ = (
     'LOOTBOX_BANDS',
     'MONTHLY_AMOUNT',
     'MONTHLY_COOLDOWN',
+    'PASSIVE_COOLDOWN',
     'PRESTIGE_BASE_REQUIREMENT',
     'PRESTIGE_MAX_LEVEL',
     'PRESTIGE_STEP',
@@ -46,6 +47,7 @@ __all__ = (
     'compute_daily',
     'compute_periodic',
     'describe_effect',
+    'parse_amount',
     'pick_weighted_winner',
     'prestige_multiplier',
     'prestige_requirement',
@@ -168,6 +170,29 @@ MONTHLY_AMOUNT = 7_000
 WEEKLY_COOLDOWN = datetime.timedelta(days=7)
 #: Minimum time between monthly claims.
 MONTHLY_COOLDOWN = datetime.timedelta(days=30)
+#: Minimum gap between passive-mode toggles, so it can't be flipped on just before someone robs back.
+PASSIVE_COOLDOWN = datetime.timedelta(hours=24)
+
+
+def parse_amount(text: str, available: int) -> int | None:
+    """Parse a money argument: a number (``1,500`` and ``2k`` work), ``all``/``max`` or ``half``.
+
+    Keywords resolve against ``available``. Returns ``None`` for anything unparsable or
+    not positive, so the caller has one error path.
+    """
+    text = text.strip().lower().replace(',', '').replace('_', '')
+    if text in ('all', 'max'):
+        amount = available
+    elif text == 'half':
+        amount = available // 2
+    else:
+        factor = {'k': 1_000, 'm': 1_000_000}.get(text[-1:], 1)
+        number = text[:-1] if factor > 1 else text
+        try:
+            amount = round(float(number) * factor)
+        except (ValueError, OverflowError):
+            return None
+    return amount if amount > 0 else None
 
 
 @dataclass(frozen=True, slots=True)

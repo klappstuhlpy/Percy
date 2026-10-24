@@ -303,3 +303,30 @@ def test_settings_built_from_record() -> None:
 def test_rob_shield_item_effect_validates() -> None:
     assert validate_item_effect('rob_shield', None, 60) is None
     assert validate_item_effect('rob_shield', None, None) is not None
+
+
+# -- parse_amount / postmemes ------------------------------------------------
+
+
+def test_parse_amount_keywords_and_numbers() -> None:
+    from app.services.economy import parse_amount
+
+    assert parse_amount('all', 1234) == parse_amount('MAX', 1234) == 1234
+    assert parse_amount('half', 5) == 2
+    assert parse_amount('1,500', 0) == 1500
+    assert parse_amount('2k', 0) == 2000
+    assert parse_amount('1.5m', 0) == 1_500_000
+    for bad in ('', 'abc', '-5', '0', 'half', 'nan', 'inf', '1e999'):
+        assert parse_amount(bad, 1) is None, bad
+
+
+def test_meme_formats_resolve_like_search() -> None:
+    from app.services.economy import MEME_FORMATS, pick_search_options, resolve_search
+
+    rng = random.Random(4)
+    assert len({m.id for m in MEME_FORMATS}) == len(MEME_FORMATS)
+    for meme in pick_search_options(locations=MEME_FORMATS, rng=rng):
+        outcome = resolve_search(meme, rng=rng)
+        assert outcome.injured or (outcome.catch is not None and outcome.catch.amount >= 0)
+    wholesome = next(m for m in MEME_FORMATS if m.id == 'wholesome')
+    assert not any(resolve_search(wholesome, rng=rng).injured for _ in range(200))

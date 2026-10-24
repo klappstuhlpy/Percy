@@ -11,7 +11,7 @@ import random
 import numpy as np
 import pytest
 
-from app.cogs.games.engine import dice, higherlower, horserace, mines
+from app.cogs.games.engine import crash, dice, fight, heist, higherlower, horserace, mines, scratch
 from app.cogs.games.engine.blackjack import Hand
 from app.cogs.games.engine.cards import BaseCard
 from app.cogs.games.engine.trivia import build_round
@@ -215,3 +215,136 @@ def test_trivia_build_round_tracks_correct_answer() -> None:
     assert set(rnd.options) == {"right", "a", "b", "c"}
     assert rnd.options[rnd.correct_index] == "right"
     assert rnd.correct == "right"
+
+
+# -- Snake Eyes / Gamble ----------------------------------------------------
+
+
+def test_snake_eyes_multipliers_and_edge() -> None:
+    assert dice.snake_eyes_multiplier(1, 1) == dice.SNAKE_BOTH
+    assert dice.snake_eyes_multiplier(1, 4) == dice.snake_eyes_multiplier(6, 1) == dice.SNAKE_ONE
+    assert dice.snake_eyes_multiplier(2, 3) == 0.0
+    ev = sum(dice.snake_eyes_multiplier(a, b) for a in range(1, 7) for b in range(1, 7)) / 36
+    assert 0.9 < ev < 1.0
+
+
+def test_gamble_house_edge() -> None:
+    sides = range(1, dice.GAMBLE_SIDES + 1)
+    wins = sum(p > h for p in sides for h in sides)
+    ev = wins / dice.GAMBLE_SIDES**2 * dice.GAMBLE_PAYOUT
+    assert 0.9 < ev < 1.0
+    p, h = dice.gamble_roll(random.Random(1))
+    assert 1 <= p <= dice.GAMBLE_SIDES and 1 <= h <= dice.GAMBLE_SIDES
+
+
+# -- Crash ------------------------------------------------------------------
+
+
+def test_crash_point_distribution_matches_edge() -> None:
+    rng = random.Random(7)
+    points = [crash.draw_crash_point(rng) for _ in range(40_000)]
+    assert min(points) >= 1.0
+    for target in (1.5, 2.0, 5.0):
+        survive = sum(p > target for p in points) / len(points)
+        assert survive == pytest.approx(crash.HOUSE_EDGE / target, abs=0.015)
+
+
+def test_crash_run_cash_out_and_crash() -> None:
+    game = crash.Crash(rng=random.Random(0))
+    assert game.cash_out() is None  # nothing to lock in before the first tick
+    game.crash_point = 1.5
+    game.tick()
+    assert game.multiplier == 1.15 and not game.finished
+    assert game.cash_out() == 1.15
+    game.tick()  # no-op once finished
+    assert game.tick_count == 1
+
+    game = crash.Crash(rng=random.Random(0))
+    game.crash_point = 1.2
+    game.tick()
+    game.tick()
+    assert game.crashed and game.cash_out() is None
+
+
+def test_crash_auto_cashout_beats_crash_in_same_tick() -> None:
+    game = crash.Crash(auto_cashout=1.2, rng=random.Random(0))
+    game.crash_point = 1.25
+    game.tick()
+    assert not game.finished
+    game.tick()  # x1.32 overshoots both, but the auto target came first
+    assert game.cashed_at == 1.2 and not game.crashed
+
+
+def test_crash_caps_at_max_multiplier() -> None:
+    game = crash.Crash(rng=random.Random(0))
+    game.crash_point = 1_000.0
+    while not game.finished:
+        game.tick()
+    assert game.cashed_at == crash.MAX_MULTIPLIER
+
+
+# -- Scratch ----------------------------------------------------------------
+
+
+def test_scratch_card_pays_average_of_picks() -> None:
+    card = scratch.ScratchCard(random.Random(3))
+    card.tiles = [10.0, 0.0, 2.0, 1.0, 0.0, 0.0, 0.5, 3.0, 0.0]
+    card.scratch(0)
+    card.scratch(2)
+    with pytest.raises(ValueError):
+        card.scratch(2)
+    card.scratch(3)
+    assert card.finished and card.multiplier == round(13 / 3, 2)
+    with pytest.raises(RuntimeError):
+        card.scratch(4)
+
+
+def test_scratch_expected_return_below_one() -> None:
+    assert 0.9 < scratch.expected_multiplier() < 1.0
+
+
+# -- Fight ------------------------------------------------------------------
+
+
+def test_fight_punch_defend_and_win() -> None:
+    game = fight.Fight(random.Random(5))
+    first = game.act(fight.Action.DEFEND)
+    assert first.actor == 0 and game.guarding[0] and game.turn == 1
+    blocked = game.act(fight.Action.PUNCH)
+    assert blocked.blocked and not game.guarding[0]
+    while not game.finished:
+        game.act(fight.Action.PUNCH)
+    assert min(game.hp) == 0 and game.hp[game.winner] > 0  # type: ignore[index]
+
+
+def test_fight_flee_forfeits() -> None:
+    game = fight.Fight(random.Random(1))
+    game.act(fight.Action.FLEE)
+    assert game.winner == 1
+    with pytest.raises(RuntimeError):
+        game.act(fight.Action.PUNCH)
+
+
+def test_fight_heal_never_exceeds_max() -> None:
+    game = fight.Fight(random.Random(2))
+    assert game.act(fight.Action.DEFEND).heal == 0
+    assert game.hp[0] == fight.MAX_HP
+
+
+# -- Heist ------------------------------------------------------------------
+
+
+def test_heist_chance_grows_and_caps() -> None:
+    assert heist.success_chance(2) > heist.success_chance(1)
+    assert heist.success_chance(heist.MAX_CREW) <= 0.75
+
+
+def test_heist_split_conserves_coins() -> None:
+    rng = random.Random(11)
+    for _ in range(500):
+        result = heist.resolve_heist(3, 10_000, rng)
+        if result.success:
+            assert result.loot == result.share * 3 <= 10_000 * 0.35
+            assert result.fine_fraction == 0.0
+        else:
+            assert result.loot == 0 and 0.1 <= result.fine_fraction <= 0.25

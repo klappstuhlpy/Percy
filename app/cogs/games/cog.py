@@ -16,7 +16,10 @@ from expiringdict import ExpiringDict
 from app.cogs.games import (
     blackjack_bridge,
     coinflip_ui,
+    crash_ui,
+    fight_ui,
     hangman_ui,
+    heist_ui,
     higherlower_ui,
     horserace_ui,
     mines_ui,
@@ -25,13 +28,16 @@ from app.cogs.games import (
     poker_bridge,
     roulette_ui,
     russianroulette_ui,
+    scratch_ui,
     slot_ui,
     tictactoe_ui,
     tower_ui,
     trivia_ui,
     wordle_ui,
 )
+from app.cogs.games.engine import crash as crash_engine
 from app.cogs.games.engine import dice as dice_engine
+from app.cogs.games.engine import heist as heist_engine
 from app.cogs.games.engine import horserace as horserace_engine
 from app.cogs.games.engine import roulette as roulette_engine
 from app.cogs.games.engine.cards import MinimumBet, Payouts
@@ -544,24 +550,12 @@ class Games(Cog):
         Possible amount to steal: `success rate * their cash`
         Failing penalty is the same as with command `crime`
         """
-        if user.bot:
-            if ctx.command is not None:
-                ctx.command.reset_cooldown(ctx)
-            await ctx.send_error("Cannot rob a bot.")
-            return
-
-        if user == ctx.author:
-            if ctx.command is not None:
-                ctx.command.reset_cooldown(ctx)
-            await ctx.send_error("You cannot rob yourself.")
-            return
-
         assert ctx.guild is not None
-        settings = GuildEconomySettings.from_record(await self.bot.db.economy.get_settings(ctx.guild.id))
-        if not settings.rob_enabled:
+        error = await self._rob_block_reason(ctx, user)
+        if error:
             if ctx.command is not None:
                 ctx.command.reset_cooldown(ctx)
-            await ctx.send_error("Robbing is disabled in this server.")
+            await ctx.send_error(error)
             return
 
         if await self.bot.db.economy.has_active_boost(user.id, ctx.guild.id, "shield"):
@@ -904,6 +898,161 @@ class Games(Cog):
 
         with suppress(discord.HTTPException):
             await ctx.message.add_reaction(Emojis.success)
+
+    @command("crash", description="Ride a climbing multiplier and cash out before it crashes.", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.", auto="Cash out automatically at this multiplier (e.g. 2.5).")
+    async def crash(self, ctx: Context, bet: int, auto: float | None = None) -> None:
+        """The multiplier climbs every second and a half until it crashes at a hidden point.
+
+        Cash out any time to win `bet x multiplier`; stay on past the crash and the stake is gone.
+        """
+        if auto is not None and not 1.1 <= auto <= crash_engine.MAX_MULTIPLIER:
+            await ctx.send_error(f"Auto cash-out must be between **x1.1** and **x{crash_engine.MAX_MULTIPLIER:g}**.")
+            return
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        game = crash_ui.CrashGame(cast("discord.Member", ctx.author), bet, auto)
+        game.message = await ctx.send(view=game)
+        await game.run(self.bot)
+
+    @command("scratch", description="Scratch three of nine tiles; win their average multiplier.", guild_only=True, hybrid=True)
+    @describe(bet="The price of the card.")
+    async def scratch(self, ctx: Context, bet: int) -> None:
+        """Buy a 3x3 scratch card, scratch three tiles and get paid the average of what you uncover."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        game = scratch_ui.ScratchGame(self.bot, cast("discord.Member", ctx.author), bet)
+        game.message = await ctx.send(view=game)
+
+    @command("snakeeyes", aliases=["se"], description="Roll two dice — one 1 pays x2, double 1s pay x15.", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.")
+    async def snakeeyes(self, ctx: Context, bet: int) -> None:
+        """Roll two dice. A single 1 doubles your bet, snake eyes (both 1s) pays fifteen times."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        assert ctx.guild is not None
+        d1, d2 = dice_engine.roll()
+        multiplier = dice_engine.snake_eyes_multiplier(d1, d2)
+        payout = round(bet * multiplier)
+        faces = f"{dice_engine.DIE_FACES[d1 - 1]} {dice_engine.DIE_FACES[d2 - 1]}"
+        if payout:
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=payout)
+            title = "\N{SNAKE} SNAKE EYES!" if multiplier == dice_engine.SNAKE_BOTH else "\N{SNAKE} Snake Eyes"
+            embed = discord.Embed(
+                title=title, colour=helpers.Colour.lime_green(),
+                description=f"# {faces}\nWon {Emojis.Economy.cash} **{fnumb(payout)}** (**x{multiplier:g}**).",
+            )
+            result, profit = GameResult.WIN, payout - bet
+        else:
+            embed = discord.Embed(
+                title="\N{SNAKE} Snake Eyes", colour=helpers.Colour.light_red(),
+                description=f"# {faces}\nNo ones. Lost {Emojis.Economy.cash} **{fnumb(bet)}**.",
+            )
+            result, profit = GameResult.LOSS, -bet
+        await ctx.send(embed=embed)
+        await self.bot.db.game_stats.record_result(
+            ctx.guild.id, ctx.author.id, Game.SNAKE_EYES, result, wagered=bet, profit=profit
+        )
+
+    @command("gamble", aliases=["bet"], description="Out-roll Percy on a d12 — ties go to the house.", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.")
+    async def gamble(self, ctx: Context, bet: int) -> None:
+        """You and Percy each roll a d12. Roll higher to double your bet; a tie or lower loses it."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        assert ctx.guild is not None
+        mine, house = dice_engine.gamble_roll()
+        rolls = f"You rolled **{mine}** • Percy rolled **{house}**"
+        if mine > house:
+            payout = round(bet * dice_engine.GAMBLE_PAYOUT)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=payout)
+            embed = discord.Embed(
+                title="\N{GAME DIE} You win!", colour=helpers.Colour.lime_green(),
+                description=f"{rolls}\nWon {Emojis.Economy.cash} **{fnumb(payout - bet)}**.",
+            )
+            result, profit = GameResult.WIN, payout - bet
+        else:
+            reason = "Ties go to the house." if mine == house else "Percy wins this one."
+            embed = discord.Embed(
+                title="\N{GAME DIE} You lose", colour=helpers.Colour.light_red(),
+                description=f"{rolls}\n{reason} Lost {Emojis.Economy.cash} **{fnumb(bet)}**.",
+            )
+            result, profit = GameResult.LOSS, -bet
+        await ctx.send(embed=embed)
+        await self.bot.db.game_stats.record_result(
+            ctx.guild.id, ctx.author.id, Game.GAMBLE, result, wagered=bet, profit=profit
+        )
+
+    @command("fight", description="Challenge a member to a turn-based fight, optionally for coins.", guild_only=True, hybrid=True)
+    @describe(member="Who to fight.", bet="Coins each fighter puts in; the winner takes both (default 0).")
+    async def fight(self, ctx: Context, member: discord.Member, bet: int = 0) -> None:
+        """Punch, defend or flee in turns until someone drops to 0 HP. With a bet, the winner takes the pot."""
+        if member.bot or member == ctx.author:
+            await ctx.send_error("Pick a real opponent — not yourself and not a bot.")
+            return
+        if bet < 0:
+            await ctx.send_error("You cannot bet negative coins.")
+            return
+        if bet:
+            assert ctx.guild is not None
+            if not await self._check_max_bet(ctx, bet):
+                return
+            for fighter in (ctx.author, member):
+                balance = await ctx.db.get_user_balance(fighter.id, ctx.guild.id)
+                if balance.cash < bet:
+                    await ctx.send_error(f"**{fighter.display_name}** doesn't have {Emojis.Economy.cash} **{fnumb(bet)}** in cash.")
+                    return
+        view = fight_ui.FightView(self.bot, cast("discord.Member", ctx.author), member, bet)
+        view.message = await ctx.send(view=view)
+
+    @command("heist", aliases=["bankrob"], description="Rally a crew and rob a member's bank.", guild_only=True, hybrid=True)
+    @cooldown(1, 7200, commands.BucketType.member)
+    @describe(member="Whose bank to hit.")
+    async def heist(self, ctx: Context, member: discord.Member) -> None:
+        """Open a 60-second crew sign-up for a heist on someone's **bank**.
+
+        Every extra crew member raises the odds. Success splits a slice of the bank
+        evenly; failure fines every member a slice of their cash.
+        """
+        assert ctx.guild is not None
+        error = await self._rob_block_reason(ctx, member)
+        if error is None:
+            target_balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)
+            robber_balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            if target_balance.bank < heist_engine.MIN_TARGET_BANK:
+                error = f"**{member.display_name}**'s bank isn't worth the risk."
+            elif robber_balance.cash < heist_engine.ENTRY_CASH:
+                error = f"You need {Emojis.Economy.cash} **{fnumb(heist_engine.ENTRY_CASH)}** in cash to lead a heist."
+        if error:
+            if ctx.command is not None:
+                ctx.command.reset_cooldown(ctx)
+            await ctx.send_error(error)
+            return
+        view = heist_ui.HeistView(self.bot, cast("discord.Member", ctx.author), member)
+        view.message = await ctx.send(view=view)
+
+    async def _rob_block_reason(self, ctx: Context, target: discord.Member) -> str | None:
+        """Why the invoker may not rob or heist ``target`` right now — ``None`` when they may.
+
+        Shared by ``rob`` and ``heist``: bots, self, the guild's rob toggle and
+        passive mode on either side. A rob shield is checked separately, since
+        hitting one still costs the robber their cooldown.
+        """
+        assert ctx.guild is not None
+        if target.bot:
+            return "You can't rob a bot."
+        if target == ctx.author:
+            return "You can't rob yourself."
+        settings = GuildEconomySettings.from_record(await self.bot.db.economy.get_settings(ctx.guild.id))
+        if not settings.rob_enabled:
+            return "Robbing is disabled in this server."
+        if await self.bot.db.economy.is_passive(ctx.author.id, ctx.guild.id):
+            return "You're in passive mode — turn it off with `passive off` first."
+        if await self.bot.db.economy.is_passive(target.id, ctx.guild.id):
+            return f"**{target.display_name}** is in passive mode."
+        return None
 
     async def _balances_for(self, guild_id: int, user_ids: Iterable[int]) -> dict[int, Balance]:
         """Fetch balances for the given users in a single query, keyed by user id.

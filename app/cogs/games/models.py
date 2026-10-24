@@ -42,6 +42,12 @@ class Game(StrEnum):
     RUSSIAN_ROULETTE = 'russianroulette'
     HORSERACE = 'horserace'
     COINFLIP = 'coinflip'
+    CRASH = 'crash'
+    SCRATCH = 'scratch'
+    SNAKE_EYES = 'snakeeyes'
+    GAMBLE = 'gamble'
+    FIGHT = 'fight'
+    HEIST = 'heist'
 
     @property
     def label(self) -> str:
@@ -71,6 +77,12 @@ _LABELS: dict[Game, str] = {
     Game.RUSSIAN_ROULETTE: "Russian Roulette",
     Game.HORSERACE: "Horse Race",
     Game.COINFLIP: "Coinflip",
+    Game.CRASH: "Crash",
+    Game.SCRATCH: "Scratch Card",
+    Game.SNAKE_EYES: "Snake Eyes",
+    Game.GAMBLE: "Gamble",
+    Game.FIGHT: "Fight",
+    Game.HEIST: "Heist",
 }
 
 _ICONS: dict[Game, str] = {

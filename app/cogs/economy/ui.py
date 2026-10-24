@@ -82,9 +82,12 @@ class SearchView(discord.ui.View):
         member: discord.abc.User,
         options: Sequence[SearchLocation],
         resolve: Callable[[discord.Interaction, SearchLocation], Awaitable[None]],
+        *,
+        timeout_text: str = 'You hesitated too long and went home empty-handed.',
     ) -> None:
         super().__init__(timeout=30.0)
         self.member = member
+        self.timeout_text = timeout_text
         self.resolve = resolve
         self.message: discord.Message | None = None
         for location in options:
@@ -92,7 +95,7 @@ class SearchView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.member.id:
-            await interaction.response.send_message('This search is not yours.', ephemeral=True)
+            await interaction.response.send_message('This choice is not yours.', ephemeral=True)
             return False
         return True
 
@@ -102,7 +105,7 @@ class SearchView(discord.ui.View):
                 child.disabled = True
         if self.message is not None:
             try:
-                await self.message.edit(content='You hesitated too long and went home empty-handed.', view=self)
+                await self.message.edit(content=self.timeout_text, view=self)
             except discord.HTTPException:
                 pass
 

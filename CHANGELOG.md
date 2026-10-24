@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `crash`: a multiplier climbs until it crashes at a hidden point. Cash out before it does,
+  or set an automatic cash-out.
+- `scratch`: scratch three of nine tiles on a card and win the average of what you uncover.
+- `snakeeyes`: roll two dice. One 1 pays x2, two 1s pay x15.
+- `gamble`: you and Percy each roll a d12. Roll higher to win; ties go to Percy.
+- `fight`: a turn-based duel with another member (punch, defend or flee). You can bet on it,
+  and the winner takes both stakes.
+- `heist`: gather a crew within 60 seconds to rob a member's bank. A bigger crew has better
+  odds. If it works, the loot is split evenly; if it fails, everyone is fined.
+- `postmemes`: post one of three kinds of meme. Riskier memes pay more but can flop.
+- `passive`: opt out of robbing and heists, in both directions. You can switch it once
+  every 24 hours.
+- `deposit` and `withdraw` take `all`, `max`, `half` and shorthand like `2k`.
+
+### Changed
+
+- `rob` respects passive mode.
+
 ## [2.14.0] - 2026-10-23
 
 ### Added

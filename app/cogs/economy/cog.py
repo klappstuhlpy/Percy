@@ -31,10 +31,13 @@ from app.services.economy import (
     HUNTING_TABLE,
     JOB_LADDER,
     MAX_ITEM_STOCK,
+    MEME_FORMATS,
     MONTHLY_AMOUNT,
     MONTHLY_COOLDOWN,
     NO_TOOL_PAYOUT,
+    PASSIVE_COOLDOWN,
     PET_SPECIES,
+    POSTMEME_COOLDOWN,
     PRESTIGE_STEP,
     REPLY_LIMIT,
     SEARCH_COOLDOWN,
@@ -61,6 +64,7 @@ from app.services.economy import (
     get_species,
     item_emoji,
     name_reserved_error,
+    parse_amount,
     pick_search_options,
     pick_weighted_winner,
     prestige_multiplier,
@@ -373,31 +377,39 @@ class Economy(Cog):
         )
 
     @command("deposit", aliases=["dep"], description="Deposits money into your bank.", guild_only=True, hybrid=True)
-    @describe(amount="The amount to deposit.")
-    async def deposit(self, ctx: Context, amount: Range[int, 1]) -> None:
-        """Deposits money into your bank."""
+    @describe(amount="The amount to deposit: a number (2k works), all or half.")
+    async def deposit(self, ctx: Context, amount: str) -> None:
+        """Deposits money into your bank. Takes a number, `all`/`max` or `half` of your cash."""
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
-        if balance.cash < amount:
+        value = parse_amount(amount, balance.cash)
+        if value is None:
+            await ctx.send_error("Give a positive amount, `all` or `half` — and have some cash to deposit.")
+            return
+        if balance.cash < value:
             await ctx.send_error("Cannot deposit more than your balance.")
             return
 
-        await balance.remove(cash=amount)
-        await balance.add(bank=amount)
-        await ctx.send_success(f"Successfully deposited {Emojis.Economy.cash} **{fnumb(amount)}** into your bank.")
-        await self._bump_quests(ctx, "deposit", amount)
+        await balance.remove(cash=value)
+        await balance.add(bank=value)
+        await ctx.send_success(f"Successfully deposited {Emojis.Economy.cash} **{fnumb(value)}** into your bank.")
+        await self._bump_quests(ctx, "deposit", value)
 
     @command("withdraw", description="Withdraws money from your bank.", guild_only=True, hybrid=True)
-    @describe(amount="The amount to withdraw.")
-    async def withdraw(self, ctx: Context, amount: Range[int, 1]) -> None:
-        """Withdraws money from your bank."""
+    @describe(amount="The amount to withdraw: a number (2k works), all or half.")
+    async def withdraw(self, ctx: Context, amount: str) -> None:
+        """Withdraws money from your bank. Takes a number, `all`/`max` or `half` of your bank."""
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
-        if balance.bank < amount:
+        value = parse_amount(amount, balance.bank)
+        if value is None:
+            await ctx.send_error("Give a positive amount, `all` or `half` — and have something in the bank.")
+            return
+        if balance.bank < value:
             await ctx.send_error("Cannot withdraw more than your bank balance.")
             return
 
-        await balance.remove(bank=amount)
-        await balance.add(cash=amount)
-        await ctx.send_success(f"Successfully withdrew {Emojis.Economy.cash} **{fnumb(amount)}** from your bank.")
+        await balance.remove(bank=value)
+        await balance.add(cash=value)
+        await ctx.send_success(f"Successfully withdrew {Emojis.Economy.cash} **{fnumb(value)}** from your bank.")
 
     @command("transfer", description="Transfers money to another user.", guild_only=True, hybrid=True)
     @describe(member="The user to transfer the money to.", amount="The amount to transfer.")
@@ -1210,6 +1222,45 @@ class Economy(Cog):
         view = SearchView(ctx.author, options, resolve)
         view.message = await ctx.send("\N{RIGHT-POINTING MAGNIFYING GLASS} **Where do you want to search?**", view=view)
 
+    @command("postmemes", aliases=["pm"], description="Post a meme online and hope it goes viral.", guild_only=True)
+    @cooldown(1, POSTMEME_COOLDOWN)
+    async def postmemes(self, ctx: Context) -> None:
+        """Pick one of three meme formats to post.
+
+        Safe formats earn steady change; edgy ones go viral more often but can
+        flop and cost you instead.
+        """
+        assert ctx.guild is not None
+        guild_id = ctx.guild.id
+
+        async def resolve(interaction: discord.Interaction, meme: SearchLocation) -> None:
+            outcome = resolve_search(meme)
+            balance = await ctx.db.get_user_balance(ctx.author.id, guild_id)
+            if outcome.injured:
+                fine = min(outcome.fine, max(balance.cash, 0))
+                if fine:
+                    await balance.remove(cash=fine)
+                text = (
+                    f'{meme.emoji} **{meme.name}** flopped — {outcome.flavor}\n'
+                    f'You lost {Emojis.Economy.cash} **{fnumb(fine)}**.'
+                )
+            else:
+                assert outcome.catch is not None
+                scale = await self._payout_scale(ctx.author.id, guild_id)
+                amount = round(outcome.catch.amount * scale)
+                await balance.add(cash=amount)
+                text = (
+                    f'{meme.emoji} Your **{meme.name}** earned {outcome.catch.emoji} **{outcome.catch.name}** — '
+                    f'{Emojis.Economy.cash} **{fnumb(amount)}** in ad revenue!{self._scale_suffix(scale)}'
+                )
+            await interaction.response.edit_message(content=text, view=view)
+
+        view = SearchView(
+            ctx.author, pick_search_options(locations=MEME_FORMATS), resolve,
+            timeout_text='You overthought the caption and never posted.',
+        )
+        view.message = await ctx.send("\N{MOBILE PHONE} **What kind of meme are you posting?**", view=view)
+
     @command("work", description="Work a shift at your job.", guild_only=True, extras={"example": "work"})
     @cooldown(1, WORK_COOLDOWN, commands.BucketType.member)
     async def work(self, ctx: Context) -> None:
@@ -1473,6 +1524,39 @@ class Economy(Cog):
         await self._open_hub(ctx, "perks", member)
 
     # -- gifting ------------------------------------------------------------
+
+    @command("passive", description="Opt out of robbing and heists — both ways.", guild_only=True, hybrid=True)
+    @describe(enabled="Turn passive mode on or off; leave empty to see your status.")
+    async def passive(self, ctx: Context, enabled: bool | None = None) -> None:
+        """Passive mode: nobody can rob you or heist your bank, and you can't rob or heist anyone.
+
+        It can be toggled once every 24 hours, so it can't be flipped on right
+        before someone robs you back.
+        """
+        assert ctx.guild is not None
+        db = self.bot.db.economy
+        row = await db.get_passive(ctx.author.id, ctx.guild.id)
+        current = bool(row and row['enabled'])
+        if enabled is None:
+            state = 'on \N{DOVE OF PEACE}' if current else 'off'
+            await ctx.send_info(f"Passive mode is **{state}**. Toggle it with `passive on` / `passive off`.")
+            return
+        if enabled == current:
+            await ctx.send_info(f"Passive mode is already **{'on' if current else 'off'}**.")
+            return
+        last = row['changed_at'].replace(tzinfo=datetime.UTC) if row else None
+        result = compute_periodic(last, now=ctx.message.created_at, cooldown=PASSIVE_COOLDOWN)
+        if not result.claimed:
+            assert result.next_available is not None
+            await ctx.send_error(
+                f"You can toggle passive mode again {discord.utils.format_dt(result.next_available, 'R')}."
+            )
+            return
+        await db.set_passive(ctx.author.id, ctx.guild.id, enabled)
+        if enabled:
+            await ctx.send_success("\N{DOVE OF PEACE} Passive mode **on** — you can't rob or be robbed, and heists skip you.")
+        else:
+            await ctx.send_success("Passive mode **off** — robbing and heists are back on the table, both ways.")
 
     @command("gift", description="Gift items from your inventory to another member.", guild_only=True, hybrid=True)
     @describe(member="The member to gift to.", name="The item to gift.", quantity="How many to gift.")

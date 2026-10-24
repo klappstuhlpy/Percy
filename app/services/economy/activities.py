@@ -1,4 +1,4 @@
-"""Pure logic for the light earning activities: ``beg``, ``dig`` and ``search``.
+"""Pure logic for the light earning activities: ``beg``, ``dig``, ``search`` and ``postmemes``.
 
 These mirror :data:`~app.services.economy.core.FISHING_TABLE` / ``HUNTING_TABLE``:
 weighted loot tables the cog rolls against, plus the ``search`` location catalogue
@@ -25,6 +25,8 @@ __all__ = (
     'BEG_TABLE',
     'DIG_COOLDOWN',
     'DIG_TABLE',
+    'MEME_FORMATS',
+    'POSTMEME_COOLDOWN',
     'SEARCH_COOLDOWN',
     'SEARCH_LOCATIONS',
     'SearchLocation',
@@ -39,6 +41,8 @@ BEG_COOLDOWN = 45
 DIG_COOLDOWN = 90
 #: Minimum seconds between ``search`` attempts.
 SEARCH_COOLDOWN = 75
+#: Minimum seconds between ``postmemes`` attempts.
+POSTMEME_COOLDOWN = 60
 
 #: Begging outcomes — small change most of the time, the occasional windfall.
 BEG_TABLE: tuple[LootEntry, ...] = (
@@ -187,6 +191,56 @@ SEARCH_LOCATIONS: tuple[SearchLocation, ...] = (
             LootEntry('an heirloom brooch', '\N{GEM STONE}', 200, 450, 15),
         ),
         0.05, 5, 40, 'Grandma caught you elbow-deep in the cookie jar. Guilt tax applied.',
+    ),
+)
+
+
+#: ``postmemes`` formats — the same pick-one-of-three shape as search (a flop is the "injury").
+MEME_FORMATS: tuple[SearchLocation, ...] = (
+    SearchLocation(
+        'reaction', 'Reaction Image', '\N{FACE WITH TEARS OF JOY}',
+        (
+            LootEntry('a few pity upvotes', '\N{THUMBS UP SIGN}', 10, 40, 55),
+            LootEntry('a solid front-page run', '\N{FIRE}', 60, 160, 40),
+            LootEntry('a sponsor DM', '\N{BRIEFCASE}', 250, 450, 5),
+        ),
+        0.05, 10, 40, 'Turns out that template died in 2016. You bought ads to save face.',
+    ),
+    SearchLocation(
+        'copypasta', 'Copypasta', '\N{SPIRAL NOTE PAD}',
+        (
+            LootEntry('three confused replies', '\N{THINKING FACE}', 0, 20, 35),
+            LootEntry('a cult following', '\N{BUSTS IN SILHOUETTE}', 80, 220, 50),
+            LootEntry('a viral repost chain', '\N{CHART WITH UPWARDS TREND}', 300, 600, 15),
+        ),
+        0.15, 30, 120, 'Someone found the original author. The apology cost you.',
+    ),
+    SearchLocation(
+        'deepfried', 'Deep-Fried Meme', '\N{FRENCH FRIES}',
+        (
+            LootEntry('a single, sizzling upvote', '\N{COOKING}', 0, 10, 30),
+            LootEntry('an ironic award', '\N{SPORTS MEDAL}', 120, 300, 50),
+            LootEntry('meme-of-the-year buzz', '\N{TROPHY}', 450, 900, 20),
+        ),
+        0.3, 80, 250, 'Too crispy. The mods removed it and the fine was very real.',
+    ),
+    SearchLocation(
+        'wholesome', 'Wholesome Meme', '\N{SMILING FACE WITH SMILING EYES}',
+        (
+            LootEntry('warm fuzzies (non-taxable)', '\N{HEAVY BLACK HEART}', 5, 30, 45),
+            LootEntry('a tip jar refill', '\N{MONEY BAG}', 60, 150, 45),
+            LootEntry('a gift from a stranger', '\N{WRAPPED PRESENT}', 200, 400, 10),
+        ),
+        0.0, 0, 0, '',
+    ),
+    SearchLocation(
+        'shitpost', 'Low-Effort Shitpost', '\N{PILE OF POO}',
+        (
+            LootEntry('crickets', '\N{CRICKET}', 0, 5, 40),
+            LootEntry('chaotic engagement', '\N{CYCLONE}', 100, 280, 40),
+            LootEntry('an unhinged bidding war', '\N{MONEY WITH WINGS}', 500, 1_000, 20),
+        ),
+        0.35, 100, 300, 'Your account got shadowbanned and the appeal fee was steep.',
     ),
 )
 

@@ -357,6 +357,28 @@ class EconomyRepository(BaseRepository):
         )
         return bool(value)
 
+    async def get_passive(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
+        """The member's passive-mode row (``enabled``, ``changed_at``), or ``None`` if they never toggled."""
+        return await self.fetchrow(
+            'SELECT enabled, changed_at FROM economy_passive WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+
+    async def is_passive(self, user_id: int, guild_id: int) -> bool:
+        """Whether the member opted out of robbing and heists."""
+        value = await self.fetchval(
+            'SELECT enabled FROM economy_passive WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+        return bool(value)
+
+    async def set_passive(self, user_id: int, guild_id: int, enabled: bool) -> None:
+        """Turns passive mode on or off, stamping ``changed_at`` for the toggle cooldown."""
+        await self.execute(
+            """
+            INSERT INTO economy_passive (user_id, guild_id, enabled) VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, guild_id) DO UPDATE
+                SET enabled = EXCLUDED.enabled, changed_at = now() at time zone 'utc';
+            """,
+            user_id, guild_id, enabled,
+        )
+
     async def get_boost_multiplier(self, user_id: int, guild_id: int, kind: str) -> float:
         """The member's active multiplier for ``kind`` (``1.0`` when no boost is running)."""
         value = await self.fetchval(
