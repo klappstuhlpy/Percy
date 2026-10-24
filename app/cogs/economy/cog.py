@@ -37,6 +37,7 @@ from app.services.economy import (
     DAILY_COOLDOWN,
     DIG_COOLDOWN,
     DIG_TABLE,
+    DROP_KEYS,
     FISHING_COOLDOWN,
     FISHING_TABLE,
     HUNTING_COOLDOWN,
@@ -70,6 +71,7 @@ from app.services.economy import (
     bank_room,
     boost_multiplier,
     builtin_error,
+    collection_summary,
     compute_daily,
     compute_periodic,
     compute_pet_claim,
@@ -175,6 +177,7 @@ class Economy(Cog):
             return 1.0, ''
         item = await db.ensure_builtin(guild_id, drop)
         await db.add_to_inventory(user_id, guild_id, item['id'], 1)
+        await db.record_discovery(user_id, guild_id, drop.key)
         return 1.0, f'\n…and found {drop.emoji} **{item["name"]}**!'
 
     async def _award_drop(self, member: discord.Member, drop: ChatDrop) -> str:
@@ -188,6 +191,8 @@ class Economy(Cog):
             return f'{member.mention} grabbed the drop: {Emojis.Economy.cash} **{fnumb(amount)}**!'
         row = await db.ensure_builtin(member.guild.id, drop.item)
         await db.add_to_inventory(member.id, member.guild.id, row['id'], 1)
+        if drop.item.drop_from:
+            await db.record_discovery(member.id, member.guild.id, drop.item.key)
         return f'{member.mention} grabbed the drop: {drop.item.emoji} **{row["name"]}**!'
 
     async def _drops_enabled(self, guild_id: int) -> bool:
@@ -280,6 +285,7 @@ class Economy(Cog):
             has_pet=await db.economy.get_pet(user_id, guild_id) is not None,
             quests_completed=await db.economy.count_completed_quests(user_id, guild_id),
             items_owned=await db.economy.count_items(user_id, guild_id),
+            discoveries=len(DROP_KEYS.intersection(await db.economy.get_discoveries(user_id, guild_id))),
         )
         new_ids = await db.economy.award_achievements(user_id, guild_id, evaluate_achievements(snapshot))
         unlocked = [a for a in (get_achievement(aid) for aid in new_ids) if a is not None]
@@ -1867,6 +1873,26 @@ class Economy(Cog):
         )
         await ctx.send(view=make_notice(
             f"{user.display_name}'s Multipliers", '\n'.join(lines), thumbnail=get_asset_url(user)
+        ))
+
+    @command("collection", alias="book", description="See which item drops you have discovered.", guild_only=True)
+    @describe(member="The member to look at (defaults to you).")
+    async def collection(
+        self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None
+    ) -> None:
+        """Your collection book: every fish, hunt and dig drop, or ``???`` until you find it."""
+        assert ctx.guild is not None
+        user = member or ctx.author
+        groups = collection_summary(await self.bot.db.economy.get_discoveries(user.id, ctx.guild.id))
+        found = sum(g.found for g in groups)
+        total = sum(g.total for g in groups)
+        fields = [
+            (f'{g.activity.title()} ({g.found}/{g.total})', '\n'.join(label for label, _ in g.entries))
+            for g in groups
+        ]
+        await ctx.send(view=make_notice(
+            f"{user.display_name}'s Collection", f'**{found}/{total}** drops discovered.',
+            fields=fields, thumbnail=get_asset_url(user),
         ))
 
     @command("gift", description="Gift items from your inventory to another member.", guild_only=True, hybrid=True)

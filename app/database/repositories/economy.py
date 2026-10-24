@@ -871,6 +871,20 @@ class EconomyRepository(BaseRepository):
             'gross': gross, 'tax': tax, 'net': net,
         }
 
+    async def record_discovery(self, user_id: int, guild_id: int, builtin_key: str) -> None:
+        """Note that the member has found catalogue drop ``builtin_key`` (insert-if-absent)."""
+        await self.execute(
+            'INSERT INTO economy_discoveries (user_id, guild_id, builtin_key) VALUES ($1, $2, $3) '
+            'ON CONFLICT DO NOTHING;',
+            user_id, guild_id, builtin_key,
+        )
+
+    async def get_discoveries(self, user_id: int, guild_id: int) -> list[str]:
+        """The catalogue keys the member has ever found."""
+        rows = await self.fetch(
+            'SELECT builtin_key FROM economy_discoveries WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+        return [r['builtin_key'] for r in rows]
+
     async def count_items(self, user_id: int, guild_id: int) -> int:
         """The total number of items (summed quantities) a member owns."""
         value = await self.fetchval(

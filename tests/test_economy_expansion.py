@@ -396,3 +396,24 @@ def test_settings_bank_cap_defaults_on() -> None:
     row = {'payout_multiplier': 1.0, 'rob_enabled': True, 'daily_base': 250, 'max_bet': None}
     assert GuildEconomySettings.from_record(row).bank_cap is True
     assert GuildEconomySettings.from_record({**row, 'bank_cap': False}).bank_cap is False
+
+
+def test_collection_summary_hides_undiscovered_drops() -> None:
+    from app.services.economy import DROP_KEYS, collection_summary
+
+    assert {g.activity for g in collection_summary([])} == {'fish', 'hunt', 'dig'}
+    groups = collection_summary(['sardine', 'fishing_rod', 'nope'])  # tools / unknown keys never count
+    assert sum(g.found for g in groups) == 1
+    assert sum(g.total for g in groups) == len(DROP_KEYS)
+    fish = next(g for g in groups if g.activity == 'fish')
+    assert fish.entries[0] == ('\N{FISH} Sardine', True)
+    assert fish.entries[1] == ('???', False)
+
+
+def test_discovery_achievements() -> None:
+    from app.services.economy import DROP_KEYS
+
+    assert 'naturalist' not in evaluate_achievements(EconomySnapshot(discoveries=9))
+    assert 'naturalist' in evaluate_achievements(EconomySnapshot(discoveries=10))
+    assert 'completionist' not in evaluate_achievements(EconomySnapshot(discoveries=len(DROP_KEYS) - 1))
+    assert 'completionist' in evaluate_achievements(EconomySnapshot(discoveries=len(DROP_KEYS)))

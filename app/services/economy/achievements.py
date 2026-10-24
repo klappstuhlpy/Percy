@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.services.economy.collection import DROP_KEYS
 from app.services.economy.jobs import JOB_LADDER
 
 if TYPE_CHECKING:
@@ -37,6 +38,7 @@ class EconomySnapshot:
     has_pet: bool = False
     quests_completed: int = 0
     items_owned: int = 0
+    discoveries: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +119,17 @@ ACHIEVEMENTS: tuple[Achievement, ...] = (
         'collector', 'Collector', '\N{PACKAGE}',
         'Own 50 items at once.', 500,
         lambda s: s.items_owned >= 50,
+    ),
+    # ponytail: the id 'collector' is taken by the item-count badge above, so the book badge is 'naturalist'.
+    Achievement(
+        'naturalist', 'Naturalist', '\N{OPEN BOOK}',
+        'Discover 10 different drops for your collection book.', 500,
+        lambda s: s.discoveries >= 10,
+    ),
+    Achievement(
+        'completionist', 'Completionist', '\N{TROPHY}',
+        'Discover every drop in the collection book.', 3_000,
+        lambda s: s.discoveries >= len(DROP_KEYS),
     ),
 )
 

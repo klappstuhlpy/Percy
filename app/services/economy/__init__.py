@@ -53,6 +53,7 @@ from app.services.economy.catalogue import (
     roll_drop,
     tool_for_activity,
 )
+from app.services.economy.collection import DROP_KEYS, CollectionGroup, collection_summary
 from app.services.economy.core import (
     BANK_SPACE_DEFAULT,
     BANK_SPACE_GROWTH,
@@ -207,6 +208,7 @@ __all__ = (
     'DROP_COINS',
     'DROP_COIN_SHARE',
     'DROP_GRAB_TIMEOUT',
+    'DROP_KEYS',
     'DROP_MIN_INTERVAL',
     'FISHING_COOLDOWN',
     'FISHING_TABLE',
@@ -253,6 +255,7 @@ __all__ = (
     'Category',
     'Challenge',
     'ChatDrop',
+    'CollectionGroup',
     'DailyResult',
     'EconomySnapshot',
     'GuildEconomySettings',
@@ -275,6 +278,7 @@ __all__ = (
     'bank_room',
     'boost_multiplier',
     'builtin_error',
+    'collection_summary',
     'compute_daily',
     'compute_periodic',
     'compute_pet_claim',
