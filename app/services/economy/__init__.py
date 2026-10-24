@@ -9,6 +9,7 @@
 - :mod:`~app.services.economy.achievements` — milestone badges.
 - :mod:`~app.services.economy.items` — item rarity, categories, listing limits, purchase outcomes, daily sale.
 - :mod:`~app.services.economy.catalogue` — built-in drop/tool items and the drop roll.
+- :mod:`~app.services.economy.market` — player-market limits, validation and sale proceeds.
 - :mod:`~app.services.economy.trade` — one side's trade offer and its checks.
 
 Everything is re-exported here so callers keep importing from
@@ -139,6 +140,7 @@ from app.services.economy.jobs import (
     get_job,
     next_unlock,
 )
+from app.services.economy.market import MARKET_TAX, MAX_LISTINGS, MAX_PRICE_EACH, market_error, sale_proceeds
 from app.services.economy.minigames import (
     CHALLENGE_KINDS,
     WORK_CHALLENGE_TIMEOUT,
@@ -216,7 +218,10 @@ __all__ = (
     'JOB_LADDER',
     'LIFESAVER_KEY',
     'LOOTBOX_BANDS',
+    'MARKET_TAX',
     'MAX_ITEM_STOCK',
+    'MAX_LISTINGS',
+    'MAX_PRICE_EACH',
     'MAX_TRADE_LINES',
     'MEME_FORMATS',
     'MONTHLY_AMOUNT',
@@ -291,6 +296,7 @@ __all__ = (
     'item_category',
     'item_emoji',
     'item_expired',
+    'market_error',
     'name_reserved_error',
     'next_unlock',
     'parse_amount',
@@ -307,6 +313,7 @@ __all__ = (
     'roll_loot',
     'roll_lootbox',
     'sale_price',
+    'sale_proceeds',
     'sell_price',
     'should_drop',
     'split_cooldowns',

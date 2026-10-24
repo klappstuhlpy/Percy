@@ -43,7 +43,9 @@ from app.services.economy import (
     HUNTING_TABLE,
     JOB_LADDER,
     LIFESAVER_KEY,
+    MARKET_TAX,
     MAX_ITEM_STOCK,
+    MAX_LISTINGS,
     MEME_FORMATS,
     MONTHLY_AMOUNT,
     MONTHLY_COOLDOWN,
@@ -82,6 +84,7 @@ from app.services.economy import (
     get_job,
     get_species,
     item_emoji,
+    market_error,
     name_reserved_error,
     parse_amount,
     pick_search_options,
@@ -1187,6 +1190,110 @@ class Economy(Cog):
         view = TradeView(self, ctx.author, member)
         await view.build()
         view.message = await ctx.send(view=view)
+
+    # Text-only group: the bot sits at the 99/100 global slash-command budget, so no new slash slot.
+    @group("market", fallback="browse", description="Buy and sell items with other members.", guild_only=True)
+    async def market(self, ctx: Context, *, item: str | None = None) -> None:
+        """Browse open listings, optionally for one item. Sales are taxed 5% (paid by the seller)."""
+        assert ctx.guild is not None
+        item_id = None
+        if item:
+            record = await self.bot.db.economy.get_item(ctx.guild.id, item)
+            if record is None:
+                await ctx.send_error(f"No item named **{item}** exists.")
+                return
+            item_id = record["id"]
+        rows = await self.bot.db.economy.market_listings(ctx.guild.id, item_id=item_id)
+        await self._send_listings(ctx, rows, "Player Market", "Nothing is listed right now. Be the first with `market sell`.")
+
+    @market.command("mine", description="Show your own open listings.", guild_only=True)
+    async def market_mine(self, ctx: Context) -> None:
+        """Your open listings; cancel one with `market cancel <id>`."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.economy.market_listings(ctx.guild.id, seller_id=ctx.author.id)
+        await self._send_listings(ctx, rows, "Your Listings", "You have no open listings.")
+
+    async def _send_listings(self, ctx: Context, rows: list[Any], title: str, empty: str) -> None:
+        if not rows:
+            await ctx.send_info(empty)
+            return
+        entries = [
+            f"`#{r['id']}` {item_emoji(r)} **{r['name']}** ×{fnumb(r['quantity'])} • "
+            f"{Emojis.Economy.cash} **{fnumb(r['price_each'])}** each • <@{r['seller_id']}>"
+            for r in rows
+        ]
+        embed = discord.Embed(title=title, colour=helpers.Colour.white())
+        embed.set_footer(text=f"{MARKET_TAX:.0%} tax is paid by the seller • buy with market buy <id> [quantity]")
+        await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
+
+    @market.command("sell", description="List items for sale; they are held until sold or cancelled.", guild_only=True)
+    @describe(item="The item to list.", quantity="How many to list.", price_each="Asking price per item.")
+    @app_commands.autocomplete(item=owned_item_autocomplete)  # type: ignore
+    async def market_sell(self, ctx: Context, item: str, quantity: commands.Range[int, 1], price_each: commands.Range[int, 1]) -> None:
+        """List items on the market. They leave your inventory until bought or cancelled."""
+        assert ctx.guild is not None
+        record = await self.bot.db.economy.get_item(ctx.guild.id, item)
+        if record is None:
+            await ctx.send_error(f"No item named **{item}** exists.")
+            return
+        db = self.bot.db.economy
+        owned = await db.get_quantity(ctx.author.id, ctx.guild.id, record["id"])
+        open_listings = await db.market_count(ctx.guild.id, ctx.author.id)
+        if error := market_error(quantity=quantity, price_each=price_each, owned=owned, open_listings=open_listings):
+            await ctx.send_error(error)
+            return
+        listing = await db.market_list(ctx.guild.id, ctx.author.id, record["id"], quantity, price_each, MAX_LISTINGS)
+        if listing == 'items':
+            await ctx.send_error("You no longer own that many.")
+        elif listing == 'listings':
+            await ctx.send_error(f"You can only have {MAX_LISTINGS} listings open at a time.")
+        else:
+            assert not isinstance(listing, str)
+            await ctx.send_success(
+                f"Listed **{quantity}× {item_emoji(record)} {record['name']}** at {Emojis.Economy.cash} "
+                f"**{fnumb(price_each)}** each as `#{listing['id']}`."
+            )
+
+    @market.command("buy", description="Buy from a listing (partial buys allowed).", guild_only=True)
+    @describe(listing_id="The listing number.", quantity="How many to buy (default: all of it).")
+    async def market_buy(self, ctx: Context, listing_id: commands.Range[int, 1], quantity: commands.Range[int, 1] | None = None) -> None:
+        """Buy some or all of a listing with your cash."""
+        assert ctx.guild is not None
+        db = self.bot.db.economy
+        if quantity is None:
+            rows = [r for r in await db.market_listings(ctx.guild.id) if r['id'] == listing_id]
+            if not rows:
+                await ctx.send_error("That listing no longer exists.")
+                return
+            quantity = rows[0]['quantity']
+        status, info = await db.market_buy(ctx.guild.id, ctx.author.id, listing_id, quantity, MARKET_TAX)
+        if status == 'missing':
+            await ctx.send_error("That listing no longer exists.")
+        elif status == 'own':
+            await ctx.send_error("You cannot buy your own listing; use `market cancel` instead.")
+        elif status == 'quantity':
+            await ctx.send_error(f"Only **{info['available']}** left in that listing.")
+        elif status == 'cash':
+            await ctx.send_error(f"You need {Emojis.Economy.cash} **{fnumb(info['gross'])}** in cash for that.")
+        else:
+            record = await db.get_item_by_id(ctx.guild.id, info['item_id'])
+            name = f"{item_emoji(record)} {record['name']}" if record else 'items'
+            await ctx.send_success(
+                f"Bought **{quantity}× {name}** for {Emojis.Economy.cash} **{fnumb(info['gross'])}**."
+            )
+
+    @market.command("cancel", description="Cancel one of your listings and get the items back.", guild_only=True)
+    @describe(listing_id="The listing number.")
+    async def market_cancel(self, ctx: Context, listing_id: commands.Range[int, 1]) -> None:
+        """Take a listing down; the escrowed items return to your inventory."""
+        assert ctx.guild is not None
+        row = await self.bot.db.economy.market_cancel(ctx.guild.id, listing_id, ctx.author.id)
+        if row is None:
+            await ctx.send_error("You have no listing with that number.")
+            return
+        record = await self.bot.db.economy.get_item_by_id(ctx.guild.id, row['item_id'])
+        name = record['name'] if record else 'items'
+        await ctx.send_success(f"Cancelled `#{listing_id}`: **{row['quantity']}× {name}** returned to your inventory.")
 
     # -- earning activities ----------------------------------------------
 
