@@ -438,11 +438,12 @@ class PlayerPanel(LayoutView):
         else:
             self.msg = await self.channel.send(view=self)
 
-        current = self.player.current.title
-        artist = self.player.current.author
-        status = f"{current} - {artist}" if self.player.current else "Idle"
-        with suppress(discord.HTTPException):
-            await self.player.channel.edit(status=f"{Emojis.Music.note} {status}")
+        if self.player.current:
+            current = self.player.current.title
+            artist = self.player.current.author
+            status = f"{current} - {artist}" if self.player.current else "Idle"
+            with suppress(discord.HTTPException):
+                await self.player.channel.edit(status=f"{Emojis.Music.note} {status}")
 
         return self.msg
 
