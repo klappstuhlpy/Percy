@@ -439,6 +439,58 @@ class EconomyRepository(BaseRepository):
         """
         await self.execute(query, user_id, guild_id, ensure_utc(last_claim).replace(tzinfo=None), streak)
 
+    async def get_last_vote_claim(self, user_id: int, guild_id: int) -> datetime.datetime | None:
+        """When the member last claimed a vote reward in this guild (naive UTC), or ``None``."""
+        return await self.fetchval(
+            'SELECT last_vote_claim FROM economy_dailies WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+
+    async def set_vote_claim(self, user_id: int, guild_id: int, when: datetime.datetime) -> None:
+        """Records a member's latest vote-reward claim."""
+        query = """
+            INSERT INTO economy_dailies (user_id, guild_id, last_claim, streak, last_vote_claim)
+            VALUES ($1, $2, NULL, 0, $3)
+            ON CONFLICT (user_id, guild_id) DO UPDATE SET last_vote_claim = EXCLUDED.last_vote_claim;
+        """
+        await self.execute(query, user_id, guild_id, ensure_utc(when).replace(tzinfo=None))
+
+    # -- leaderboards: (user_id, value) rows, highest first, one query each -----
+
+    async def top_networth(self, guild_id: int, limit: int = 100) -> list[asyncpg.Record]:
+        """Cash + bank + inventory sell value (``price / 2``, as :meth:`inventory_value`), in one grouped query."""
+        return await self.fetch(
+            """
+            SELECT e.user_id, (e.cash + e.bank + COALESCE(v.value, 0))::BIGINT AS value
+            FROM economy e
+            LEFT JOIN (
+                SELECT i.user_id, SUM((it.price / 2) * i.quantity) AS value
+                FROM economy_inventory i JOIN economy_items it ON it.id = i.item_id
+                WHERE i.guild_id = $1 AND i.quantity > 0
+                GROUP BY i.user_id
+            ) v ON v.user_id = e.user_id
+            WHERE e.guild_id = $1
+            ORDER BY value DESC LIMIT $2;
+            """,
+            guild_id, limit,
+        )
+
+    async def top_prestige(self, guild_id: int, limit: int = 100) -> list[asyncpg.Record]:
+        """Members by prestige level (level 0 excluded)."""
+        return await self.fetch(
+            'SELECT user_id, level AS value FROM economy_prestige WHERE guild_id = $1 AND level > 0 '
+            'ORDER BY level DESC LIMIT $2;', guild_id, limit)
+
+    async def top_streak(self, guild_id: int, limit: int = 100) -> list[asyncpg.Record]:
+        """Members by daily streak."""
+        return await self.fetch(
+            'SELECT user_id, streak AS value FROM economy_dailies WHERE guild_id = $1 AND streak > 0 '
+            'ORDER BY streak DESC LIMIT $2;', guild_id, limit)
+
+    async def top_game_profit(self, guild_id: int, limit: int = 100) -> list[asyncpg.Record]:
+        """Members by net profit across all games (``game_stats``)."""
+        return await self.fetch(
+            'SELECT user_id, SUM(profit)::BIGINT AS value FROM game_stats WHERE guild_id = $1 '
+            'GROUP BY user_id ORDER BY value DESC LIMIT $2;', guild_id, limit)
+
     async def set_weekly(self, user_id: int, guild_id: int, when: datetime.datetime) -> None:
         """Records a member's latest weekly claim."""
         query = """

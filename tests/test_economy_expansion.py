@@ -38,6 +38,7 @@ from app.services.economy import (
     prestige_requirement,
     resolve_search,
     validate_item_effect,
+    vote_claimable,
 )
 
 UTC = datetime.UTC
@@ -430,3 +431,13 @@ def test_best_game_and_match_achievement() -> None:
     assert match_achievement(first.name.upper(), ACHIEVEMENTS) is first
     assert match_achievement('zzzzqqqq', ACHIEVEMENTS) is None
     assert match_achievement(first.name, []) is None
+
+
+def test_vote_claimable() -> None:
+    voted = NOW - datetime.timedelta(hours=1)
+    live = NOW + datetime.timedelta(hours=11)
+    assert vote_claimable(voted, live, None, NOW)
+    assert vote_claimable(voted, live, voted - datetime.timedelta(days=1), NOW)
+    assert not vote_claimable(voted, live, voted + datetime.timedelta(minutes=5), NOW)  # already claimed
+    assert not vote_claimable(voted, NOW - datetime.timedelta(seconds=1), None, NOW)  # expired
+    assert not vote_claimable(None, None, None, NOW)  # never voted

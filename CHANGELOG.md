@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `voteclaim`: claim 1,500 coins once per bot-list vote in each server (use `vote` to vote).
+- `balance leaderboard` can now rank by net worth, prestige, daily streak or game profit.
 - `profile [member]`: one card with net worth, rank, prestige, job, pet, achievements, best game and daily streak; `profile title <achievement>` equips an earned achievement as your title.
 - `collection` (`book`): a collection book of every fish, hunt and dig drop you have found (`???` until then), with two new achievements for filling it.
 - `market`: list items for other members to buy (held until sold or cancelled), browse listings,

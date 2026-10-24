@@ -225,6 +225,22 @@ def compute_periodic(
     return PeriodicResult(True, None)
 
 
+#: Coins paid once per bot-list vote (``voteclaim``), before the server payout scale.
+VOTE_REWARD = 1_500
+
+
+def vote_claimable(
+    last_voted_at: datetime.datetime | None,
+    expires_at: datetime.datetime | None,
+    last_claim: datetime.datetime | None,
+    now: datetime.datetime,
+) -> bool:
+    """Whether a vote reward can be claimed: the vote is still active and no claim was made since it."""
+    if last_voted_at is None or expires_at is None or expires_at <= now:
+        return False
+    return last_claim is None or last_claim < last_voted_at
+
+
 # -- prestige ----------------------------------------------------------------
 
 #: Net worth needed for the first prestige; each further level costs one more multiple.

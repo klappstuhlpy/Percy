@@ -57,6 +57,7 @@ from app.services.economy import (
     PRESTIGE_STEP,
     REPLY_LIMIT,
     SEARCH_COOLDOWN,
+    VOTE_REWARD,
     WEEKLY_AMOUNT,
     WEEKLY_COOLDOWN,
     WORK_COOLDOWN,
@@ -114,6 +115,7 @@ from app.services.economy import (
     trade_failure_message,
     validate_item_effect,
     validate_item_meta,
+    vote_claimable,
 )
 from app.utils import fnumb, fuzzy, get_asset_url, helpers, pluralize, timetools
 from config import Emojis
@@ -560,26 +562,37 @@ class Economy(Cog):
         ))
 
     @balance.command("leaderboard", alias="top", description="Shows the leaderboard of the server", guild_only=True)
-    async def leaderboard(self, ctx: Context) -> None:
-        """Shows the leaderboard of the server."""
+    @describe(kind="What to rank by (default: total cash + bank).")
+    async def leaderboard(
+        self, ctx: Context, kind: Literal["total", "networth", "prestige", "streak", "games"] = "total"
+    ) -> None:
+        """Shows the leaderboard of the server: total money, net worth, prestige, daily streak or game profit."""
         assert ctx.guild is not None
-        balances = await ctx.db.get_guild_balances(ctx.guild.id)
-        total = sum(balance.total for balance in balances)
-        # The underlying query returns rows in arbitrary order, so rank richest-first here.
-        balances = sorted(balances, key=lambda balance: balance.total, reverse=True)
+        repo = self.bot.db.economy
+        cash = Emojis.Economy.cash
+        if kind == "total":
+            balances = await ctx.db.get_guild_balances(ctx.guild.id)
+            # The underlying query returns rows in arbitrary order, so rank richest-first here.
+            balances = sorted(balances, key=lambda balance: balance.total, reverse=True)
+            rows = [(balance.user_id, balance.total) for balance in balances]
+            footer = f"Total Server Money: {fnumb(sum(value for _, value in rows))}"
+            title, fmt = "Economy Leaderboard", lambda v: f"{cash} **{fnumb(v)}**"
+        else:
+            title, query, fmt = {
+                "networth": ("Net Worth Leaderboard", repo.top_networth, lambda v: f"{cash} **{fnumb(v)}**"),
+                "prestige": ("Prestige Leaderboard", repo.top_prestige, lambda v: f"**Prestige {v}**"),
+                "streak": ("Daily Streak Leaderboard", repo.top_streak, lambda v: f"**{v}** day streak"),
+                "games": ("Game Profit Leaderboard", repo.top_game_profit, lambda v: f"{cash} **{fnumb(v)}**"),
+            }[kind]
+            rows = [(r["user_id"], r["value"]) for r in await query(ctx.guild.id, 100)]
+            footer = f"Top {len(rows)} by {kind}"
 
-        users = [
-            f"**{index}.** <@{balance.user_id}> • {Emojis.Economy.cash} **{fnumb(balance.total)}**"
-            for index, balance in enumerate(balances, 1)
-        ]
-
+        users = [f"**{index}.** <@{user_id}> • {fmt(value)}" for index, (user_id, value) in enumerate(rows, 1)]
         embed = discord.Embed(
-            title="Economy Leaderboard", description="This is the server's leaderboard.\n\n", colour=helpers.Colour.white()
+            title=title, description="This is the server's leaderboard.\n\n", colour=helpers.Colour.white()
         )
         embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
-        embed.set_footer(
-            text=f"Total Server Money: {fnumb(total)}", icon_url=discord.PartialEmoji.from_str(Emojis.Economy.cash).url
-        )
+        embed.set_footer(text=footer, icon_url=discord.PartialEmoji.from_str(cash).url)
         await LinePaginator.start(ctx, entries=users, embed=embed, location='description')
 
     @command("daily", description="Claim your daily reward and build a streak.", guild_only=True, hybrid=True, extras={"example": "daily"})
@@ -661,6 +674,35 @@ class Economy(Cog):
         await self.bot.db.economy.set_monthly(ctx.author.id, ctx.guild.id, now)
         await ctx.send_success(
             f"You claimed your monthly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
+        )
+
+    @command("voteclaim", alias="claimvote", description="Claim coins for your active bot-list vote.", guild_only=True)
+    async def voteclaim(self, ctx: Context) -> None:
+        """Claim a coin reward for voting. One claim per vote, per server (see `vote` to vote)."""
+        assert ctx.guild is not None
+        status = await ctx.bot.db.votes.get_status(ctx.author.id)
+        now = ctx.message.created_at
+
+        def aware(value: datetime.datetime | None) -> datetime.datetime | None:
+            return value.replace(tzinfo=datetime.UTC) if value is not None else None
+
+        voted = aware(status["last_voted_at"]) if status else None
+        expires = aware(status["expires_at"]) if status else None
+        claimed = aware(await self.bot.db.economy.get_last_vote_claim(ctx.author.id, ctx.guild.id))
+        if not vote_claimable(voted, expires, claimed, now):
+            if expires is not None and expires > now:
+                await ctx.send_error("You already claimed the reward for your current vote. Vote again to claim more!")
+            else:
+                await ctx.send_error("You have no active vote. Use `vote` to see where to vote, then claim here.")
+            return
+
+        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
+        amount = round(VOTE_REWARD * scale)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        await balance.add(cash=amount)
+        await self.bot.db.economy.set_vote_claim(ctx.author.id, ctx.guild.id, now)
+        await ctx.send_success(
+            f"Thanks for voting! You claimed {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
         )
 
     # -- items: shared actions (commands and the item browser both call these) --

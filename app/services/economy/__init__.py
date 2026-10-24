@@ -78,6 +78,7 @@ from app.services.economy.core import (
     PRESTIGE_MAX_LEVEL,
     PRESTIGE_STEP,
     SELL_RATE,
+    VOTE_REWARD,
     WEEKLY_AMOUNT,
     WEEKLY_COOLDOWN,
     Catch,
@@ -99,6 +100,7 @@ from app.services.economy.core import (
     roll_lootbox,
     sell_price,
     validate_item_effect,
+    vote_claimable,
 )
 from app.services.economy.drops import (
     DROP_CHANCE_PER_MESSAGE,
@@ -244,6 +246,7 @@ __all__ = (
     'SELL_RATE',
     'SHIFT_EVENTS',
     'STARVING_AFTER_HOURS',
+    'VOTE_REWARD',
     'WEEKLY_AMOUNT',
     'WEEKLY_COOLDOWN',
     'WORK_CHALLENGE_TIMEOUT',
