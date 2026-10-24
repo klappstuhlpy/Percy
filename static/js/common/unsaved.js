@@ -264,8 +264,15 @@
     function writeForm(form, state) {
         for (const el of fields(form)) {
             const value = state[el.name];
-            if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!value;
-            else el.value = value !== undefined ? value : '';
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                el.checked = !!value;
+            } else {
+                const next = value !== undefined ? value : '';
+                if (el.value === next) continue;
+                el.value = next;
+                // Live previews (level-up message, tags) re-render off the field's own input event.
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
         }
         // Fields whose visibility depends on another field (the leveling channel picker)
         // re-sync off the same change event a user edit would fire.
