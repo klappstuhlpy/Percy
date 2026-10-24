@@ -885,6 +885,21 @@ class EconomyRepository(BaseRepository):
             'SELECT builtin_key FROM economy_discoveries WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
         return [r['builtin_key'] for r in rows]
 
+    # -- profile ---------------------------------------------------------------
+
+    async def get_profile_title(self, user_id: int, guild_id: int) -> str | None:
+        """The member's equipped profile title, or ``None``."""
+        return await self.fetchval(
+            'SELECT title FROM economy_profiles WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+
+    async def set_profile_title(self, user_id: int, guild_id: int, title: str | None) -> None:
+        """Equips ``title`` (``None`` clears it)."""
+        await self.execute(
+            'INSERT INTO economy_profiles (user_id, guild_id, title) VALUES ($1, $2, $3) '
+            'ON CONFLICT (user_id, guild_id) DO UPDATE SET title = EXCLUDED.title;',
+            user_id, guild_id, title,
+        )
+
     async def count_items(self, user_id: int, guild_id: int) -> int:
         """The total number of items (summed quantities) a member owns."""
         value = await self.fetchval(

@@ -69,6 +69,7 @@ from app.services.economy import (
     SearchLocation,
     TradeOffer,
     bank_room,
+    best_game,
     boost_multiplier,
     builtin_error,
     collection_summary,
@@ -87,6 +88,7 @@ from app.services.economy import (
     get_species,
     item_emoji,
     market_error,
+    match_achievement,
     name_reserved_error,
     parse_amount,
     pick_search_options,
@@ -1976,6 +1978,68 @@ class Economy(Cog):
     async def quests(self, ctx: Context) -> None:
         """Show today's quests: three rotating tasks with cash rewards, reset daily (UTC)."""
         await self._open_hub(ctx, "quests")
+
+    # -- profile -----------------------------------------------------------------
+
+    # Text-only group: the bot sits at the 99/100 global slash-command budget, so no new slash slot.
+    @group("profile", fallback="show", description="Show a member's economy profile.", guild_only=True)
+    async def profile(
+        self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None
+    ) -> None:
+        """One card: net worth, rank, prestige, job, pet, achievements, title, best game and daily streak."""
+        assert ctx.guild is not None
+        if member and member.bot:
+            await ctx.send_error("Bots have no profile.")
+            return
+        user = member or ctx.author
+        db, gid = self.bot.db, ctx.guild.id
+        if user.id == ctx.author.id:
+            await self._sync_achievements(ctx, announce=False)
+        balance = await db.get_user_balance(user.id, gid)
+        everyone = await db.get_guild_balances(gid)
+        worth = balance.total + await db.economy.inventory_value(user.id, gid)
+        richer = sum(1 for other in everyone if other.user_id != user.id and other.total > balance.total)
+        job_row = await db.economy.get_job(user.id, gid)
+        job = get_job(job_row["job_id"] if job_row else None)
+        pet_row = await db.economy.get_pet(user.id, gid)
+        species = get_species(pet_row["species"]) if pet_row else None
+        pet = f"{species.emoji if species else ''} {pet_row['name']}" + (f" ({species.name})" if species else "") if pet_row else "None"
+        earned = len(await db.economy.get_achievements(user.id, gid))
+        title = await db.economy.get_profile_title(user.id, gid)
+        daily = await db.economy.get_daily(user.id, gid)
+        totals = await db.game_stats.get_member_totals(gid, user.id)
+        top = best_game(await db.game_stats.get_member_games(gid, user.id))
+        best = f"{str(top['game']).replace('_', ' ').title()} ({fnumb(top['profit'])} profit)" if top else "None yet"
+        cash = Emojis.Economy.cash
+        await ctx.send(view=make_notice(
+            f"{user.display_name}'s Profile" + (f" - {title}" if title else ""),
+            f"{cash} **Net worth** {fnumb(worth)} (rank **#{richer + 1:,}** of {max(len(everyone), 1):,})\n"
+            f"\N{GLOWING STAR} **Prestige** {await db.economy.get_prestige(user.id, gid)}\n"
+            f"\N{BRIEFCASE} **Job** {job.name if job else 'Unemployed'}\n"
+            f"\N{PAW PRINTS} **Pet** {pet}\n"
+            f"\N{TROPHY} **Achievements** {earned}/{len(ACHIEVEMENTS)}\n"
+            f"\N{VIDEO GAME} **Games** {fnumb(totals['played']) if totals else 0} played, best: {best}\n"
+            f"\N{FIRE} **Daily streak** {daily['streak'] if daily else 0}",
+            thumbnail=get_asset_url(user),
+        ))
+
+    @profile.command("title", description="Equip an earned achievement as your title; no argument clears it.", guild_only=True)
+    async def profile_title(self, ctx: Context, *, achievement: str | None = None) -> None:
+        """Equip the name of an earned achievement (by name or id) as your profile title."""
+        assert ctx.guild is not None
+        db = self.bot.db.economy
+        if achievement is None:
+            await db.set_profile_title(ctx.author.id, ctx.guild.id, None)
+            await ctx.send_success("Title cleared.")
+            return
+        await self._sync_achievements(ctx, announce=False)
+        owned = {row["achievement"] for row in await db.get_achievements(ctx.author.id, ctx.guild.id)}
+        found = match_achievement(achievement, [a for a in ACHIEVEMENTS if a.id in owned])
+        if found is None:
+            await ctx.send_error(f"You haven't earned an achievement matching **{achievement}**.")
+            return
+        await db.set_profile_title(ctx.author.id, ctx.guild.id, found.name)
+        await ctx.send_success(f"Title set to **{found.name}**.")
 
     # -- pets ----------------------------------------------------------------------
 

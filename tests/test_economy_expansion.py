@@ -417,3 +417,16 @@ def test_discovery_achievements() -> None:
     assert 'naturalist' in evaluate_achievements(EconomySnapshot(discoveries=10))
     assert 'completionist' not in evaluate_achievements(EconomySnapshot(discoveries=len(DROP_KEYS) - 1))
     assert 'completionist' in evaluate_achievements(EconomySnapshot(discoveries=len(DROP_KEYS)))
+
+
+def test_best_game_and_match_achievement() -> None:
+    from app.services.economy import best_game, match_achievement
+
+    assert best_game([]) is None
+    assert best_game([{'game': 'a', 'profit': -5}]) is None
+    assert best_game([{'game': 'a', 'profit': 5}, {'game': 'b', 'profit': 9}])['game'] == 'b'  # type: ignore[index]
+    first = ACHIEVEMENTS[0]
+    assert match_achievement(first.id, ACHIEVEMENTS) is first
+    assert match_achievement(first.name.upper(), ACHIEVEMENTS) is first
+    assert match_achievement('zzzzqqqq', ACHIEVEMENTS) is None
+    assert match_achievement(first.name, []) is None

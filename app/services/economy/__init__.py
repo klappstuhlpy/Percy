@@ -162,6 +162,7 @@ from app.services.economy.pets import (
     get_species,
     hunger_state,
 )
+from app.services.economy.profile import best_game, match_achievement
 from app.services.economy.quests import (
     DAILY_QUEST_COUNT,
     QUEST_POOL,
@@ -276,6 +277,7 @@ __all__ = (
     'TradeOffer',
     'available_jobs',
     'bank_room',
+    'best_game',
     'boost_multiplier',
     'builtin_error',
     'collection_summary',
@@ -301,6 +303,7 @@ __all__ = (
     'item_emoji',
     'item_expired',
     'market_error',
+    'match_achievement',
     'name_reserved_error',
     'next_unlock',
     'parse_amount',
