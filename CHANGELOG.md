@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `postmemes`: post one of three kinds of meme. Riskier memes pay more but can flop.
 - `passive`: opt out of robbing and heists, in both directions. You can switch it once
   every 24 hours.
+- `work` now asks a quick challenge (unscramble a word, remember emojis, or read a colour word). Get it right for +25% pay; a wrong answer or running out of 20 seconds halves it.
 - `deposit` and `withdraw` take `all`, `max`, `half` and shorthand like `2k`.
 
 ### Changed

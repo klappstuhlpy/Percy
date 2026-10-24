@@ -11,6 +11,7 @@ from app.core import LayoutView
 from app.services.economy import (
     ACHIEVEMENTS,
     JOB_LADDER,
+    WORK_CHALLENGE_TIMEOUT,
     compute_pet_claim,
     generate_daily_quests,
     get_job,
@@ -26,9 +27,9 @@ if TYPE_CHECKING:
 
     from app.cogs.economy.cog import Economy
     from app.core.models import Context
-    from app.services.economy import SearchLocation
+    from app.services.economy import Challenge, SearchLocation
 
-__all__ = ('BOOST_LABELS', 'EconomyHub', 'SearchView', 'boost_display_line', 'progress_bar')
+__all__ = ('BOOST_LABELS', 'EconomyHub', 'SearchView', 'WorkChallengeView', 'boost_display_line', 'progress_bar')
 
 #: Display labels for active boost kinds.
 BOOST_LABELS = {'xp': 'leveling XP', 'loot': 'fishing & hunting payouts'}
@@ -106,6 +107,59 @@ class SearchView(discord.ui.View):
         if self.message is not None:
             try:
                 await self.message.edit(content=self.timeout_text, view=self)
+            except discord.HTTPException:
+                pass
+
+
+class _ChallengeButton(discord.ui.Button['WorkChallengeView']):
+    """One answer option of a :class:`WorkChallengeView`."""
+
+    def __init__(self, option: str) -> None:
+        super().__init__(style=discord.ButtonStyle.secondary, label=option)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
+        view = self.view
+        view.correct = self.label == view.challenge.answer
+        view.stop()
+        for child in view.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+                if child.label == view.challenge.answer:
+                    child.style = discord.ButtonStyle.success
+        if not view.correct:
+            self.style = discord.ButtonStyle.danger
+        await interaction.response.edit_message(view=view)
+
+
+class WorkChallengeView(discord.ui.View):
+    """The ``work`` challenge: one button per option, invoker-locked and single use.
+
+    The cog awaits :meth:`wait`, then reads :attr:`correct` (``None`` = timed out).
+    """
+
+    def __init__(self, member: discord.abc.User, challenge: Challenge) -> None:
+        super().__init__(timeout=WORK_CHALLENGE_TIMEOUT)
+        self.member = member
+        self.challenge = challenge
+        self.correct: bool | None = None
+        self.message: discord.Message | None = None
+        for option in challenge.options:
+            self.add_item(_ChallengeButton(option))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message('This is not your shift.', ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
             except discord.HTTPException:
                 pass
 

@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import random
 from contextlib import nullcontext
@@ -11,7 +12,7 @@ from discord.ext.commands import Range
 
 from app.cogs.economy.item_ui import ItemBrowser
 from app.cogs.economy.trade_ui import TradeView
-from app.cogs.economy.ui import BOOST_LABELS, EconomyHub, SearchView, boost_display_line, progress_bar
+from app.cogs.economy.ui import BOOST_LABELS, EconomyHub, SearchView, WorkChallengeView, boost_display_line, progress_bar
 from app.core import Accent, Bot, Cog, converter, make_notice
 from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator
@@ -44,6 +45,8 @@ from app.services.economy import (
     WEEKLY_AMOUNT,
     WEEKLY_COOLDOWN,
     WORK_COOLDOWN,
+    WORK_FAIL_FACTOR,
+    WORK_SUCCESS_BONUS,
     EconomySnapshot,
     GuildEconomySettings,
     PurchaseStatus,
@@ -58,6 +61,7 @@ from app.services.economy import (
     daily_sale,
     describe_effect,
     evaluate_achievements,
+    generate_challenge,
     generate_daily_quests,
     get_achievement,
     get_job,
@@ -1275,8 +1279,26 @@ class Economy(Cog):
         job = get_job(row["job_id"] if row else None)
 
         result = compute_shift(job)
+        challenge = generate_challenge()
+        view = WorkChallengeView(ctx.author, challenge)
+        if challenge.kind == 'memory':
+            header = f"{job.emoji} **Memorise the order!**\n{challenge.prompt}"
+            view.message = await ctx.send(header)
+            await asyncio.sleep(3)
+            view.message = await view.message.edit(content=f"{job.emoji} **Which order did you see?**", view=view)
+        else:
+            view.message = await ctx.send(f"{job.emoji} **Quick task before you clock in!**\n{challenge.prompt}", view=view)
+        await view.wait()
+        factor = WORK_SUCCESS_BONUS if view.correct else WORK_FAIL_FACTOR
+        if view.correct:
+            outcome = f"\N{WHITE HEAVY CHECK MARK} Task done right: **+{WORK_SUCCESS_BONUS - 1:.0%}** pay."
+        elif view.correct is None:
+            outcome = f"\N{ALARM CLOCK} You ran out of time: pay is **{WORK_FAIL_FACTOR:.0%}**."
+        else:
+            outcome = f"\N{CROSS MARK} Wrong answer: pay is **{WORK_FAIL_FACTOR:.0%}**."
+
         scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        amount = round(result.amount * scale)
+        amount = round(result.amount * scale * factor)
         shifts = await self.bot.db.economy.add_shift(ctx.author.id, ctx.guild.id, job.id)
 
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
@@ -1286,6 +1308,7 @@ class Economy(Cog):
             f"{job.emoji} You worked a shift as **{job.name}** and earned "
             f"{Emojis.Economy.cash} **{fnumb(amount)}**.{self._scale_suffix(scale)}"
         )
+        message += f"\n{outcome}"
         if result.event.id != "normal":
             message += f"\n{result.event.flavor}"
         newly_unlocked = [j for j in JOB_LADDER if j.shifts_required == shifts]

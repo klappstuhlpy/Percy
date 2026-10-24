@@ -330,3 +330,21 @@ def test_meme_formats_resolve_like_search() -> None:
         assert outcome.injured or (outcome.catch is not None and outcome.catch.amount >= 0)
     wholesome = next(m for m in MEME_FORMATS if m.id == 'wholesome')
     assert not any(resolve_search(wholesome, rng=rng).injured for _ in range(200))
+
+
+def test_work_challenges_invariants() -> None:
+    from app.services.economy import CHALLENGE_KINDS, generate_challenge
+    from app.services.economy.minigames import _WORDS
+
+    assert all(4 <= len(w) <= 8 for w in _WORDS) and len(_WORDS) >= 20
+    seen = set()
+    for seed in range(300):
+        rng = random.Random(seed)
+        c = generate_challenge(rng)
+        seen.add(c.kind)
+        assert c.answer in c.options
+        assert len(c.options) == 4 and len(set(c.options)) == 4
+        if c.kind == 'unscramble':
+            shown = c.prompt.split('**')[1].lower()
+            assert shown != c.answer and sorted(shown) == sorted(c.answer)
+    assert seen == set(CHALLENGE_KINDS)
