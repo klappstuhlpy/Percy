@@ -496,6 +496,10 @@ class GameStatsRepository(BaseRepository):
         Telemetry must never break gameplay, so any database error here is logged
         and swallowed rather than propagated to the caller (a game's payout flow).
 
+        After a successful write it dispatches the ``game_result`` bot event
+        ``(guild_id, user_id, game, result)`` - the one deliberate non-SQL line in this
+        repository; a missing bot or listener error is logged, never raised.
+
         Parameters
         ----------
         guild_id, user_id:
@@ -544,6 +548,17 @@ class GameStatsRepository(BaseRepository):
             await self.execute(query, guild_id, user_id, game, won, lost, tied, wagered, profit)
         except Exception:
             log.exception("Failed to record game result (guild=%s user=%s game=%s)", guild_id, user_id, game)
+            return
+        self._dispatch_result(guild_id, user_id, game, result)
+
+    def _dispatch_result(self, guild_id: int, user_id: int, game: str, result: str) -> None:
+        # The one deliberate non-SQL line in this repository: every game outcome funnels through
+        # record_result, so this is the single seam for listeners (e.g. economy quests).
+        # Like the write, it must never break a game's payout flow.
+        try:
+            self.bot.dispatch('game_result', guild_id, user_id, game, result)
+        except Exception:
+            log.exception("Failed to dispatch game_result (guild=%s user=%s game=%s)", guild_id, user_id, game)
 
     # -- member reads -----------------------------------------------------
 

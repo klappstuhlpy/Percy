@@ -110,6 +110,12 @@ from app.services.economy import (
 from app.utils import fnumb, fuzzy, get_asset_url, helpers, pluralize, timetools
 from config import Emojis
 
+#: Staked casino games whose wins advance the ``casino_win`` quest (fight and heist have their own kinds).
+_CASINO_QUEST_GAMES = frozenset({
+    'blackjack', 'slots', 'roulette', 'poker', 'tower', 'higherlower', 'dice', 'mines', 'coinflip',
+    'horserace', 'russianroulette', 'crash', 'scratch', 'snakeeyes', 'gamble',
+})
+
 #: Species ids offered as slash choices by ``pet adopt``.
 PetSpeciesChoice = Literal['hamster', 'cat', 'dog', 'parrot', 'fox', 'dragon']
 #: Rarity ids offered as slash choices by ``shop add`` / ``shop edit`` (mirrors ``RARITIES``).
@@ -1348,6 +1354,7 @@ class Economy(Cog):
                     f'{Emojis.Economy.cash} **{fnumb(amount)}** in ad revenue!{self._scale_suffix(scale)}'
                 )
             await interaction.response.edit_message(content=text, view=view)
+            await self._bump_quests(ctx, 'postmeme')
 
         view = SearchView(
             ctx.author, pick_search_options(locations=MEME_FORMATS), resolve,
@@ -1594,6 +1601,20 @@ class Economy(Cog):
             f"Bought **{pluralize(amount):ticket}** for {Emojis.Economy.cash} **{fnumb(cost)}**. "
             f"You now hold **{fnumb(total)}**."
         )
+
+    @Cog.listener()
+    async def on_game_result(self, guild_id: int, user_id: int, game: str, result: str) -> None:
+        """Advance game quests from a recorded round (silent: there is no ctx to announce on)."""
+        kind = None
+        if game == 'heist':
+            kind = 'heist'
+        elif result == 'win':
+            if game == 'fight':
+                kind = 'fight_win'
+            elif game in _CASINO_QUEST_GAMES:
+                kind = 'casino_win'
+        if kind is not None:
+            await self._advance_quests(user_id, guild_id, kind)
 
     @Cog.listener()
     async def on_lottery_timer_complete(self, timer: Timer) -> None:

@@ -212,6 +212,17 @@ def test_deposit_quest_goal_is_rounded() -> None:
     raise AssertionError('deposit quest never appeared in 200 boards')
 
 
+def test_new_activity_quests_in_pool_and_format() -> None:
+    kinds = {spec.kind for spec in QUEST_POOL}
+    assert {'casino_win', 'postmeme', 'heist', 'fight_win'} <= kinds
+    seen: set[str] = set()
+    for user_id in range(300):
+        for quest in generate_daily_quests(1, user_id, TODAY):
+            seen.add(quest.kind)
+            assert '{' not in quest.description
+    assert {'casino_win', 'postmeme', 'heist', 'fight_win'} <= seen
+
+
 # -- achievements -----------------------------------------------------------------
 
 

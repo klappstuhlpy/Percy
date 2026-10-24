@@ -51,6 +51,10 @@ QUEST_POOL: tuple[QuestSpec, ...] = (
     QuestSpec('search_n', 'search', 'Search {goal} locations', 3, 6, 70),
     QuestSpec('deposit_amount', 'deposit', 'Deposit {goal} cash into your bank', 500, 2_000, 0),
     QuestSpec('gift_n', 'gift', 'Gift {goal} items to other members', 1, 2, 200),
+    QuestSpec('casino_win', 'casino_win', 'Win {goal} casino games', 2, 5, 150),
+    QuestSpec('postmeme_n', 'postmeme', 'Post {goal} memes', 2, 4, 80),
+    QuestSpec('heist_n', 'heist', 'Take part in {goal} heist', 1, 1, 250),
+    QuestSpec('fight_win', 'fight_win', 'Win {goal} fight', 1, 1, 200),
 )
 
 

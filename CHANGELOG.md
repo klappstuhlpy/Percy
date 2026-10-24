@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Daily quests can now ask you to win casino games, post memes, join a heist or win a fight.
 - `cooldowns` (`cd`): see which economy and game commands are ready and when the rest unlock,
   including your daily, weekly and monthly rewards.
 - `multipliers` (`multi`): see every factor behind your earnings (server payout, prestige, boosts)
