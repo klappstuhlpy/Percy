@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cooldowns` (`cd`): see which economy and game commands are ready and when the rest unlock,
+  including your daily, weekly and monthly rewards.
+- `multipliers` (`multi`): see every factor behind your earnings (server payout, prestige, boosts)
+  and how many uses your fishing rod, rifle and shovel have left.
 - `crash`: a multiplier climbs until it crashes at a hidden point. Cash out before it does,
   or set an automatic cash-out.
 - `scratch`: scratch three of nine tiles on a card and win the average of what you uncover.

@@ -147,6 +147,7 @@ from app.services.economy.minigames import (
     Challenge,
     generate_challenge,
 )
+from app.services.economy.overview import describe_multipliers, split_cooldowns, tool_uses_left
 from app.services.economy.pets import (
     HUNGRY_AFTER_HOURS,
     PET_SPECIES,
@@ -275,6 +276,7 @@ __all__ = (
     'compute_shift',
     'daily_sale',
     'describe_effect',
+    'describe_multipliers',
     'drops_for',
     'evaluate_achievements',
     'filter_items',
@@ -307,8 +309,10 @@ __all__ = (
     'sale_price',
     'sell_price',
     'should_drop',
+    'split_cooldowns',
     'summarize_offer',
     'tool_for_activity',
+    'tool_uses_left',
     'trade_error',
     'trade_failure_message',
     'validate_item_effect',

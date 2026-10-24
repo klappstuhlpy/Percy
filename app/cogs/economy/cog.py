@@ -34,6 +34,7 @@ from app.services.economy import (
     BEG_FAIL_LINES,
     BEG_SUCCESS_LINES,
     BEG_TABLE,
+    DAILY_COOLDOWN,
     DIG_COOLDOWN,
     DIG_TABLE,
     FISHING_COOLDOWN,
@@ -73,6 +74,7 @@ from app.services.economy import (
     compute_shift,
     daily_sale,
     describe_effect,
+    describe_multipliers,
     evaluate_achievements,
     generate_challenge,
     generate_daily_quests,
@@ -97,7 +99,9 @@ from app.services.economy import (
     sale_price,
     sell_price,
     should_drop,
+    split_cooldowns,
     tool_for_activity,
+    tool_uses_left,
     trade_error,
     trade_failure_message,
     validate_item_effect,
@@ -1666,6 +1670,78 @@ class Economy(Cog):
             await ctx.send_success("\N{DOVE OF PEACE} Passive mode **on** — you can't rob or be robbed, and heists skip you.")
         else:
             await ctx.send_success("Passive mode **off** — robbing and heists are back on the table, both ways.")
+
+    @command("cooldowns", alias="cd", description="See which economy and game commands are ready.", guild_only=True)
+    async def cooldowns(self, ctx: Context) -> None:
+        """Every Economy and Games command with a cooldown, plus your daily, weekly and monthly timers."""
+        assert ctx.guild is not None
+        now = ctx.message.created_at
+        entries: list[tuple[str, float]] = []
+        for cog_name in ('Economy', 'Games'):
+            cog = self.bot.get_cog(cog_name)
+            entries.extend(
+                (cmd.qualified_name, cmd.get_cooldown_retry_after(ctx))
+                for cmd in (cog.walk_commands() if cog else ())
+                if cmd.cooldown is not None
+            )
+
+        record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
+        for name, column, span in (
+            ('daily', 'last_claim', DAILY_COOLDOWN),
+            ('weekly', 'last_weekly', WEEKLY_COOLDOWN),
+            ('monthly', 'last_monthly', MONTHLY_COOLDOWN),
+        ):
+            last = record[column].replace(tzinfo=datetime.UTC) if record and record[column] else None
+            entries.append((name, max(0.0, (last + span - now).total_seconds()) if last else 0.0))
+        passive = await self.bot.db.economy.get_passive(ctx.author.id, ctx.guild.id)
+        if passive:
+            changed = passive['changed_at'].replace(tzinfo=datetime.UTC)
+            entries.append(('passive', max(0.0, (changed + PASSIVE_COOLDOWN - now).total_seconds())))
+
+        ready, waiting = split_cooldowns(entries)
+        fields = [(
+            '\N{WHITE HEAVY CHECK MARK} Ready',
+            ', '.join(f'`{name}`' for name in ready) or 'Nothing right now.',
+        )]
+        if waiting:
+            fields.append((
+                '\N{HOURGLASS WITH FLOWING SAND} On cooldown',
+                '\n'.join(
+                    f'`{name}` {discord.utils.format_dt(now + datetime.timedelta(seconds=left), "R")}'
+                    for name, left in waiting
+                ),
+            ))
+        await ctx.send(view=make_notice(f"{ctx.author.display_name}'s Cooldowns", fields=fields))
+
+    @command("multipliers", alias="multi", description="See what boosts your earnings.", guild_only=True)
+    @describe(member="The member to look at (defaults to you).")
+    async def multipliers(
+        self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None
+    ) -> None:
+        """Every factor behind your earnings: server payout, prestige, boosts and tools."""
+        assert ctx.guild is not None
+        user = member or ctx.author
+        db = self.bot.db.economy
+        settings = await self._settings(ctx.guild.id)
+        prestige = prestige_multiplier(await db.get_prestige(user.id, ctx.guild.id))
+        owned = {row['builtin_key']: row for row in await db.get_inventory(user.id, ctx.guild.id)}
+        tools: list[tuple[str, int | None]] = []
+        for activity in ('fish', 'hunt', 'dig'):
+            tool = tool_for_activity(activity)
+            assert tool is not None and tool.durability is not None
+            row = owned.get(tool.key)
+            tools.append((tool.name, tool_uses_left(row['quantity'], row['durability'], tool.durability) if row else None))
+        lines = describe_multipliers(
+            guild=settings.payout_multiplier,
+            prestige=prestige,
+            loot=await db.get_boost_multiplier(user.id, ctx.guild.id, 'loot'),
+            xp=await db.get_boost_multiplier(user.id, ctx.guild.id, 'xp'),
+            vote=await self.bot.db.votes.get_active_multiplier(user.id),
+            tools=tools,
+        )
+        await ctx.send(view=make_notice(
+            f"{user.display_name}'s Multipliers", '\n'.join(lines), thumbnail=get_asset_url(user)
+        ))
 
     @command("gift", description="Gift items from your inventory to another member.", guild_only=True, hybrid=True)
     @describe(member="The member to gift to.", name="The item to gift.", quantity="How many to gift.")
