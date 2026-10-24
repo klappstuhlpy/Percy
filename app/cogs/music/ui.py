@@ -203,15 +203,17 @@ class PlayerPanel(LayoutView):
                 container.add_item(discord.ui.TextDisplay(ProgressBar(0, 100, 0)))
             else:
                 current_position = max(position, 0.0)
-                container.add_item(discord.ui.TextDisplay(f"`{convert_duration(current_position)}` / `{convert_duration(track.length)}`"))
+                container.add_item(discord.ui.TextDisplay(f"-# `{convert_duration(current_position)}` / `{convert_duration(track.length)}`"))
                 container.add_item(discord.ui.TextDisplay(ProgressBar(0, track.length, current_position, key_full=14)))
 
-            container.add_item(discord.ui.TextDisplay(f"**{self.player.volume}%** " + ProgressBar(0, 100, self.player.volume)))
+            container.add_item(discord.ui.TextDisplay(f"-# ``{self.player.volume}%``"))
+            container.add_item(discord.ui.TextDisplay(ProgressBar(0, 100, self.player.volume)))
             container.add_item(discord.ui.Separator())
 
-            container.add_item(discord.ui.TextDisplay("-# Playback Controls"))
-            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_skip, self.on_loop))
-            container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
+            container.add_item(discord.ui.TextDisplay("-# Playback"))
+            container.add_item(discord.ui.ActionRow(self.on_back, self.on_pause_play, self.on_skip, self.on_stop))
+            container.add_item(discord.ui.TextDisplay("-# Controls"))
+            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_volume, self.on_loop, self.on_like))
 
             container.add_item(discord.ui.Separator())
             mode = "Autoplay • " if self.player.autoplay != 2 else ""
@@ -232,9 +234,10 @@ class PlayerPanel(LayoutView):
 
             container.add_item(discord.ui.Separator())
 
-            container.add_item(discord.ui.TextDisplay("-# Playback Controls"))
-            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_skip, self.on_loop))
-            container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
+            container.add_item(discord.ui.TextDisplay("-# Playback"))
+            container.add_item(discord.ui.ActionRow(self.on_back, self.on_pause_play, self.on_skip, self.on_stop))
+            container.add_item(discord.ui.TextDisplay("-# Controls"))
+            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_volume, self.on_loop, self.on_like))
 
             container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.TextDisplay(f"-# last updated • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
