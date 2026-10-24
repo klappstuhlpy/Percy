@@ -569,6 +569,10 @@ class Player(wavelink.Player):
                 if self.channel.instance is not None:
                     await self.channel.instance.delete()
 
+        if len(self.channel.members) == 1 and isinstance(self.channel, discord.VoiceChannel):
+            with suppress(discord.HTTPException):
+                await self.channel.edit(status=None)
+
         await super().disconnect(**kwargs)
 
     async def cleanupleft(self) -> None:
