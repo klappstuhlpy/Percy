@@ -10,6 +10,7 @@ import discord
 from app.core import LayoutView
 from app.services.economy import (
     ACHIEVEMENTS,
+    DROP_GRAB_TIMEOUT,
     JOB_LADDER,
     WORK_CHALLENGE_TIMEOUT,
     compute_pet_claim,
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
     from app.core.models import Context
     from app.services.economy import Challenge, SearchLocation
 
-__all__ = ('BOOST_LABELS', 'EconomyHub', 'SearchView', 'WorkChallengeView', 'boost_display_line', 'progress_bar')
+__all__ = ('BOOST_LABELS', 'DropView', 'EconomyHub', 'SearchView', 'WorkChallengeView', 'boost_display_line', 'progress_bar')
 
 #: Display labels for active boost kinds.
 BOOST_LABELS = {'xp': 'leveling XP', 'loot': 'fishing & hunting payouts'}
@@ -160,6 +161,41 @@ class WorkChallengeView(discord.ui.View):
         if self.message is not None:
             try:
                 await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+
+class DropView(discord.ui.View):
+    """A chat drop: the first member to press **Grab** wins, everyone else is told they were too slow.
+
+    ``award(member)`` pays the winner and returns the text shown on the finished card.
+    """
+
+    def __init__(self, award: Callable[[discord.Member], Awaitable[str]]) -> None:
+        super().__init__(timeout=DROP_GRAB_TIMEOUT)
+        self._award = award
+        self.winner: discord.abc.User | None = None
+        self.message: discord.Message | None = None
+
+    @discord.ui.button(label='Grab', style=discord.ButtonStyle.success, emoji='\N{RAISED HAND}')
+    async def grab(self, interaction: discord.Interaction, button: discord.ui.Button[DropView]) -> None:
+        if self.winner is not None:  # claimed before any await, so the first click wins
+            await interaction.response.send_message('Too slow - someone already grabbed it.', ephemeral=True)
+            return
+        self.winner = interaction.user
+        self.stop()
+        button.disabled = True
+        button.label = 'Grabbed'
+        assert isinstance(interaction.user, discord.Member)
+        await interaction.response.edit_message(content=await self._award(interaction.user), view=self)
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+        if self.message is not None and self.winner is None:
+            try:
+                await self.message.edit(content='\N{ALARM CLOCK} Nobody grabbed the drop.', view=self)
             except discord.HTTPException:
                 pass
 

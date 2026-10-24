@@ -152,6 +152,7 @@ class GuildEconomySettings:
     daily_base: int = DAILY_BASE
     max_bet: int | None = None
     bank_cap: bool = True
+    drops_enabled: bool = False
 
     @classmethod
     def from_record(cls, record: Mapping[str, Any] | None) -> GuildEconomySettings:
@@ -164,6 +165,7 @@ class GuildEconomySettings:
             daily_base=record['daily_base'],
             max_bet=record['max_bet'],
             bank_cap=record.get('bank_cap', True),
+            drops_enabled=record.get('drops_enabled', False),
         )
 
 

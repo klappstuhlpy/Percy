@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import random
+import time
 from contextlib import nullcontext
 from typing import Annotated, Any, Literal
 
@@ -13,7 +14,15 @@ from discord.ext.commands import Range
 from app.cogs.economy.item_ui import ItemBrowser
 from app.cogs.economy.risk import resolve_death
 from app.cogs.economy.trade_ui import TradeView
-from app.cogs.economy.ui import BOOST_LABELS, EconomyHub, SearchView, WorkChallengeView, boost_display_line, progress_bar
+from app.cogs.economy.ui import (
+    BOOST_LABELS,
+    DropView,
+    EconomyHub,
+    SearchView,
+    WorkChallengeView,
+    boost_display_line,
+    progress_bar,
+)
 from app.core import Accent, Bot, Cog, converter, make_notice
 from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator
@@ -49,6 +58,7 @@ from app.services.economy import (
     WORK_COOLDOWN,
     WORK_FAIL_FACTOR,
     WORK_SUCCESS_BONUS,
+    ChatDrop,
     EconomySnapshot,
     GuildEconomySettings,
     PurchaseStatus,
@@ -79,12 +89,14 @@ from app.services.economy import (
     purchase_error,
     resolve_search,
     roll_bank_space,
+    roll_chat_drop,
     roll_death,
     roll_drop,
     roll_loot,
     roll_lootbox,
     sale_price,
     sell_price,
+    should_drop,
     tool_for_activity,
     trade_error,
     trade_failure_message,
@@ -104,6 +116,11 @@ class Economy(Cog):
     """Economy commands"""
 
     emoji = Emojis.Economy.cash
+
+    def __init__(self, bot: Bot) -> None:
+        super().__init__(bot)
+        self._last_drop: dict[int, datetime.datetime] = {}
+        self._drops_cache: dict[int, tuple[float, bool]] = {}
 
     def _effect_line(self, guild: discord.Guild, item: Any) -> str | None:
         """A display line for an item's use-effect, resolving role mentions where possible."""
@@ -145,6 +162,47 @@ class Economy(Cog):
         item = await db.ensure_builtin(guild_id, drop)
         await db.add_to_inventory(user_id, guild_id, item['id'], 1)
         return 1.0, f'\n…and found {drop.emoji} **{item["name"]}**!'
+
+    async def _award_drop(self, member: discord.Member, drop: ChatDrop) -> str:
+        """Pay a chat drop to ``member`` (coins scaled like any earning, or the item); returns the result text."""
+        db = self.bot.db.economy
+        if drop.item is None:
+            scale = await self._payout_scale(member.id, member.guild.id)
+            amount = max(1, round(drop.coins * scale))
+            balance = await self.bot.db.get_user_balance(member.id, member.guild.id)
+            await balance.add(cash=amount)
+            return f'{member.mention} grabbed the drop: {Emojis.Economy.cash} **{fnumb(amount)}**!'
+        row = await db.ensure_builtin(member.guild.id, drop.item)
+        await db.add_to_inventory(member.id, member.guild.id, row['id'], 1)
+        return f'{member.mention} grabbed the drop: {drop.item.emoji} **{row["name"]}**!'
+
+    async def _drops_enabled(self, guild_id: int) -> bool:
+        """Whether chat drops are on for the guild, cached for 5 minutes so a message costs no DB read."""
+        now = time.monotonic()
+        cached = self._drops_cache.get(guild_id)
+        if cached is None or cached[0] < now:
+            cached = (now + 300, (await self._settings(guild_id)).drops_enabled)
+            self._drops_cache[guild_id] = cached
+        return cached[1]
+
+    @Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if message.guild is None or message.author.bot:
+            return
+        now = datetime.datetime.now(datetime.UTC)
+        last = self._last_drop.get(message.guild.id)
+        # Cheap in-memory gate first; the settings lookup only happens on a would-be drop.
+        if not should_drop(last, now) or not await self._drops_enabled(message.guild.id):
+            return
+        self._last_drop[message.guild.id] = now
+        drop = roll_chat_drop()
+        view = DropView(lambda member: self._award_drop(member, drop))
+        prize = f'{Emojis.Economy.cash} coins' if drop.item is None else f'{drop.item.emoji} an item'
+        try:
+            view.message = await message.channel.send(
+                f'\N{WRAPPED PRESENT} A drop appeared with {prize}! Press **Grab** first.', view=view)
+        except discord.HTTPException:
+            pass
 
     @staticmethod
     def _scale_suffix(scale: float) -> str:
@@ -1856,9 +1914,10 @@ class Economy(Cog):
             f"**Robbing** {'Enabled' if settings.rob_enabled else 'Disabled'}\n"
             f"**Daily base** {Emojis.Economy.cash} {fnumb(settings.daily_base)}\n"
             f"**Max casino bet** {max_bet}\n"
-            f"**Bank cap** {'On' if settings.bank_cap else 'Off'}",
+            f"**Bank cap** {'On' if settings.bank_cap else 'Off'}\n"
+            f"**Chat drops** {'On' if settings.drops_enabled else 'Off'}",
             thumbnail=icon or None,
-            footer="economy-config multiplier/rob/bank-cap/daily-base/max-bet",
+            footer="economy-config multiplier/rob/bank-cap/drops/daily-base/max-bet",
         ))
 
     @economy_config.command(
@@ -1899,6 +1958,20 @@ class Economy(Cog):
         assert ctx.guild is not None
         await self.bot.db.economy.update_settings(ctx.guild.id, {"bank_cap": enabled})
         await ctx.send_success(f"The bank cap is now **{'on' if enabled else 'off'}**.")
+
+    @economy_config.command(
+        "drops",
+        description="Turn random chat drops on or off.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.admin,
+    )
+    @describe(enabled="Whether coin and item drops appear in chat now and then.")
+    async def economy_config_drops(self, ctx: Context, enabled: bool) -> None:
+        """Toggle random chat drops for this server."""
+        assert ctx.guild is not None
+        await self.bot.db.economy.update_settings(ctx.guild.id, {"drops_enabled": enabled})
+        self._drops_cache.pop(ctx.guild.id, None)
+        await ctx.send_success(f"Chat drops are now **{'on' if enabled else 'off'}**.")
 
     @economy_config.command(
         "daily-base",
