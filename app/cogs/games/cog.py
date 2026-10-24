@@ -13,6 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 from expiringdict import ExpiringDict
 
+from app.cogs.economy.risk import resolve_death
 from app.cogs.games import (
     blackjack_bridge,
     coinflip_ui,
@@ -47,7 +48,7 @@ from app.cogs.games.models import Game, GameResult
 from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, command, cooldown, describe
-from app.services.economy import GuildEconomySettings
+from app.services.economy import GuildEconomySettings, roll_death
 from app.utils import (
     FAILED_CRIME_RESPONSES,
     FAILED_SLUT_RESPONSES,
@@ -504,9 +505,10 @@ class Games(Cog):
         else:
             amount = round(random.uniform(Payouts.CRIME_FINE_MIN.value, Payouts.CRIME_FINE_MAX.value) * amount)
             await balance.remove(cash=amount)
-            await ctx.send_error(
-                random.choice(FAILED_CRIME_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
-            )
+            text = random.choice(FAILED_CRIME_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
+            if roll_death('crime'):
+                text += await resolve_death(self.bot, ctx.author.id, ctx.guild.id)
+            await ctx.send_error(text)
 
     @command("slut", description="Whip it out, for a bit of cash. ;) (NSFW)", nsfw=True, guild_only=True)
     @cooldown(1, Payouts.SLUT_COODLWON.value, commands.BucketType.member)

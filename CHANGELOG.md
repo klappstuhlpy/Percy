@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every 24 hours.
 - `work` now asks a quick challenge (unscramble a word, remember emojis, or read a colour word). Get it right for +25% pay; a wrong answer or running out of 20 seconds halves it.
 - Bank space: your bank now holds a limited amount (10,000 to start). It grows a little with every `work` shift and `daily` claim, and a Banknote from the shop adds 5,000. Admins can turn the limit off with `economy-config bank-cap`.
+- Death: `hunt`, `search` (when it goes wrong) and a failed `crime` can kill you, and you lose all your cash. A Lifesaver (3,000 in the shop) is used up instead and saves you automatically.
 - `deposit` and `withdraw` take `all`, `max`, `half` and shorthand like `2k`.
 
 ### Changed

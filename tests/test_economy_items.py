@@ -404,8 +404,7 @@ def test_catalogue_integrity() -> None:
     rarities = {r.id for r in RARITIES}
     for item in CATALOGUE:
         assert item.price > 0 and item.rarity in rarities and item.effect in ITEM_EFFECTS
-        if item.effect == 'bank_space':  # a shop consumable: neither tool nor drop
-            assert item.for_sale and item.tool_for is None and item.drop_from is None
+        if item.for_sale and item.tool_for is None and item.drop_from is None:  # shop consumable or passive item
             continue
         assert (item.tool_for is None) != (item.drop_from is None)  # a tool or a drop, never both
         if item.tool_for:

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.services.economy.core import BANKNOTE_SPACE
+from app.services.economy.risk import LIFESAVER_KEY
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -69,9 +70,12 @@ CATALOGUE: tuple[CatalogueItem, ...] = (
     CatalogueItem('shovel', 'Shovel', '\N{PICK}', 'uncommon', 500, for_sale=True,
                   tool_for='dig', durability=25, description='Needed for full `dig` payouts and item drops.'),
     # Bank
-    CatalogueItem('banknote', 'Banknote', '💵', 'rare', 2_500, effect='bank_space',
-                  effect_value=BANKNOTE_SPACE, for_sale=True,
+    CatalogueItem('banknote', 'Banknote', '\N{BANKNOTE WITH DOLLAR SIGN}', 'rare', 2_500,
+                  effect='bank_space', effect_value=BANKNOTE_SPACE, for_sale=True,
                   description='Use it to add bank space.'),
+    # Protection
+    CatalogueItem(LIFESAVER_KEY, 'Lifesaver', '\N{RING BUOY}', 'uncommon', 3_000, for_sale=True,
+                  description='Works automatically: saves you from dying once, then is used up.'),
     # Fish
     CatalogueItem('sardine', 'Sardine', '\N{FISH}', 'common', 30, drop_from='fish', description='A shiny little fish.'),
     CatalogueItem('salmon', 'Salmon', '\N{TROPICAL FISH}', 'uncommon', 90, drop_from='fish'),

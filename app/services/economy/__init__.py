@@ -155,6 +155,7 @@ from app.services.economy.quests import (
     QuestSpec,
     generate_daily_quests,
 )
+from app.services.economy.risk import DEATH_CHANCES, LIFESAVER_KEY, roll_death
 from app.services.economy.trade import (
     MAX_TRADE_LINES,
     TradeOffer,
@@ -185,6 +186,7 @@ __all__ = (
     'DAILY_RESET',
     'DAILY_STREAK_BONUS',
     'DAILY_STREAK_CAP',
+    'DEATH_CHANCES',
     'DIG_COOLDOWN',
     'DIG_TABLE',
     'DROP_CHANCE',
@@ -196,6 +198,7 @@ __all__ = (
     'ITEM_EFFECTS',
     'ITEM_NAME_LIMIT',
     'JOB_LADDER',
+    'LIFESAVER_KEY',
     'LOOTBOX_BANDS',
     'MAX_ITEM_STOCK',
     'MAX_TRADE_LINES',
@@ -280,6 +283,7 @@ __all__ = (
     'purchase_error',
     'resolve_search',
     'roll_bank_space',
+    'roll_death',
     'roll_drop',
     'roll_loot',
     'roll_lootbox',

@@ -11,6 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import Range
 
 from app.cogs.economy.item_ui import ItemBrowser
+from app.cogs.economy.risk import resolve_death
 from app.cogs.economy.trade_ui import TradeView
 from app.cogs.economy.ui import BOOST_LABELS, EconomyHub, SearchView, WorkChallengeView, boost_display_line, progress_bar
 from app.core import Accent, Bot, Cog, converter, make_notice
@@ -31,6 +32,7 @@ from app.services.economy import (
     HUNTING_COOLDOWN,
     HUNTING_TABLE,
     JOB_LADDER,
+    LIFESAVER_KEY,
     MAX_ITEM_STOCK,
     MEME_FORMATS,
     MONTHLY_AMOUNT,
@@ -77,6 +79,7 @@ from app.services.economy import (
     purchase_error,
     resolve_search,
     roll_bank_space,
+    roll_death,
     roll_drop,
     roll_loot,
     roll_lootbox,
@@ -715,6 +718,9 @@ class Economy(Cog):
         if item is None:
             return False, 'That item no longer exists.'
 
+        if item.get('builtin_key') == LIFESAVER_KEY:
+            return False, f'**{item["name"]}** works automatically - keep it in your inventory.'
+
         effect: str = item['effect'] or 'none'
         value: int = item['effect_value'] or 0
         duration: int = item['duration_minutes'] or 0
@@ -1149,6 +1155,8 @@ class Economy(Cog):
         amount = round(catch.amount * boost * scale * factor)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount)
+        if roll_death('hunt'):
+            extra += await resolve_death(self.bot, ctx.author.id, ctx.guild.id)
 
         if catch.amount <= 10:
             await ctx.send_info(f"{catch.emoji} You found **{catch.name}** and came back empty-handed.{extra}")
@@ -1226,6 +1234,8 @@ class Economy(Cog):
                     f'{location.emoji} **{location.name}** — {outcome.flavor}\n'
                     f'You lost {Emojis.Economy.cash} **{fnumb(fine)}**.'
                 )
+                if roll_death('search'):
+                    text += await resolve_death(self.bot, ctx.author.id, guild_id)
             else:
                 assert outcome.catch is not None
                 scale = await self._payout_scale(ctx.author.id, guild_id)

@@ -221,6 +221,18 @@ class EconomyRepository(BaseRepository):
             user_id, guild_id, item_id, quantity,
         )
 
+    async def wipe_cash(self, user_id: int, guild_id: int) -> int:
+        """Zeroes a member's cash (bank untouched) and returns how much was lost."""
+        return await self.fetchval(
+            """
+            WITH old AS (SELECT cash FROM economy WHERE user_id = $1 AND guild_id = $2 FOR UPDATE)
+            UPDATE economy SET cash = 0 FROM old
+            WHERE user_id = $1 AND guild_id = $2
+            RETURNING old.cash;
+            """,
+            user_id, guild_id,
+        ) or 0
+
     async def delete_item_by_id(self, guild_id: int, item_id: int) -> asyncpg.Record | None:
         """Deletes a shop item by id, returning the deleted row (or ``None``)."""
         return await self.fetchrow(
