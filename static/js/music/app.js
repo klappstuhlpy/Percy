@@ -527,19 +527,17 @@
         if (blocked(now ? 'playnow' : 'add')) return;
         const query = t.query || t.uri || [t.title, t.author].filter(Boolean).join(' ');
         if (!query) { toast('error', 'This track has no link to play.'); return; }
-        const r = await api(`${BASE}/play`, { method: 'POST', body: { query } });
+        const r = await api(`${BASE}/play`, { method: 'POST', body: t.query ? { query, limit: 15 } : now && canDestroy() ? { query, play_now: true } : { query } }); // vibes queue a mix
         if (!r.ok) { toast('error', r.error); return; }
+        if (t.query) {
+            const n = (r.data.queued || []).length;
+            toast('success', `Queued ${n} song${n === 1 ? '' : 's'} from ${q(t.label)}`);
+            soon(400); return;
+        }
         const found = r.data.queued && r.data.queued[0] && r.data.queued[0].title;
         const name = (t.query ? found || `${t.label} mix` : t.title || found) || 'that track';
-        if (r.data.started) { toast('success', `Now playing ${q(name)}`); soon(400); return; }
-        if (now && canDestroy()) {
-            // Jump to the track just queued: it is the last manual (non-autoplay) entry.
-            const s = await api(`${BASE}/status`);
-            let idx = -1;
-            ((s.ok && s.data.queue) || []).forEach((x, i) => { if (!x.autoplay) idx = i; });
-            if (idx >= 0 && await control('jump', { index: idx })) { toast('success', `Now playing ${q(name)}`); return; }
-            toast('success', `Added ${q(name)} to the queue`);
-        } else if (now) {
+        if (r.data.started || (now && canDestroy())) { toast('success', `Now playing ${q(name)}`); soon(400); return; }
+        if (now) {
             toast('info', `Added ${q(name)} to the queue. Skipping ahead needs the DJ role.`);
         } else {
             const extra = (r.data.queued || []).length > 1 ? ` (+${r.data.queued.length - 1} more)` : '';
@@ -681,12 +679,25 @@
     function searchIdle() {
         if (results) results.innerHTML = empty('search', 'Find something to play', 'Type a song, an artist or paste a link in the search bar above.');
     }
+    // Session-local search cache (60 s) so retyping a query does not refetch; failures are never kept.
+    const searchCache = new Map();
+    async function cachedSearch(query) {
+        const key = query.toLowerCase();
+        const hit = searchCache.get(key);
+        if (hit && Date.now() - hit.at < 60000) return hit.r;
+        const r = await api(`${BASE}/search?q=${encodeURIComponent(query)}&limit=20`);
+        if (r.ok) {
+            if (searchCache.size >= 50) searchCache.delete(searchCache.keys().next().value);
+            searchCache.set(key, { at: Date.now(), r });
+        }
+        return r;
+    }
     async function runSearch(text) {
         const query = text.trim();
         const mine = ++searchSeq;
         if (!query) { searchIdle(); return; }
         if (results) results.innerHTML = skeleton(7);
-        const r = await api(`${BASE}/search?q=${encodeURIComponent(query)}&limit=20`);
+        const r = await cachedSearch(query);
         if (mine !== searchSeq || !results) return;
         if (!r.ok) {
             results.innerHTML = empty('alert', 'Search failed', r.error, '<button type="button" class="mapp-btn" data-act="retry-search">Try again</button>', '', true);

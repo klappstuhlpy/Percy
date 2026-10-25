@@ -17,6 +17,11 @@ use axum::{
 use percy_client::{MusicInfo, MusicViewer, PercyClient, PercyError, UserMusicLibrary};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex},
+    time::{Duration, Instant},
+};
 
 use crate::{
     errors::percy_message,
@@ -26,6 +31,59 @@ use crate::{
     view::Viewer,
     AppState,
 };
+
+type Key = (u64, u64, String);
+
+/// Tiny in-process TTL map (no cache crate in the tree), keyed `(guild_id, user_id, extra)`.
+/// Bounded: at the cap, expired entries go, then an arbitrary one. Callers store successes only.
+struct TtlCache {
+    ttl: Duration,
+    max: usize,
+    map: Mutex<HashMap<Key, (Instant, Value)>>,
+}
+
+impl TtlCache {
+    fn new(ttl_secs: u64, max: usize) -> Self {
+        Self {
+            ttl: Duration::from_secs(ttl_secs),
+            max,
+            map: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn get(&self, key: &Key) -> Option<Value> {
+        let map = self.map.lock().ok()?;
+        map.get(key)
+            .filter(|(at, _)| at.elapsed() < self.ttl)
+            .map(|(_, v)| v.clone())
+    }
+
+    fn put(&self, key: Key, v: Value) {
+        let Ok(mut map) = self.map.lock() else { return };
+        if map.len() >= self.max {
+            let ttl = self.ttl;
+            map.retain(|_, (at, _)| at.elapsed() < ttl);
+            if map.len() >= self.max {
+                if let Some(k) = map.keys().next().cloned() {
+                    map.remove(&k);
+                }
+            }
+        }
+        map.insert(key, (Instant::now(), v));
+    }
+
+    /// Drops every entry of one user (their likes/plays change what is worth recommending).
+    fn forget_user(&self, uid: u64) {
+        if let Ok(mut map) = self.map.lock() {
+            map.retain(|k, _| k.1 != uid);
+        }
+    }
+}
+
+/// Searches are shared across users (user 0), 2 minutes.
+static SEARCH_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(120, 512));
+/// Recommendations are per user and guild, 10 minutes.
+static RECS_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(600, 512));
 
 /// How many guild history rows the first frame carries.
 const HISTORY_FIRST_FRAME: u32 = 20;
@@ -262,11 +320,17 @@ pub async fn music_search(
     if q.q.trim().is_empty() {
         return Json(json!({"ok": true, "results": []})).into_response();
     }
-    match percy
-        .search_music(guild_id, q.q.trim(), q.limit.unwrap_or(8).min(25))
-        .await
-    {
-        Ok(s) => Json(json!({"ok": true, "results": s.results})).into_response(),
+    let limit = q.limit.unwrap_or(8).min(25);
+    let key = (guild_id, 0, format!("{}\0{limit}", q.q.trim().to_lowercase()));
+    if let Some(hit) = SEARCH_CACHE.get(&key) {
+        return Json(hit).into_response();
+    }
+    match percy.search_music(guild_id, q.q.trim(), limit).await {
+        Ok(s) => {
+            let out = json!({"ok": true, "results": s.results});
+            SEARCH_CACHE.put(key, out.clone());
+            Json(out).into_response()
+        }
         Err(e) => percy_fail(&e),
     }
 }
@@ -294,6 +358,12 @@ pub async fn music_lyrics(State(app): State<AppState>, session: Session, Path(gu
 #[derive(Deserialize)]
 pub struct PlayBody {
     query: String,
+    /// More than one queues a mix of the top results (vibe tiles); clamped to 1-25.
+    #[serde(default)]
+    limit: Option<u8>,
+    /// Front of the queue and skip to it, keeping the rest (Percy gates it on skip rights).
+    #[serde(default)]
+    play_now: bool,
 }
 
 /// `POST /dashboard/music/:guild_id/play` — queue a query as the session user.
@@ -311,8 +381,12 @@ pub async fn music_play(
         Ok(u) => u,
         Err(r) => return r,
     };
-    match percy.play_music(guild_id, uid, &body.query).await {
-        Ok(r) => Json(json!({"ok": true, "queued": r.queued, "started": r.started})).into_response(),
+    let limit = body.limit.map(|n| n.clamp(1, 25));
+    match percy.play_music(guild_id, uid, &body.query, limit, body.play_now).await {
+        Ok(r) => {
+            RECS_CACHE.forget_user(uid);
+            Json(json!({"ok": true, "queued": r.queued, "started": r.started})).into_response()
+        }
         Err(e) => percy_fail(&e),
     }
 }
@@ -370,7 +444,10 @@ pub async fn account_music_like(State(app): State<AppState>, session: Session, J
         Err(r) => return r,
     };
     match percy.like_track(uid, &b.name, &b.url).await {
-        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Ok(()) => {
+            RECS_CACHE.forget_user(uid);
+            Json(json!({"ok": true})).into_response()
+        }
         Err(e) => percy_fail(&e),
     }
 }
@@ -382,7 +459,10 @@ pub async fn account_music_unlike(State(app): State<AppState>, session: Session,
         Err(r) => return r,
     };
     match percy.unlike_track(uid, &b.url).await {
-        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Ok(()) => {
+            RECS_CACHE.forget_user(uid);
+            Json(json!({"ok": true})).into_response()
+        }
         Err(e) => percy_fail(&e),
     }
 }
@@ -472,6 +552,10 @@ pub async fn music_recommendations(
         Ok(u) => u,
         Err(r) => return r,
     };
+    let key = (guild_id, uid, String::new());
+    if let Some(hit) = RECS_CACHE.get(&key) {
+        return Json(hit).into_response();
+    }
     let library = match percy.get_user_music(uid).await {
         Ok(l) => l,
         Err(e) => return percy_fail(&e),
@@ -482,20 +566,29 @@ pub async fn music_recommendations(
         async move {
             match artist {
                 Some(a) => {
-                    let tracks = percy
-                        .search_music(guild_id, &a, REC_PER_ARTIST)
-                        .await
-                        .map(|s| s.results)
-                        .unwrap_or_default();
-                    Some((a, tracks))
+                    let found = percy.search_music(guild_id, &a, REC_PER_ARTIST).await;
+                    Some((a, found.map(|s| s.results)))
                 }
                 None => None,
             }
         }
     };
     let (a, b, c) = tokio::join!(search(0), search(1), search(2));
-    let results = [a, b, c].into_iter().flatten().collect();
-    Json(build_recommendations(&library.top_tracks, results)).into_response()
+    // A failed per-artist search just drops that group, but then the answer is not cached.
+    let mut all_ok = true;
+    let results = [a, b, c]
+        .into_iter()
+        .flatten()
+        .map(|(artist, r)| {
+            all_ok &= r.is_ok();
+            (artist, r.unwrap_or_default())
+        })
+        .collect();
+    let out = build_recommendations(&library.top_tracks, results);
+    if all_ok {
+        RECS_CACHE.put(key, out.clone());
+    }
+    Json(out).into_response()
 }
 
 /// `MusicHistoryItem` length as `m:ss`, for the template.
@@ -580,6 +673,84 @@ mod tests {
         let got = seen.lock().unwrap().clone().expect("Percy was called");
         assert_eq!(got["user_id"], "42");
         assert_eq!(got["action"], "pause");
+    }
+
+    /// Fake Percy where user 42 shares guild 7001; `hits` counts search calls and `fail` flips them to 500.
+    async fn counting_percy(
+        hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        fail: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> AppState {
+        use std::sync::atomic::Ordering::SeqCst;
+        let fake = axum::Router::new()
+            .route(
+                "/api/v1/users/42/guilds",
+                axum::routing::get(|| async { Json(json!([{"id": "7001", "name": "Home", "owner": false}])) }),
+            )
+            .route(
+                "/api/v1/users/42/music",
+                axum::routing::get(|| async {
+                    Json(json!({"top_tracks": [{"title": "Old", "author": "Band", "uri": "u0"}]}))
+                }),
+            )
+            .route(
+                "/api/v1/guilds/7001/music/search",
+                axum::routing::get(move || async move {
+                    hits.fetch_add(1, SeqCst);
+                    if fail.load(SeqCst) {
+                        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"detail": "down"})));
+                    }
+                    (
+                        StatusCode::OK,
+                        Json(json!({"results": [{"title": "New", "author": "Band", "uri": "u1"}]})),
+                    )
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, fake).await });
+        let mut config = Config::test_default();
+        config.percy.api_url = Some(format!("http://{addr}"));
+        build_state_with(config, FsPath::new(":memory:")).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn search_and_recommendations_are_cached_but_errors_are_not() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
+        let hits = std::sync::Arc::new(AtomicUsize::new(0));
+        let fail = std::sync::Arc::new(AtomicBool::new(true));
+        let app = counting_percy(hits.clone(), fail.clone()).await;
+        let session = || Session::new("42", "ferris");
+        let search = |q: &str| {
+            music_search(
+                State(app.clone()),
+                session(),
+                Path(7001),
+                Query(SearchQuery {
+                    q: q.into(),
+                    limit: None,
+                }),
+            )
+        };
+
+        // Errors are not cached: the retry reaches Percy again.
+        assert_eq!(search("cache-me").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(search("cache-me").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(hits.load(SeqCst), 2);
+
+        fail.store(false, SeqCst);
+        assert_eq!(search("cache-me").await.status(), StatusCode::OK);
+        assert_eq!(search(" Cache-Me ").await.status(), StatusCode::OK);
+        assert_eq!(hits.load(SeqCst), 3, "second call served from cache");
+
+        // Recommendations: one artist search the first time, none the second; a like clears them.
+        let recs = || music_recommendations(State(app.clone()), session(), Path(7001));
+        assert_eq!(recs().await.status(), StatusCode::OK);
+        let after_first = hits.load(SeqCst);
+        assert_eq!(recs().await.status(), StatusCode::OK);
+        assert_eq!(hits.load(SeqCst), after_first, "recommendations cached");
+        RECS_CACHE.forget_user(42);
+        assert_eq!(recs().await.status(), StatusCode::OK);
+        assert!(hits.load(SeqCst) > after_first, "invalidated entry refetches");
     }
 
     #[test]
