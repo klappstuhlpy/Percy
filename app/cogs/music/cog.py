@@ -649,6 +649,30 @@ class Music(Cog):
             await player.panel.channel.send("The host has stopped listening to Spotify.")
             await player.disconnect()
 
+    async def connect_to(
+        self,
+        channel: discord.VoiceChannel | discord.StageChannel,
+        text_channel: discord.abc.Messageable | None,
+    ) -> Player:
+        """Connect to ``channel`` as a :class:`Player` and start its panel (shared by ``play`` and the API).
+
+        With no ``text_channel`` the guild's configured panel channel is used; if there is none, no panel is posted.
+        """
+        from .ui import PlayerPanel
+
+        try:
+            player = await channel.connect(cls=Player, self_deaf=True)
+        except wavelink.ChannelTimeoutException:
+            raise commands.BadArgument('I currently am unable to join your voice channel :/') from None
+        await channel.guild.me.edit(suppress=False if isinstance(channel, discord.StageChannel) else MISSING, deafen=True)
+
+        config_ = await self.bot.db.get_guild_config(channel.guild.id)
+        panel_channel = text_channel or (config_.music_panel_channel if config_ else None)
+        if isinstance(panel_channel, discord.TextChannel):
+            disabled = bool(config_ and not config_.use_music_panel)
+            player.panel = await PlayerPanel.start(player, channel=panel_channel, disabled=disabled)
+        return player
+
     @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True, extras={"example": "play never gonna give you up"}, bot_permissions=[discord.Permissions.connect, discord.Permissions.speak])
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(

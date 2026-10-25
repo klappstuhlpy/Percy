@@ -1,15 +1,17 @@
 """Music, equalizer, and live player control endpoints."""
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING, Any
 
 import discord
 import wavelink
+from discord.ext import commands
 from discord.ui.view import LayoutView
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.services.music_access import resolve_viewer
+from app.services.music_access import MusicViewer, resolve_viewer
 
 from ..dependencies import BotDep, GuildDep, verify_token
 
@@ -64,6 +66,11 @@ class DJModeBody(BaseModel):
     dj_mode: int
 
 
+class PlayBody(BaseModel):
+    user_id: int | str
+    query: str
+
+
 class ControlBody(BaseModel):
     action: str
     user_id: int | str
@@ -94,6 +101,29 @@ def _get_guild_player(bot: Bot, guild_id: int) -> tuple[discord.Guild | None, wa
     if player is None or not isinstance(player, wavelink.Player):
         return guild, None
     return guild, player
+
+
+async def _viewer_for(bot: Bot, guild: discord.Guild, user_id: int | str) -> tuple[discord.Member, MusicViewer, Any]:
+    """Resolve who ``user_id`` is to the guild's player; 403s a non-member. Returns (member, viewer, DJMode)."""
+    from app.cogs.music.models import DJMode, is_dj
+
+    try:
+        member = guild.get_member(int(user_id))
+    except (TypeError, ValueError):
+        member = None
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='you are not a member of this server')
+
+    bot_vc = guild.me.voice and guild.me.voice.channel
+    author_vc = member.voice and member.voice.channel
+    dj_mode = DJMode(getattr(await bot.db.get_guild_config(guild.id), 'music_dj_mode', 0))
+    viewer = resolve_viewer(
+        has_dj=is_dj(member) or member.guild_permissions.manage_guild,
+        user_channel_id=author_vc.id if author_vc else None,
+        bot_channel_id=bot_vc.id if bot_vc else None,
+        dj_mode=dj_mode,
+    )
+    return member, viewer, dj_mode
 
 
 def _effectively_stream(track: wavelink.Playable) -> bool:
@@ -460,6 +490,111 @@ async def patch_music_dj_mode(guild: GuildDep, bot: BotDep, body: DJModeBody) ->
     return {'ok': True, 'dj_mode': body.dj_mode}
 
 
+def _channel_ref(channel: discord.abc.GuildChannel | None) -> dict | None:
+    return {'id': str(channel.id), 'name': channel.name} if channel else None
+
+
+@router.get("/music/viewer")
+async def get_music_viewer(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+    """What ``user_id`` may do with this guild's player, plus the voice channels involved."""
+    member, viewer, dj_mode = await _viewer_for(bot, guild, user_id)
+    return {
+        'role': viewer.role,
+        'can_start': viewer.can_start,
+        'can_control': viewer.can_control,
+        'can_destroy': viewer.can_destroy,
+        'is_manager': viewer.is_manager,
+        'dj_mode': int(dj_mode),
+        'voice_channel': _channel_ref(member.voice.channel if member.voice else None),
+        'bot_channel': _channel_ref(guild.me.voice.channel if guild.me.voice else None),
+    }
+
+
+def _flatten(result: Any) -> list[wavelink.Playable]:
+    """A search result (track, playlist, list or a SearchReturn marker) as a plain track list."""
+    if isinstance(result, wavelink.Playlist):
+        return list(result.tracks)
+    if isinstance(result, wavelink.Playable):
+        return [result]
+    return list(result) if isinstance(result, list) else []
+
+
+@router.get("/music/search")
+async def get_music_search(guild: GuildDep, q: str, limit: int = Query(10, ge=1, le=25)) -> dict:
+    """Search tracks (needs a Lavalink node, not a player)."""
+    from app.cogs.music.player import Player
+
+    tracks = _flatten(await Player.search(q))[:limit]
+    return {'results': [_serialize_track(guild, t) for t in tracks]}
+
+
+@router.post("/music/play")
+async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
+    """Queue ``query`` for ``user_id``; starts a player in their voice channel when none is running."""
+    from app.cogs.music.player import Player
+
+    member, viewer, _ = await _viewer_for(bot, guild, body.user_id)
+    _, player = _get_guild_player(bot, guild.id)
+
+    if player is None:
+        if member.voice is None or member.voice.channel is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Join a voice channel first.')
+        if not viewer.can_start:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='only members with the DJ role can start the player')
+    elif not viewer.can_control:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="join the bot's voice channel to queue tracks")
+    elif getattr(player, 'always_on', False):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='A 24/7 session is active.')
+
+    result = await Player.search(body.query, return_first=True)
+    tracks = _flatten(result)
+    if not tracks:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='No results for that search.')
+    for track in tracks:
+        track.extras.requester_id = member.id
+
+    if player is None:
+        cog = bot.get_cog('Music')
+        try:
+            player = await cog.connect_to(member.voice.channel, None)  # type: ignore[union-attr]
+        except commands.BadArgument as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        player.autoplay = wavelink.AutoPlayMode.partial
+
+    await player.queue.put_wait(result if isinstance(result, wavelink.Playlist) else tracks[0])
+    started = not player.playing
+    if started:
+        await player.play(player.queue.get(), volume=70)
+    elif player.connected:
+        await player.refresh_panel()
+    return {'queued': [_serialize_track(guild, t) for t in tracks], 'started': started}
+
+
+@router.get("/music/history")
+async def get_music_history(
+    guild: GuildDep, bot: BotDep, limit: int = Query(50, ge=1, le=100), before: str | None = None
+) -> dict:
+    """Recently played tracks in this guild, newest first; pass the last ``played_at`` as ``before`` to page."""
+    cursor = None
+    if before:
+        try:
+            cursor = datetime.datetime.fromisoformat(before)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'before' must be an ISO timestamp")
+        if cursor.tzinfo is not None:
+            cursor = cursor.astimezone(datetime.UTC).replace(tzinfo=None)  # the column is naive UTC
+    rows = await bot.db.music_plays.guild_history(guild.id, limit=limit, before=cursor)
+    return {'items': [
+        {
+            'title': r['title'], 'author': r['author'], 'uri': r['uri'], 'artwork': r['artwork'],
+            'length_ms': r['length_ms'],
+            'user_id': str(r['user_id']) if r['user_id'] else None,
+            'played_at': r['played_at'].isoformat(),
+        }
+        for r in rows
+    ]}
+
+
 @router.post("/music/control")
 async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) -> dict:
     """Control playback from the dashboard (pause/resume/skip/back/volume/seek/loop/shuffle/jump/move/stop).
@@ -467,14 +602,14 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
     Enforces voice-channel presence and DJ-mode permissions, mirroring the
     in-Discord control panel exactly.
     """
-    from app.cogs.music.models import DJMode, is_dj
+    from app.cogs.music.models import DJMode
 
     _, player = _get_guild_player(bot, guild.id)
     if player is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no active player in this guild')
 
     BASIC = {'pause', 'resume', 'volume', 'seek'}
-    DESTRUCTIVE = {'skip', 'stop', 'back', 'shuffle', 'loop', 'jump', 'move'}
+    DESTRUCTIVE = {'skip', 'stop', 'back', 'shuffle', 'loop', 'jump', 'move', 'remove'}
 
     action = body.action
     user_id = body.user_id
@@ -484,22 +619,8 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
     if not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'user_id' is required")
 
-    member = guild.get_member(int(user_id))
-    if member is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='you are not a member of this server')
+    _, viewer, dj_mode = await _viewer_for(bot, guild, user_id)
 
-    has_dj = is_dj(member) or member.guild_permissions.manage_guild
-    bot_vc = guild.me.voice and guild.me.voice.channel
-    author_vc = member.voice and member.voice.channel
-    dj_mode = DJMode(getattr(await bot.db.get_guild_config(guild.id), 'music_dj_mode', 0))
-
-    # Base gate: DJs can always act; otherwise the viewer must share the VC.
-    viewer = resolve_viewer(
-        has_dj=has_dj,
-        user_channel_id=author_vc.id if author_vc else None,
-        bot_channel_id=bot_vc.id if bot_vc else None,
-        dj_mode=dj_mode,
-    )
     if not viewer.can_control:
         if dj_mode == DJMode.dj_only:
             raise HTTPException(
@@ -589,6 +710,16 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
         if not (0 <= from_idx < len(items)) or not (0 <= to_idx < len(items)):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='index out of range')
         items.insert(to_idx, items.pop(from_idx))
+        refresh_panel = True
+    elif action == 'remove':
+        try:
+            index = int(body.index)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'index' is required")
+        items = player.queue._items
+        if not 0 <= index < len(items):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid queue index')
+        del items[index]
         refresh_panel = True
 
     if refresh_panel and player.connected:
