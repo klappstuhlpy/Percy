@@ -56,12 +56,21 @@
 .mapp-prog i { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--accent-violet); }
 .mapp-bar-right { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; }
 
-@media (max-width: 900px) {
-    .mapp-body { grid-template-columns: 1fr; }
-    .mapp-side { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--box-border); }
-    .mapp-rail { border-left: 0; border-top: 1px solid var(--box-border); }
-    .mapp-bar { grid-template-columns: 1fr; text-align: center; }
+@media (max-width: 1024px) {
+    .mapp-body { grid-template-columns: 12rem minmax(0, 1fr); }
+    .mapp-rail { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--box-border); }
+}
+@media (max-width: 768px) {
+    .mapp-body { grid-template-columns: 3.2rem minmax(0, 1fr); }
+    .mapp-side { padding: 0.5rem 0.3rem; align-items: center; }
+    .mapp-side a { justify-content: center; padding: 0.55rem; font-size: 0; }
+    .mapp-side a svg { font-size: 1rem; }
+    .mapp-side hr { width: 1.6rem; }
+    .mapp-top { flex-wrap: wrap; }
+    .mapp-main { padding: 0.8rem; }
+    .mapp-bar { grid-template-columns: 1fr; text-align: center; gap: 0.5rem; }
     .mapp-bar-right { justify-content: center; }
+    .mapp-volume { width: 4.5rem; }
 }
 
 /* Client-driven states (music/app.js). */
