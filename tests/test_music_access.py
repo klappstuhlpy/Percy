@@ -21,3 +21,21 @@ def test_resolve_viewer(has_dj, user_ch, bot_ch, mode, expected) -> None:
     v = resolve_viewer(has_dj=has_dj, user_channel_id=user_ch, bot_channel_id=bot_ch, dj_mode=mode)
     assert (v.role, v.can_start, v.can_control, v.can_destroy) == expected
     assert v.is_manager is has_dj
+
+
+def test_dj_mode_constants_match_enum() -> None:
+    from app.cogs.music.models import DJMode
+    from app.services import music_access as m
+
+    assert (DJMode.everyone, DJMode.dj_only, DJMode.hybrid) == (0, 1, 2)
+    assert (DJMode.everyone, DJMode.dj_only) == (m.DJ_MODE_EVERYONE, m.DJ_MODE_DJ_ONLY)
+
+
+def test_resolve_viewer_with_enum_members() -> None:
+    from app.cogs.music.models import DJMode
+
+    dj_only = resolve_viewer(has_dj=False, user_channel_id=5, bot_channel_id=5, dj_mode=DJMode.dj_only)
+    assert dj_only.role == 'visitor'
+    assert not (dj_only.can_control or dj_only.can_destroy)
+    hybrid = resolve_viewer(has_dj=False, user_channel_id=5, bot_channel_id=5, dj_mode=DJMode.hybrid)
+    assert (hybrid.role, hybrid.can_control, hybrid.can_destroy) == ('listener', True, False)

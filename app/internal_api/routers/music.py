@@ -498,7 +498,7 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
         has_dj=has_dj,
         user_channel_id=author_vc.id if author_vc else None,
         bot_channel_id=bot_vc.id if bot_vc else None,
-        dj_mode=int(dj_mode),
+        dj_mode=dj_mode,
     )
     if not viewer.can_control:
         if dj_mode == DJMode.dj_only:
