@@ -74,25 +74,8 @@ function musicErr(m) { if (window.showToast) window.showToast('error', m); }
 
     select.value = String(DJ_MODE_INITIAL);
 
-    select.addEventListener('change', async () => {
-        const mode = parseInt(select.value, 10);
-        select.disabled = true;
-        try {
-            const res = await fetch(`/dashboard/guild/${GUILD_ID}/music/dj-mode`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dj_mode: mode }),
-            });
-            const data = await res.json().catch(() => ({ ok: false, error: 'Bad response' }));
-            if (data.ok) {
-                if (desc) desc.textContent = descriptions[String(mode)] || '';
-            } else {
-                musicErr('Failed to update DJ mode: ' + (data.error || 'unknown error'));
-            }
-        } finally {
-            select.disabled = false;
-        }
-    });
+    // Saving is owned by static/js/guild/music.js (PercyUnsaved); this only keeps the helper text in step.
+    select.addEventListener('change', () => { if (desc) desc.textContent = descriptions[select.value] || ''; });
 })();
 </script>
 {% endif %}

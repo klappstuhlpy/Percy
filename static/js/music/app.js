@@ -79,7 +79,7 @@
                 <li data-index="${i}"${mgr && !t.autoplay ? ' draggable="true"' : ''}>
                     ${mgr && !t.autoplay ? `<span class="mapp-grip" aria-hidden="true">${ico('grip')}</span>` : ''}
                     <span>${esc(t.title)}</span><small>${esc(t.author)}</small>
-                    ${mgr ? `<button type="button" class="mapp-ico" data-q-remove aria-label="Remove from queue">${ico('x')}</button>` : ''}
+                    ${mgr && !t.autoplay ? `<button type="button" class="mapp-ico" data-q-remove aria-label="Remove from queue">${ico('x')}</button>` : ''}
                 </li>`).join('')}</ol>` : '<p class="mapp-muted">The queue is empty.</p>'}
             <p class="mapp-muted">${status.listeners || 0} listening</p>`;
     }
@@ -88,6 +88,8 @@
         const np = status && status.now_playing;
         const now = $('.mapp-bar-now');
         if (now) now.innerHTML = np ? `<b>${esc(np.title)}</b><br><small class="mapp-muted">${esc(np.author)}</small>` : '<span class="mapp-muted">Nothing playing</span>';
+        const lk = $('.mapp-bar [data-action="like"]');
+        if (lk) { lk.hidden = !(np && np.uri); lk.dataset.uri = (np && np.uri) || ''; lk.dataset.name = (np && np.title) || ''; syncHearts(); }
         const t = $('[data-action="toggle"]');
         if (t) t.innerHTML = ico(np && !np.paused ? 'pause' : 'play');
         const l = $('[data-action="loop"]');
@@ -229,6 +231,7 @@
 
     // ── Search ──────────────────────────────────────────────────────────
     const input = $('#mapp-search'), results = $('#mapp-results');
+    if (!GID) { input.disabled = true; input.placeholder = 'Pick a server to search'; }
     let timer = 0, seq = 0;
     $('.mapp-search').addEventListener('submit', (e) => e.preventDefault());
     input.addEventListener('input', () => {
@@ -268,13 +271,15 @@
     }
 
     function show(id) {
-        const ids = id === 'eq-section' ? ['eq-section', 'filters-section'] : [id];
+        const ids = id === 'eq-section' ? ['eq-section', 'filters-section'] : id === 'dj-mode-section' ? ['dj-mode-section', 'always-on-section'] : [id];
         $$(':scope > section', main).forEach((s) => { s.hidden = !ids.includes(s.id); });
         $$('.mapp-side a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
     }
     function route() {
-        const id = location.hash.slice(1) || 'home';
-        show($('#' + id) ? id : 'home');
+        // No server picked means no #home: land on the first pane that exists (Liked Songs).
+        const first = ['home', 'liked'].find((i) => $('#' + i)) || 'liked';
+        const id = location.hash.slice(1) || first;
+        show($('#' + id) ? id : first);
     }
     window.addEventListener('hashchange', route);
 

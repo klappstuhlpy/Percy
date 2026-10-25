@@ -37,6 +37,7 @@
     <section class="config-section overview-music dash-rise" id="music-section">
         <h2>Now Playing</h2>
         <div id="percy-player"></div>
+        {% if account.is_some() %}<p><a href="/dashboard/music?guild={{ guild_id }}">Open the music app</a></p>{% endif %}
     </section>
 
     {# ─── Server Stats ────────────────────────────────────────────── #}

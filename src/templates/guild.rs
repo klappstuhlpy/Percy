@@ -304,8 +304,8 @@ impl MusicAppTemplate {
         self.viewer.as_ref().map_or("visitor", |v| v.role.as_str())
     }
     /// `m:ss` for a millisecond length.
-    pub(crate) fn dur(&self, ms: &u64) -> String {
-        crate::music_app::fmt_ms(*ms)
+    pub(crate) fn dur(&self, ms: &Option<u64>) -> String {
+        ms.map_or_else(String::new, crate::music_app::fmt_ms)
     }
     pub(crate) fn guild_id(&self) -> &str {
         self.selected.as_ref().map_or("", |g| g.id.as_str())

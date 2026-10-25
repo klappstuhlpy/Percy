@@ -44,8 +44,11 @@
 
     <div class="mapp-body">
         <nav class="mapp-side" aria-label="Music">
+            {% if manager_view %}<a href="/dashboard/guild/{{ self.guild_id() }}"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-home"/></svg>Back to server dashboard</a><hr>{% endif %}
+            {% if selected.is_some() %}
             <a href="#home" class="on"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-home"/></svg>Home</a>
             <a href="#history"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-history"/></svg>History</a>
+            {% endif %}
             <a href="#liked"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart"/></svg>Liked Songs</a>
             <a href="#playlists"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-playlist"/></svg>Playlists</a>
             {% if is_admin %}
@@ -101,7 +104,7 @@
                     {% for t in history.iter().take(8) %}
                     <div class="card mapp-card" data-uri="{{ t.uri.as_deref().unwrap_or("") }}">
                         {% match t.artwork %}{% when Some with (a) %}<img class="mapp-art" src="{{ a }}" alt="" loading="lazy">{% when None %}<span class="mapp-art icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                        <p title="{{ t.title }} - {{ t.author }}">{{ t.title }}</p>
+                        <p title="{{ t.title }} - {{ t.author.as_deref().unwrap_or("") }}">{{ t.title }}</p>
                     </div>
                     {% endfor %}
                 </div>
@@ -115,7 +118,7 @@
                     {% for t in library.top_tracks.iter().take(10) %}
                     <li class="mapp-track" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-name="{{ t.title }}">
                         {% match t.artwork %}{% when Some with (a) %}<img class="mapp-thumb" src="{{ a }}" alt="" loading="lazy">{% when None %}<span class="mapp-thumb icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                        <span class="mapp-track-text">{{ t.title }}<small>{{ t.author }}</small></span>
+                        <span class="mapp-track-text">{{ t.title }}<small>{{ t.author.as_deref().unwrap_or("") }}</small></span>
                         <span class="mapp-muted">{{ t.plays }} plays</span>
                         <span class="mapp-muted">{{ self.dur(t.length_ms) }}</span>
                         <button type="button" class="mapp-ico" data-action="queue" aria-label="Add to queue" disabled><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-plus"/></svg></button>
@@ -135,7 +138,7 @@
                     {% for t in history %}
                     <li class="mapp-track" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-name="{{ t.title }}">
                         {% match t.artwork %}{% when Some with (a) %}<img class="mapp-thumb" src="{{ a }}" alt="" loading="lazy">{% when None %}<span class="mapp-thumb icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                        <span class="mapp-track-text">{{ t.title }}<small>{{ t.author }}</small></span>
+                        <span class="mapp-track-text">{{ t.title }}<small>{{ t.author.as_deref().unwrap_or("") }}</small></span>
                         <span class="mapp-muted">{{ self.dur(t.length_ms) }}</span>
                     </li>
                     {% endfor %}
@@ -228,6 +231,7 @@
         </div>
         <div class="mapp-bar-right">
             <button type="button" class="mapp-ico" data-action="lyrics" aria-label="Lyrics"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-lyrics"/></svg></button>
+            <button type="button" class="mapp-ico" data-action="like" aria-label="Like this track" hidden><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart"/></svg></button>
             <svg class="mapp-vol" aria-hidden="true"><use href="/static/icons/sprite.svg#i-volume"/></svg>
             <input type="range" id="mapp-volume" class="mapp-volume" min="0" max="100" value="70" aria-label="Volume"{% if !self.can_control() %} disabled{% endif %}>
         </div>

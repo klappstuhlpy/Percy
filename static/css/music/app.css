@@ -66,6 +66,7 @@
     .mapp-side a { justify-content: center; padding: 0.55rem; font-size: 0; }
     .mapp-side a svg { font-size: 1rem; }
     .mapp-side hr { width: 1.6rem; }
+    .mapp-side .chip { display: none; }
     .mapp-top { flex-wrap: wrap; }
     .mapp-main { padding: 0.8rem; }
     .mapp-bar { grid-template-columns: 1fr; text-align: center; gap: 0.5rem; }
