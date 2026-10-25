@@ -33,6 +33,7 @@ from app.database.repositories import (
     IncidentsRepository,
     LevelingRepository,
     ModerationRepository,
+    MusicPlaysRepository,
     MusicSessionsRepository,
     NewsRepository,
     NotificationsRepository,
@@ -298,6 +299,7 @@ class Database(_Database):
     temp_channels: TempChannelsRepository
     playlists: PlaylistsRepository
     music_sessions: MusicSessionsRepository
+    music_plays: MusicPlaysRepository
     admin: AdminRepository
     timers: TimersRepository
     comics: ComicsRepository
@@ -332,6 +334,7 @@ class Database(_Database):
         self.temp_channels = TempChannelsRepository(self)
         self.playlists = PlaylistsRepository(self)
         self.music_sessions = MusicSessionsRepository(self)
+        self.music_plays = MusicPlaysRepository(self)
         self.admin = AdminRepository(self)
         self.timers = TimersRepository(self)
         self.comics = ComicsRepository(self)

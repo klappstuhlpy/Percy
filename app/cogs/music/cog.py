@@ -131,6 +131,7 @@ class Music(Cog):
             self._restored = True
             self.bot.loop.create_task(self._restore_sessions())
         self.lavalink_watchdog.start()
+        self.prune_play_history.start()
 
     async def cog_load(self) -> None:
         await self.bot.wait_until_ready()
@@ -138,6 +139,7 @@ class Music(Cog):
     async def cog_unload(self) -> None:
         self.lavalink_watchdog.cancel()
         self.persist_sessions.cancel()
+        self.prune_play_history.cancel()
         # Persist final state and destroy players on the Lavalink node so it
         # doesn't keep streaming audio after the bot process exits. We call
         # _destroy() directly (not disconnect()) because discord.py will handle
@@ -164,6 +166,18 @@ class Music(Cog):
 
     @persist_sessions.before_loop
     async def _before_persist(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(hours=24)
+    async def prune_play_history(self) -> None:
+        """Drops play history older than 90 days. Never raises (a raise would stop the loop)."""
+        try:
+            await self.bot.db.music_plays.prune()
+        except Exception:
+            log.warning('Failed to prune play history.', exc_info=True)
+
+    @prune_play_history.before_loop
+    async def _before_prune(self) -> None:
         await self.bot.wait_until_ready()
 
     @tasks.loop(seconds=30)
@@ -506,6 +520,21 @@ class Music(Cog):
 
         # A track started cleanly — clear the failure streak used by _recover_player.
         player._consecutive_errors = 0
+
+        track = player.current
+        if track is not None and player.guild is not None:
+            try:
+                await self.bot.db.music_plays.record(
+                    player.guild.id,
+                    getattr(track.extras, 'requester_id', None),  # None for autoplay recommendations
+                    title=track.title,
+                    author=track.author,
+                    uri=track.uri,
+                    artwork=track.artwork,
+                    length_ms=track.length,
+                )
+            except Exception:
+                log.warning('Failed to record play history.', exc_info=True)
 
         if player.current is not None and player.current.recommended:
             # Autoplay recommendations are fetched by wavelink directly, bypassing

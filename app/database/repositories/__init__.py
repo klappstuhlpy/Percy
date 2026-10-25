@@ -18,6 +18,7 @@ from app.database.repositories.guilds import AdminRepository, GuildsRepository
 from app.database.repositories.integrations import EventWebhooksRepository, GuildTemplatesRepository
 from app.database.repositories.moderation import CasesRepository, IncidentsRepository, ModerationRepository
 from app.database.repositories.music import MusicSessionsRepository
+from app.database.repositories.music_plays import MusicPlaysRepository
 from app.database.repositories.news import NewsRepository
 from app.database.repositories.notifications import NotificationsRepository
 from app.database.repositories.releases import ReleasesRepository
@@ -49,6 +50,7 @@ __all__ = (
     'IncidentsRepository',
     'LevelingRepository',
     'ModerationRepository',
+    'MusicPlaysRepository',
     'MusicSessionsRepository',
     'NewsRepository',
     'NotificationsRepository',
