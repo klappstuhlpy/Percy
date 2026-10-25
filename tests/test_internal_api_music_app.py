@@ -172,3 +172,31 @@ async def test_search_is_cached() -> None:
         await api.get_music_search(MagicMock(), 'nothing', 10)
         await api.get_music_search(MagicMock(), 'nothing', 10)
     assert node.await_count == 3  # empties are not cached
+
+
+class _SkipQueue(_Queue):
+    def put_at(self, i: int, item: object) -> None:
+        self._items.insert(i, item)
+
+
+async def test_play_now_keeps_queue_and_skips() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _player()
+    player.queue = _SkipQueue()
+    player.queue._items = ['A', 'B', 'C']
+    player.skip = AsyncMock()
+    x = _tracks(1)[0]
+    with (
+        patch.object(api, '_get_guild_player', return_value=(guild, player)),
+        patch.object(api, '_serialize_track', return_value={'title': 'x'}),
+        patch('app.cogs.music.player.Player.search', AsyncMock(return_value=x)),
+    ):
+        await api.post_music_play(guild, _bot(0), api.PlayBody(user_id=5, query='x', play_now=True))
+    assert player.queue._items == [x, 'A', 'B', 'C']
+    player.skip.assert_awaited_once()
+
+
+async def test_play_now_needs_destroy() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _player()
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)), pytest.raises(HTTPException) as exc:
+        await api.post_music_play(guild, _bot(2), api.PlayBody(user_id=5, query='x', play_now=True))
+    assert exc.value.status_code == 403

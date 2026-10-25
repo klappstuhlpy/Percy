@@ -71,6 +71,7 @@ class PlayBody(BaseModel):
     user_id: int | str
     query: str
     limit: int = Field(1, ge=1, le=25)  # >1 queues a mix of the top results
+    play_now: bool = False  # front of the queue + skip to it; the queue is kept
 
 
 class ControlBody(BaseModel):
@@ -568,7 +569,11 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
     elif getattr(player, 'always_on', False):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='A 24/7 session is active.')
 
-    if body.limit > 1:
+    play_now = body.play_now and player is not None
+    if play_now and not viewer.can_destroy:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='only members with the DJ role can skip tracks')
+
+    if body.limit > 1 and not play_now:
         result = await Player.search(body.query)
         if isinstance(result, list):
             seen: set[str | None] = set()
@@ -589,6 +594,11 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         player.autoplay = wavelink.AutoPlayMode.partial
 
+    if play_now and not isinstance(result, wavelink.Playlist) and player.playing:
+        # Same as the cog's `play --force`: front of the queue, then skip to it; the rest stays in order.
+        player.queue.put_at(0, tracks[0])
+        await player.skip()
+        return {'queued': [_serialize_track(guild, tracks[0])], 'started': False}
     for item in [result] if isinstance(result, wavelink.Playlist) else tracks:
         await player.queue.put_wait(item)
     started = not player.playing
