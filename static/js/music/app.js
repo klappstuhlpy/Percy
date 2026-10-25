@@ -13,7 +13,7 @@
     const fmt = (ms) => { const s = Math.max(0, Math.floor((ms || 0) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
     const toast = (msg) => (window.showToast ? window.showToast('error', msg) : console.error(msg));
 
-    async function api(url, method, body) {
+    async function api(url, method, body, quiet) {
         try {
             const r = await fetch(url, {
                 method: method || 'GET',
@@ -21,9 +21,9 @@
                 body: body ? JSON.stringify(body) : undefined,
             });
             const d = await r.json().catch(() => ({}));
-            if (!r.ok || d.ok === false) { toast(d.error || 'Something went wrong.'); return null; }
+            if (!r.ok || d.ok === false) { if (!quiet) toast(d.error || 'Something went wrong.'); return null; }
             return d;
-        } catch (_) { toast('Could not reach the server.'); return null; }
+        } catch (_) { if (!quiet) toast('Could not reach the server.'); return null; }
     }
 
     const main = $('.mapp-main');
@@ -38,16 +38,27 @@
     const canQueue = () => !!(viewer.can_control || viewer.can_start);
 
     // ── Right-hand state: bar, rail, controls ───────────────────────────
+    // Why the player is locked for this viewer; Percy decides, this only words it.
+    function lockHint() {
+        if (viewer.dj_mode === 1 && !viewer.is_manager) return 'Only DJs can control the player';
+        const ch = viewer.bot_channel && viewer.bot_channel.name;
+        return ch ? `Join #${ch} to control` : "Join Percy's voice channel to control";
+    }
+    const DJ_ONLY = ['skip', 'back', 'shuffle', 'loop']; // hybrid mode: everyone pauses, only DJs steer
     function applyViewer() {
-        const hint = canControl() ? '' : `Join #${(viewer.bot_channel && viewer.bot_channel.name) || 'the voice channel'} to control`;
+        const locked = !canControl();
         $$('.mapp-bar [data-action]').forEach((b) => {
-            if (b.dataset.action === 'lyrics') return;
-            b.disabled = !canControl();
-            b.title = hint;
+            const a = b.dataset.action;
+            if (a === 'lyrics') return;
+            const needsDj = !locked && DJ_ONLY.includes(a) && !viewer.can_destroy;
+            b.disabled = locked || needsDj;
+            b.title = locked ? lockHint() : needsDj ? 'Needs the DJ role' : '';
         });
+        const vol = $('#mapp-volume');
+        if (vol) { vol.disabled = locked; vol.title = locked ? lockHint() : 'Volume'; }
         const stop = $('.mapp-bar [data-action="stop"]');
         if (stop) stop.hidden = !viewer.can_destroy;
-        $$('[data-action="queue"]').forEach((b) => { b.disabled = !canQueue(); b.title = canQueue() ? 'Add to queue' : 'Join a voice channel to queue'; });
+        $$('[data-action="queue"]').forEach((b) => { b.disabled = !canQueue(); b.title = canQueue() ? 'Add to queue' : lockHint(); });
         const start = $('[data-action="start"]');
         if (start) start.disabled = !viewer.can_start;
     }
@@ -94,14 +105,29 @@
         duration = np ? np.duration : 0;
         isStream = !!(np && np.is_stream);
         renderBar();
+        const vol = $('#mapp-volume');
+        if (vol && np && performance.now() - volTouched > 1500) vol.value = np.volume;
         if (!dragging) renderRail();
         applyViewer();
         loadLyrics(true);
     }
 
+    // One persistent notice for a lost connection, cleared by the next good poll.
+    function connNotice(lost) {
+        let n = $('#mapp-conn');
+        if (!n && lost) {
+            n = document.createElement('div');
+            n.id = 'mapp-conn'; n.className = 'card mapp-banner'; n.setAttribute('role', 'status');
+            n.textContent = 'Connection lost - retrying';
+            main.prepend(n);
+        }
+        if (n) n.hidden = !lost;
+    }
+
     async function poll() {
         if (!GID || document.hidden) return;
-        const [s, v] = await Promise.all([api(`${BASE}/status`), api(`${BASE}/viewer`)]);
+        const [s, v] = await Promise.all([api(`${BASE}/status`, 'GET', null, true), api(`${BASE}/viewer`, 'GET', null, true)]);
+        connNotice(!(s && v));
         if (v) viewer = v;
         if (s) applyStatus(s); else applyViewer();
     }
@@ -160,6 +186,15 @@
             const ok = await PercyConfirm.ask({ title: 'Stop the music?', consequence: 'Playback stops, the queue is cleared and Percy leaves the voice channel.', undo: null, confirmLabel: 'Stop and disconnect', danger: true });
             if (ok) control('stop');
         } else if (act === 'back' || act === 'skip') control(act);
+    });
+
+    // Volume: debounced so a drag sends one request, not hundreds.
+    let volTouched = 0, volTimer = 0;
+    $('#mapp-volume')?.addEventListener('input', (e) => {
+        volTouched = performance.now();
+        clearTimeout(volTimer);
+        const value = parseInt(e.target.value, 10);
+        volTimer = setTimeout(() => control('volume', { value }), 250);
     });
 
     // Seek on the progress bar.
@@ -267,8 +302,9 @@
         if (onlyIfOpen && (!pane || pane.hidden)) return;
         const title = status && status.now_playing && status.now_playing.title;
         if (lyrics && lyrics.for === title) return;
-        const d = await api(`${BASE}/lyrics`);
-        lyrics = d ? Object.assign(d, { for: title }) : { for: title, lines: [], plain: null };
+        const d = await api(`${BASE}/lyrics`, "GET", null, onlyIfOpen); // background refetches stay quiet
+        if (!d) { if (pane) pane.innerHTML = '<h2 class="mapp-h">Lyrics</h2><p class="mapp-muted">Could not load lyrics. Open this tab again to retry.</p>'; return; } // not cached, so a retry refetches
+        lyrics = Object.assign(d, { for: title });
         lyricIdx = -1;
         if (!pane) return;
         pane.innerHTML = `<h2 class="mapp-h">Lyrics${lyrics.title ? ' - ' + esc(lyrics.title) : ''}</h2>` + (lyrics.has_synced

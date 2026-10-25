@@ -74,3 +74,4 @@
 .mapp-lyrics p { margin: 0.4rem 0; opacity: 0.5; }
 .mapp-lyrics p.on { opacity: 1; color: var(--accent-violet); }
 [hidden] { display: none !important; }
+.mapp-volume { width: 6rem; accent-color: var(--accent-violet); }

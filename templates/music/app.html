@@ -229,6 +229,7 @@
         <div class="mapp-bar-right">
             <button type="button" class="mapp-ico" data-action="lyrics" aria-label="Lyrics"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-lyrics"/></svg></button>
             <svg class="mapp-vol" aria-hidden="true"><use href="/static/icons/sprite.svg#i-volume"/></svg>
+            <input type="range" id="mapp-volume" class="mapp-volume" min="0" max="100" value="70" aria-label="Volume"{% if !self.can_control() %} disabled{% endif %}>
         </div>
     </footer>
 </div>
