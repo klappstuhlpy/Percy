@@ -110,3 +110,11 @@ async def test_control_remove_requires_destroy() -> None:
         assert exc.value.status_code == 403
         await api.post_music_control(guild, _bot(0), body)
     assert player.queue._items == [0, 2]
+
+
+async def test_control_move_accepts_from_key() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _player(queued=3)
+    body = api.ControlBody.model_validate({'action': 'move', 'user_id': 5, 'from': 0, 'to': 1})
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)):
+        await api.post_music_control(guild, _bot(0), body)
+    assert player.queue._items == [1, 0, 2]

@@ -9,7 +9,7 @@ import wavelink
 from discord.ext import commands
 from discord.ui.view import LayoutView
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.music_access import MusicViewer, resolve_viewer
 
@@ -79,7 +79,7 @@ class ControlBody(BaseModel):
     mode: int | None = None
     index: int | None = None
     # 'from' is a reserved keyword in Python; use model alias
-    from_idx: int | None = None
+    from_idx: int | None = Field(None, alias='from')
     to: int | None = None
 
     model_config = {"populate_by_name": True}
