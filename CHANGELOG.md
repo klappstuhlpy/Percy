@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `automod` feature has been removed due to being unuseful 
 
+### Fixed
+- `comics` command group now has the correct description.
+
 ## [2.14.0] - 2026-10-23
 
 ### Added

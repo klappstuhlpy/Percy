@@ -422,7 +422,7 @@ class Comics(Cog):
         hybrid=True
     )
     async def _comics(self, ctx: Context) -> None:
-        """Group command for managing polls."""
+        """Group command for managing comic feeds."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
