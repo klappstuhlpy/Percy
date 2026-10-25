@@ -275,6 +275,55 @@ pub(crate) struct MusicTemplate {
     pub(crate) channels: Vec<Channel>,
 }
 
+/// One server in the music app's picker.
+#[derive(Debug, Clone)]
+pub(crate) struct GuildPick {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) icon: Option<String>,
+    pub(crate) playing: bool,
+}
+
+/// The Rythm-style music app, for both the personal and the guild route.
+#[derive(Template)]
+#[template(path = "music/app.html")]
+pub(crate) struct MusicAppTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) page_title: &'static str,
+    pub(crate) guilds: Vec<GuildPick>,
+    pub(crate) selected: Option<GuildPick>,
+    pub(crate) viewer: Option<MusicViewer>,
+    pub(crate) music: Option<MusicInfo>,
+    pub(crate) history: Vec<MusicHistoryItem>,
+    pub(crate) library: UserMusicLibrary,
+    /// Channels for the manager forms; empty unless the viewer manages the server.
+    pub(crate) channels: Vec<Channel>,
+    /// True on `/dashboard/guild/:id/music`, where the guild-admin gate has already passed.
+    pub(crate) manager_view: bool,
+}
+
+impl MusicAppTemplate {
+    pub(crate) fn is_manager(&self) -> bool {
+        self.viewer.as_ref().is_some_and(|v| v.is_manager)
+    }
+    pub(crate) fn can_control(&self) -> bool {
+        self.viewer.as_ref().is_some_and(|v| v.can_control)
+    }
+    pub(crate) fn can_start(&self) -> bool {
+        self.viewer.as_ref().is_some_and(|v| v.can_start)
+    }
+    pub(crate) fn role(&self) -> &str {
+        self.viewer.as_ref().map_or("visitor", |v| v.role.as_str())
+    }
+    /// `m:ss` for a millisecond length.
+    pub(crate) fn dur(&self, ms: &u64) -> String {
+        crate::music_app::fmt_ms(*ms)
+    }
+    pub(crate) fn guild_id(&self) -> &str {
+        self.selected.as_ref().map_or("", |g| g.id.as_str())
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Template)]
 #[template(path = "guild/comics.html")]

@@ -17,8 +17,8 @@ use crate::{
     templates::{
         AnalyticsTemplate, AutorespondersTemplate, BackupTemplate, BlacklistRow, CardField, ComicsTemplate,
         CommandsTemplate, EconomyTemplate, EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate, HighlightsTemplate,
-        LevelRoleRow, LevelingTemplate, MultiplierRow, MusicTemplate, PollsTemplate, SpecialMsgRow, StatsTemplate,
-        TagsTemplate, TempChannelsTemplate, WebhooksTemplate,
+        LevelRoleRow, LevelingTemplate, MultiplierRow, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate,
+        TempChannelsTemplate, WebhooksTemplate,
     },
     view::Viewer,
     AppState,
@@ -298,45 +298,13 @@ pub async fn guild_economy(State(app): State<AppState>, session: Session, Path(g
     .into_response()
 }
 
-/// `GET /dashboard/guild/{id}/music`
+/// `GET /dashboard/guild/{id}/music` — the music app in its manager context. The guild-admin
+/// gate runs first; what the page shows beyond that is Percy's per-viewer role.
 pub async fn guild_music(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
-    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
-        Ok(guild) => guild,
-        Err(response) => return response,
-    };
-    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
-
-    let (music, channels) = tokio::join!(percy.get_music(guild_id), percy.get_guild_channels(guild_id));
-    let music = music.unwrap_or(MusicInfo {
-        active: false,
-        equalizer: vec![0.0; 15],
-        filters: MusicFiltersState {
-            nightcore: false,
-            eight_d: false,
-            lowpass: None,
-        },
-        presets: vec![],
-        now_playing: None,
-        queue: Vec::new(),
-        history: Vec::new(),
-        channel: None,
-        channel_name: None,
-        setup: None,
-        always_on: Default::default(),
-        listeners: Vec::new(),
-    });
-
-    MusicTemplate {
-        account: Some(Viewer::from_session(&session)),
-        guild_id,
-        guild_name: guild.name.clone(),
-        nav_active: "music",
-        page_title: "Music",
-        music,
-        guild,
-        channels: channels.unwrap_or_default(),
+    if let Err(response) = gate_and_load_guild(&app, &session, guild_id).await {
+        return response;
     }
-    .into_response()
+    crate::music_app::render_app(&app, &session, Some(guild_id), true).await
 }
 
 /// `GET /dashboard/guild/{id}/comics`

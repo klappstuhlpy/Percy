@@ -35,6 +35,22 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/dashboard/guild/:guild_id/leveling", get(pages::guild_leveling))
         .route("/dashboard/guild/:guild_id/economy", get(pages::guild_economy))
         .route("/dashboard/guild/:guild_id/music", get(pages::guild_music))
+        // The music app: members of a shared guild, not just its managers.
+        .route("/dashboard/music", get(music_app::music_page))
+        .route("/dashboard/music/:guild_id/status", get(music_app::music_status))
+        .route("/dashboard/music/:guild_id/viewer", get(music_app::music_viewer))
+        .route("/dashboard/music/:guild_id/history", get(music_app::music_history))
+        .route("/dashboard/music/:guild_id/search", get(music_app::music_search))
+        .route("/dashboard/music/:guild_id/lyrics", get(music_app::music_lyrics))
+        .route("/dashboard/music/:guild_id/play", post(music_app::music_play))
+        .route("/dashboard/music/:guild_id/control", post(music_app::music_control))
+        .route("/account/music", get(music_app::account_music))
+        .route("/account/music/liked", post(music_app::account_music_like))
+        .route("/account/music/liked/remove", post(music_app::account_music_unlike))
+        .route(
+            "/account/music/playlists/:playlist_id",
+            get(music_app::account_music_playlist),
+        )
         .route(
             "/dashboard/guild/:guild_id/autoresponders",
             get(pages::guild_autoresponders).post(actions::guild_autoresponders_action),

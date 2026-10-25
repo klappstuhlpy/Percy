@@ -202,7 +202,7 @@ pub(crate) async fn gate_and_load_guild(
 
 /// Percy's view of the guilds it shares with the user. Returns an empty list when
 /// Percy isn't configured or the call fails — the page still renders.
-async fn fetch_mutual_guilds(app: &AppState, discord_id: &str) -> Vec<UserGuild> {
+pub(crate) async fn fetch_mutual_guilds(app: &AppState, discord_id: &str) -> Vec<UserGuild> {
     let Some(percy) = &app.percy else {
         return Vec::new();
     };

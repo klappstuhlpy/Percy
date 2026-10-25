@@ -1,0 +1,97 @@
+{# Client wiring for the manager sections above. Moved from guild/music.html; Task 8 replaces it. #}
+{% if let Some(music) = music %}
+<script>
+const GUILD_ID = '{{ self.guild_id() }}';
+const MUSIC_INITIAL_ACTIVE = {{ music.active }};
+const MUSIC_EQUALIZER = [{% for g in music.equalizer %}{{ g }}{% if !loop.last %},{% endif %}{% endfor %}];
+const ALWAYS_ON_MODE = '{{ music.always_on.mode.as_deref().unwrap_or("") }}';
+const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ setup.dj_mode }}{% when None %}0{% endmatch %};
+</script>
+<script src="/static/js/guild/music.js"></script>
+<script>
+// 24/7 always-on controls
+(function () {
+    const modeSel = document.getElementById('ao-mode');
+    const sourceInput = document.getElementById('ao-source');
+    const channelSel = document.getElementById('ao-channel');
+    const statusText = document.getElementById('ao-status-text');
+    const indicator = document.querySelector('#always-on-section .ls-indicator');
+    const enableBtn = document.getElementById('ao-enable-btn');
+    const disableBtn = document.getElementById('ao-disable-btn');
+    if (!enableBtn || !disableBtn) return;
+
+    if (ALWAYS_ON_MODE) modeSel.value = ALWAYS_ON_MODE;
+
+    async function post(body) {
+        const res = await fetch(`/dashboard/guild/${GUILD_ID}/music/247`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        return res.json().catch(() => ({ ok: false, error: 'Bad response' }));
+    }
+
+    enableBtn.addEventListener('click', async () => {
+        const source = sourceInput.value.trim();
+        if (!source) { alert('Please provide a source (stream URL, playlist, or seed).'); return; }
+        if (!channelSel.value) { alert('Please pick a voice channel.'); return; }
+        enableBtn.disabled = true;
+        const data = await post({ enabled: true, mode: modeSel.value, source, voice_channel_id: channelSel.value });
+        enableBtn.disabled = false;
+        if (data.ok) {
+            if (indicator) indicator.classList.add('active');
+            statusText.innerHTML = 'Active — mode: <strong>' + modeSel.value + '</strong>';
+        } else {
+            alert('Failed to enable 24/7: ' + (data.error || 'unknown error'));
+        }
+    });
+
+    disableBtn.addEventListener('click', async () => {
+        disableBtn.disabled = true;
+        const data = await post({ enabled: false });
+        disableBtn.disabled = false;
+        if (data.ok) {
+            if (indicator) indicator.classList.remove('active');
+            statusText.textContent = 'Inactive';
+        } else {
+            alert('Failed to disable 24/7: ' + (data.error || 'unknown error'));
+        }
+    });
+})();
+
+// DJ Mode controls
+(function () {
+    const select = document.getElementById('dj-mode-select');
+    const desc = document.getElementById('dj-mode-description');
+    if (!select) return;
+
+    const descriptions = {
+        '0': 'All voice channel members can freely interact with the player.',
+        '1': 'Only members with the DJ role or Manage Server permission can use the player.',
+        '2': 'Basic controls (pause, volume) are available to everyone. Stop, shuffle, skip, and loop require the DJ role.',
+    };
+
+    select.value = String(DJ_MODE_INITIAL);
+
+    select.addEventListener('change', async () => {
+        const mode = parseInt(select.value, 10);
+        select.disabled = true;
+        try {
+            const res = await fetch(`/dashboard/guild/${GUILD_ID}/music/dj-mode`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dj_mode: mode }),
+            });
+            const data = await res.json().catch(() => ({ ok: false, error: 'Bad response' }));
+            if (data.ok) {
+                if (desc) desc.textContent = descriptions[String(mode)] || '';
+            } else {
+                alert('Failed to update DJ mode: ' + (data.error || 'unknown error'));
+            }
+        } finally {
+            select.disabled = false;
+        }
+    });
+})();
+</script>
+{% endif %}

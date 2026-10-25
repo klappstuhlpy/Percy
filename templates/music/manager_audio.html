@@ -1,0 +1,38 @@
+{# Equalizer and filters (DJ). Moved from guild/music.html; ids are what static/js/guild/music.js binds to. #}
+{% if let Some(music) = music %}
+    {# ─── Equalizer ──────────────────────────────────────────────── #}
+    <section class="config-section" id="eq-section">
+        <div class="eq-header">
+            <h2 class="m-0">Equalizer</h2>
+            <span class="eq-status" id="eq-status"><span class="eq-spinner"></span><span class="eq-status-text"></span></span>
+            <span class="eq-preset-label">Preset: <strong id="eq-preset-name">{% if music.active %}Custom{% else %}—{% endif %}</strong></span>
+        </div>
+        <p class="config-section-description">Drag the band nodes to adjust gain. Click a preset to apply it instantly. (It may take a few seconds until you'll hear the difference in voice!)</p>
+
+        <div class="eq-presets" id="eq-presets">
+            {% for preset in music.presets %}
+            <button class="button small preset-btn" data-preset="{{ preset }}">{{ preset }}</button>
+            {% endfor %}
+            <button class="button small danger" id="eq-reset-btn">Reset</button>
+        </div>
+
+        <div class="eq-container">
+            <canvas class="eq-canvas" id="eq-canvas"></canvas>
+        </div>
+    </section>
+
+    {# ─── Filters ────────────────────────────────────────── #}
+    <section class="config-section" id="filters-section">
+        <h2>Filters</h2>
+        <p class="config-section-description">Toggle audio processing filters on the active player.</p>
+        <div class="filter-toggles" id="filter-toggles">
+            <button class="filter-toggle{% if music.filters.nightcore %} active{% endif %}" data-action="nightcore">Nightcore</button>
+            <button class="filter-toggle{% if music.filters.eight_d %} active{% endif %}" data-action="8d">8D Audio</button>
+            <button class="filter-toggle" data-action="reset">Reset All</button>
+            <span class="filter-lowpass">
+                <button class="filter-toggle{% if music.filters.lowpass.is_some() %} active{% endif %}" data-action="lowpass" id="lowpass-btn">Lowpass</button>
+                <input type="number" class="config-input lowpass-input" id="lowpass-val" min="2.5" max="50" step="0.5" value="{{ music.filters.lowpass.unwrap_or(20.0) }}">
+            </span>
+        </div>
+    </section>
+{% endif %}

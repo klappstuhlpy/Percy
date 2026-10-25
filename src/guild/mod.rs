@@ -7,6 +7,7 @@ pub(crate) mod guilds;
 pub(crate) mod integrations;
 pub(crate) mod leaderboard;
 pub(crate) mod moderation;
+pub(crate) mod music_app;
 pub(crate) mod mutations;
 pub(crate) mod notifications;
 pub(crate) mod pages;
