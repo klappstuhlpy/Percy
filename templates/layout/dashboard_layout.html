@@ -35,41 +35,41 @@
         <nav class="dash-nav" aria-label="Dashboard sections">
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Overview</span>
-                <a href="/dashboard/guild/{{ guild_id }}/notifications" class="dash-nav-link{% if nav_active == "notifications" %} active{% endif %}">Notifications<span class="dash-nav-badge" hidden></span></a>
-                <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link{% if nav_active == "config" %} active{% endif %}">Configuration</a>
-                <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link{% if nav_active == "members" %} active{% endif %}">Members</a>
-                <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link{% if nav_active == "stats" %} active{% endif %}">Statistics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/analytics" class="dash-nav-link{% if nav_active == "analytics" %} active{% endif %}">Analytics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link{% if nav_active == "commands" %} active{% endif %}">Commands</a>
+                <a href="/dashboard/guild/{{ guild_id }}/notifications" class="dash-nav-link{% if nav_active == "notifications" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-bell"/></svg></span>Notifications<span class="dash-nav-badge" hidden></span></a>
+                <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link{% if nav_active == "config" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-sliders"/></svg></span>Configuration</a>
+                <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link{% if nav_active == "members" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-users"/></svg></span>Members</a>
+                <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link{% if nav_active == "stats" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-chart"/></svg></span>Statistics</a>
+                <a href="/dashboard/guild/{{ guild_id }}/analytics" class="dash-nav-link{% if nav_active == "analytics" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-trend"/></svg></span>Analytics</a>
+                <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link{% if nav_active == "commands" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-terminal"/></svg></span>Commands</a>
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Features</span>
-                <a href="/dashboard/guild/{{ guild_id }}/leveling" class="dash-nav-link{% if nav_active == "leveling" %} active{% endif %}">Leveling</a>
-                <a href="/dashboard/guild/{{ guild_id }}/economy" class="dash-nav-link{% if nav_active == "economy" %} active{% endif %}">Economy</a>
-                <a href="/dashboard/guild/{{ guild_id }}/music" class="dash-nav-link{% if nav_active == "music" %} active{% endif %}">Music</a>
-                <a href="/dashboard/guild/{{ guild_id }}/autoresponders" class="dash-nav-link{% if nav_active == "autoresponders" %} active{% endif %}">Autoresponders</a>
-                <a href="/dashboard/guild/{{ guild_id }}/comics" class="dash-nav-link{% if nav_active == "comics" %} active{% endif %}">Comics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/temp-channels" class="dash-nav-link{% if nav_active == "temp-channels" %} active{% endif %}">Temp Channels</a>
+                <a href="/dashboard/guild/{{ guild_id }}/leveling" class="dash-nav-link{% if nav_active == "leveling" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-trophy"/></svg></span>Leveling</a>
+                <a href="/dashboard/guild/{{ guild_id }}/economy" class="dash-nav-link{% if nav_active == "economy" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-coins"/></svg></span>Economy</a>
+                <a href="/dashboard/guild/{{ guild_id }}/music" class="dash-nav-link{% if nav_active == "music" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>Music</a>
+                <a href="/dashboard/guild/{{ guild_id }}/autoresponders" class="dash-nav-link{% if nav_active == "autoresponders" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-reply"/></svg></span>Autoresponders</a>
+                <a href="/dashboard/guild/{{ guild_id }}/comics" class="dash-nav-link{% if nav_active == "comics" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-book"/></svg></span>Comics</a>
+                <a href="/dashboard/guild/{{ guild_id }}/temp-channels" class="dash-nav-link{% if nav_active == "temp-channels" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-voice"/></svg></span>Temp Channels</a>
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Community</span>
-                <a href="/dashboard/guild/{{ guild_id }}/polls" class="dash-nav-link{% if nav_active == "polls" %} active{% endif %}">Polls</a>
-                <a href="/dashboard/guild/{{ guild_id }}/gallery" class="dash-nav-link{% if nav_active == "gallery" %} active{% endif %}">Image Gallery</a>
-                <a href="/dashboard/guild/{{ guild_id }}/giveaways" class="dash-nav-link{% if nav_active == "giveaways" %} active{% endif %}">Giveaways</a>
-                <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link{% if nav_active == "tags" %} active{% endif %}">Tags</a>
-                <a href="/dashboard/guild/{{ guild_id }}/role-menus" class="dash-nav-link{% if nav_active == "role-menus" %} active{% endif %}">Role Menus</a>
-                <a href="/dashboard/guild/{{ guild_id }}/starboard" class="dash-nav-link{% if nav_active == "starboard" %} active{% endif %}">Starboard</a>
-                <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link{% if nav_active == "highlights" %} active{% endif %}">Highlights</a>
-                <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link{% if nav_active == "emoji-stats" %} active{% endif %}">Emoji Stats</a>
+                <a href="/dashboard/guild/{{ guild_id }}/polls" class="dash-nav-link{% if nav_active == "polls" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-poll"/></svg></span>Polls</a>
+                <a href="/dashboard/guild/{{ guild_id }}/gallery" class="dash-nav-link{% if nav_active == "gallery" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-image"/></svg></span>Image Gallery</a>
+                <a href="/dashboard/guild/{{ guild_id }}/giveaways" class="dash-nav-link{% if nav_active == "giveaways" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-gift"/></svg></span>Giveaways</a>
+                <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link{% if nav_active == "tags" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-tag"/></svg></span>Tags</a>
+                <a href="/dashboard/guild/{{ guild_id }}/role-menus" class="dash-nav-link{% if nav_active == "role-menus" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-list"/></svg></span>Role Menus</a>
+                <a href="/dashboard/guild/{{ guild_id }}/starboard" class="dash-nav-link{% if nav_active == "starboard" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-star"/></svg></span>Starboard</a>
+                <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link{% if nav_active == "highlights" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-sparkles"/></svg></span>Highlights</a>
+                <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link{% if nav_active == "emoji-stats" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-smile"/></svg></span>Emoji Stats</a>
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Integrations</span>
-                <a href="/dashboard/guild/{{ guild_id }}/webhooks" class="dash-nav-link{% if nav_active == "webhooks" %} active{% endif %}">Webhooks</a>
-                <a href="/dashboard/guild/{{ guild_id }}/backup" class="dash-nav-link{% if nav_active == "backup" %} active{% endif %}">Backup &amp; Templates</a>
-                <a href="/dashboard/guild/{{ guild_id }}/developers" class="dash-nav-link{% if nav_active == "developers" %} active{% endif %}">Developers</a>
+                <a href="/dashboard/guild/{{ guild_id }}/webhooks" class="dash-nav-link{% if nav_active == "webhooks" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-webhook"/></svg></span>Webhooks</a>
+                <a href="/dashboard/guild/{{ guild_id }}/backup" class="dash-nav-link{% if nav_active == "backup" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-archive"/></svg></span>Backup &amp; Templates</a>
+                <a href="/dashboard/guild/{{ guild_id }}/developers" class="dash-nav-link{% if nav_active == "developers" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-code"/></svg></span>Developers</a>
             </div>
             <div class="dash-nav-group">
-                <a href="/dashboard/guild/{{ guild_id }}/me" class="dash-nav-link dash-nav-link-me{% if nav_active == "me" %} active{% endif %}">My Profile</a>
+                <a href="/dashboard/guild/{{ guild_id }}/me" class="dash-nav-link dash-nav-link-me{% if nav_active == "me" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-user"/></svg></span>My Profile</a>
             </div>
         </nav>
         {# Inline so it runs before first paint: .dash-sidebar is what scrolls, and a full page load would reset it to the top. #}
