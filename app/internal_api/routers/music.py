@@ -9,6 +9,8 @@ from discord.ui.view import LayoutView
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.services.music_access import resolve_viewer
+
 from ..dependencies import BotDep, GuildDep, verify_token
 
 if TYPE_CHECKING:
@@ -448,7 +450,7 @@ async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> di
 
 @router.patch("/music/dj-mode")
 async def patch_music_dj_mode(guild: GuildDep, bot: BotDep, body: DJModeBody) -> dict:
-    """Set the DJ mode (0=off, 1=hybrid, 2=dj_only)."""
+    """Set the DJ mode (0=everyone, 1=dj_only, 2=hybrid)."""
     if body.dj_mode not in (0, 1, 2):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='dj_mode must be 0, 1, or 2')
 
@@ -489,24 +491,28 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
     has_dj = is_dj(member) or member.guild_permissions.manage_guild
     bot_vc = guild.me.voice and guild.me.voice.channel
     author_vc = member.voice and member.voice.channel
-    in_voice = bool(bot_vc and author_vc and author_vc == bot_vc)
     dj_mode = DJMode(getattr(await bot.db.get_guild_config(guild.id), 'music_dj_mode', 0))
 
     # Base gate: DJs can always act; otherwise the viewer must share the VC.
-    if not has_dj:
+    viewer = resolve_viewer(
+        has_dj=has_dj,
+        user_channel_id=author_vc.id if author_vc else None,
+        bot_channel_id=bot_vc.id if bot_vc else None,
+        dj_mode=int(dj_mode),
+    )
+    if not viewer.can_control:
         if dj_mode == DJMode.dj_only:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail='only members with the DJ role can control the player',
             )
-        if not in_voice:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="join the bot's voice channel to control playback",
-            )
-        # Hybrid mode restricts destructive actions to DJs.
-        if dj_mode == DJMode.hybrid and action in DESTRUCTIVE:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='this action requires the DJ role')
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="join the bot's voice channel to control playback",
+        )
+    # Hybrid mode restricts destructive actions to DJs.
+    if action in DESTRUCTIVE and not viewer.can_destroy:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='this action requires the DJ role')
 
     from wavelink import QueueMode
 

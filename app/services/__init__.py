@@ -121,6 +121,7 @@ from app.services.log_channel import (
     startup_fields,
 )
 from app.services.lyrics import LyricLine, LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
+from app.services.music_access import MusicViewer, resolve_viewer
 from app.services.news import (
     COMMON_WORDS,
     DEFAULT_SOURCES,
@@ -304,6 +305,7 @@ __all__ = (
     'ModerationVerdict',
     'MusicIntent',
     'MusicIntentParser',
+    'MusicViewer',
     'NewsIngest',
     'NewsIngestReport',
     'NewsSource',
@@ -413,6 +415,7 @@ __all__ = (
     'resolve_granularity',
     'resolve_range',
     'resolve_search',
+    'resolve_viewer',
     'rewrite_gateway_line',
     'roll_lootbox',
     'seed_sources',
