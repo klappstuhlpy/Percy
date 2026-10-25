@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from app.core import Cog
 
 from .assistant import AssistantMixin
-from .automod import AutoModMixin
 from .autoresponder import AutoResponderMixin
 
 if TYPE_CHECKING:
@@ -16,7 +15,6 @@ __all__ = ('Automation', 'setup')
 
 class Automation(
     AssistantMixin,
-    AutoModMixin,
     AutoResponderMixin,
     Cog,
     name='Automation',
