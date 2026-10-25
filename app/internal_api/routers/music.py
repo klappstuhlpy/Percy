@@ -52,12 +52,13 @@ class SetupBody(BaseModel):
 class EqualizerBody(BaseModel):
     preset: str | None = None
     bands: list[float] | None = None
-    user_id: int | str | None = None  # set by the member-facing dashboard; absent = admin form
+    user_id: int | str  # required: the gate is who is asking, never an absent caller
 
 
 class FiltersBody(BaseModel):
     action: str
     smoothing: float | None = None
+    user_id: int | str
 
 
 class WobbleBody(BaseModel):
@@ -388,8 +389,7 @@ async def post_music_equalizer(guild: GuildDep, bot: BotDep, body: EqualizerBody
     if player is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no active player in this guild')
 
-    if body.user_id is not None:
-        await _require_audio_access(bot, guild, body.user_id)
+    await _require_audio_access(bot, guild, body.user_id)
 
     if body.preset:
         if body.preset not in PRESETS:
@@ -496,6 +496,7 @@ async def post_music_filters(guild: GuildDep, bot: BotDep, body: FiltersBody) ->
     _, player = _get_guild_player(bot, guild.id)
     if player is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no active player in this guild')
+    await _require_audio_access(bot, guild, body.user_id)
 
     filters: wavelink.Filters = player.filters
     action = body.action

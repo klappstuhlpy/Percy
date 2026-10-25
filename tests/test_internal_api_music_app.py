@@ -259,7 +259,7 @@ async def test_audio_requires_voice_presence() -> None:
             await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='8d'))
         assert exc.value.status_code == 403
         with pytest.raises(HTTPException) as exc:
-            await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset='pop', user_id=5))
+            await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset="pop", user_id=5))
         assert exc.value.status_code == 403
         with pytest.raises(HTTPException) as exc:
             await api.post_music_audio(_guild(member_vc=10, bot_vc=10), _bot(1), api.AudioBody(user_id=5, effect='8d'))
@@ -272,3 +272,18 @@ async def test_equalizer_preset_with_user() -> None:
     with patch.object(api, '_get_guild_player', return_value=(guild, player)):
         out = await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset='rock', user_id=5))
     assert out['equalizer'] == api.EQ_PRESETS['rock']
+
+
+def test_audio_writes_require_user_id() -> None:
+    from pydantic import ValidationError
+
+    for model, kw in ((api.EqualizerBody, {'preset': 'pop'}), (api.FiltersBody, {'action': 'reset'}), (api.AudioBody, {})):
+        with pytest.raises(ValidationError):
+            model(**kw)
+
+
+async def test_legacy_filters_are_gated_too() -> None:
+    guild, player = _guild(member_vc=None, bot_vc=10), _fx_player()
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)), pytest.raises(HTTPException) as exc:
+        await api.post_music_filters(guild, _bot(0), api.FiltersBody(action='reset', user_id=5))
+    assert exc.value.status_code == 403
