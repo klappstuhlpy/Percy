@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A music app: player bar, queue, search, play history, lyrics and your liked songs and playlists, under Music in the sidebar. It adapts to phones and narrow windows.
+
 ### Removed
 - `automod` feature is no longer available.
 
