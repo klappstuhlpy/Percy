@@ -427,9 +427,128 @@ impl MusicAppTemplate {
         serde_json::json!({
             "viewer": self.viewer,
             "status": self.music.as_ref().map(crate::music_app::status_json),
+            "vibes": VIBES,
         })
         .to_string()
     }
+    pub(crate) fn vibes(&self) -> &'static [Vibe] {
+        &VIBES
+    }
+    /// First cover candidate for an artwork URL at the size implied by the art class.
+    pub(crate) fn cover(&self, url: &str, cls: &str) -> String {
+        cover_chain(url, CoverSize::of(cls)).swap_remove(0).0
+    }
+    pub(crate) fn cover_lb(&self, url: &str, cls: &str) -> bool {
+        cover_chain(url, CoverSize::of(cls))[0].1
+    }
+    /// The remaining candidates for `app.js`'s error fallback: space-separated, `lb:` = letterboxed.
+    pub(crate) fn cover_rest(&self, url: &str, cls: &str) -> String {
+        cover_chain(url, CoverSize::of(cls))
+            .into_iter()
+            .skip(1)
+            .map(|(u, lb)| if lb { format!("lb:{u}") } else { u })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    /// The server's most-played tracks from its recent history (for users without their own).
+    pub(crate) fn popular(&self) -> Vec<&MusicHistoryItem> {
+        let mut counts: Vec<(&MusicHistoryItem, usize)> = Vec::new();
+        for h in &self.history {
+            match counts.iter_mut().find(|(c, _)| c.title.eq_ignore_ascii_case(&h.title)) {
+                Some((_, n)) => *n += 1,
+                None => counts.push((h, 1)),
+            }
+        }
+        counts.sort_by_key(|c| std::cmp::Reverse(c.1));
+        counts.into_iter().take(10).map(|(h, _)| h).collect()
+    }
+}
+
+/// A "Choose a vibe" preset: clicking it queues `query` (a plain search the play route resolves).
+#[derive(serde::Serialize)]
+pub(crate) struct Vibe {
+    pub(crate) key: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) query: &'static str,
+    pub(crate) icon: &'static str,
+}
+
+const fn vibe(key: &'static str, label: &'static str, query: &'static str, icon: &'static str) -> Vibe {
+    Vibe {
+        key,
+        label,
+        query,
+        icon,
+    }
+}
+
+/// The curated vibe list; `app.js` reads it from the boot JSON for search suggestions.
+pub(crate) const VIBES: [Vibe; 10] = [
+    vibe("lofi", "Lofi", "lofi hip hop mix", "headphones"),
+    vibe("phonk", "Phonk", "phonk mix", "sparkles"),
+    vibe("chillhop", "Chillhop", "chillhop mix", "disc"),
+    vibe("synthwave", "Synthwave", "synthwave retro mix", "trend"),
+    vibe("hiphop", "Hip-Hop", "hip hop hits mix", "voice"),
+    vibe("rock", "Rock", "rock classics mix", "star"),
+    vibe("jazz", "Jazz", "jazz cafe mix", "music"),
+    vibe("classical", "Classical", "classical music mix", "book"),
+    vibe("kpop", "K-Pop", "kpop hits mix", "heart"),
+    vibe("workout", "Workout", "workout music mix", "trophy"),
+];
+
+/// Artwork size class: rows/queue/bar, cards, now playing.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum CoverSize {
+    Small,
+    Card,
+    Large,
+}
+
+impl CoverSize {
+    fn of(cls: &str) -> Self {
+        if cls.contains("np") {
+            Self::Large
+        } else if cls.contains("fill") {
+            Self::Card
+        } else {
+            Self::Small
+        }
+    }
+}
+
+/// The video id of a YouTube thumbnail URL (`i.ytimg.com/vi/<id>/…`), if it is one.
+fn yt_id(url: &str) -> Option<&str> {
+    if !(url.contains("ytimg.com/") || url.contains("img.youtube.com/")) {
+        return None;
+    }
+    let rest = url.split_once("/vi/").or_else(|| url.split_once("/vi_webp/"))?.1;
+    let id = rest.split('/').next()?;
+    (!id.is_empty()).then_some(id)
+}
+
+/// Cover candidates, best first, as `(url, letterboxed)`. YouTube's `hq`/`sd` thumbnails are 4:3
+/// with black bars (letterboxed: the CSS zooms them past the bars); `maxres`/`mq` are 16:9.
+/// `app.js` `coverChain()` mirrors this.
+pub(crate) fn cover_chain(url: &str, size: CoverSize) -> Vec<(String, bool)> {
+    let Some(id) = yt_id(url) else {
+        return vec![(url.to_string(), false)];
+    };
+    let base = format!("https://i.ytimg.com/vi/{id}/");
+    let names: &[(&str, bool)] = match size {
+        CoverSize::Large => &[
+            ("maxresdefault", false),
+            ("sddefault", true),
+            ("hqdefault", true),
+            ("mqdefault", false),
+        ],
+        CoverSize::Card => &[("hqdefault", true), ("mqdefault", false)],
+        CoverSize::Small => &[("mqdefault", false), ("hqdefault", true)],
+    };
+    let mut out: Vec<(String, bool)> = names.iter().map(|(n, lb)| (format!("{base}{n}.jpg"), *lb)).collect();
+    if !out.iter().any(|(u, _)| u == url) {
+        out.push((url.to_string(), url.contains("hqdefault") || url.contains("sddefault")));
+    }
+    out
 }
 
 /// The context card at the top of Home (start a session / listening only / Percy offline).

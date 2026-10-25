@@ -11,10 +11,10 @@
     border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel);
 }
 .mapp-panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--m-s4); margin-bottom: var(--m-s4); }
-.mapp-panel-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.015em; }
+.mapp-panel-head h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.015em; }
 .mapp-panel-head p { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 13px; color: var(--m-muted); }
 .mapp-panel-head p svg { width: 14px; height: 14px; }
-.mapp-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--m-s2); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; overflow-wrap: anywhere; }
+.mapp-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--m-s2); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; overflow-wrap: anywhere; }
 .mapp-lede { color: var(--m-muted); max-width: 64ch; margin-top: 2px; }
 .mapp-eyebrow { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 12px; font-weight: 700; color: var(--m-muted); }
 .mapp-eyebrow svg { width: 14px; height: 14px; }
@@ -72,7 +72,7 @@
 
 /* ── Shelves + tiles ──────────────────────────────────────────────────── */
 .mapp-shelf-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--m-s4); margin-bottom: var(--m-s3); }
-.mapp-shelf-head h2 { font-size: 16px; font-weight: 800; }
+.mapp-shelf-head h2 { font-size: 16px; font-weight: 700; }
 .mapp-shelf-nav { display: flex; align-items: center; gap: var(--m-s1); }
 .mapp-shelf-nav .mapp-link { margin-right: var(--m-s2); }
 .mapp-ibtn--sm { width: 30px; height: 30px; border: 1px solid var(--m-line); }
@@ -128,7 +128,7 @@
     transition: background var(--m-ease), border-color var(--m-ease);
 }
 .mapp-guild:hover { background: var(--m-raised-2); border-color: color-mix(in srgb, var(--m-text) 16%, var(--m-line)); }
-.mapp-guild-art { display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: var(--m-r-sm); object-fit: cover; font-size: 36px; font-weight: 800; }
+.mapp-guild-art { display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: var(--m-r-sm); object-fit: cover; font-size: 36px; font-weight: 700; }
 .mapp-guild-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Track rows ───────────────────────────────────────────────────────── */
@@ -170,7 +170,7 @@
     display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;
     padding: var(--m-s6) var(--m-s5);
 }
-.mapp-empty h2, .mapp-empty h3 { font-size: 15px; font-weight: 800; color: var(--m-muted); }
+.mapp-empty h2, .mapp-empty h3 { font-size: 15px; font-weight: 700; color: var(--m-muted); }
 .mapp-empty p { max-width: 40ch; font-size: 13px; color: var(--m-faint); }
 .mapp-empty-ico { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: var(--m-s1); border-radius: var(--m-r); border: 1px solid var(--m-line); background: var(--m-raised); color: var(--m-muted); }
 .mapp-empty-ico svg { width: 22px; height: 22px; }
@@ -198,7 +198,7 @@
 .mapp-np { display: flex; align-items: center; gap: var(--m-s3); min-width: 0; }
 .mapp-np-text { flex: 1; min-width: 0; }
 .mapp-np-label { font-size: 12px; color: var(--m-faint); font-weight: 600; }
-.mapp-np-title { margin-top: 1px; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-np-title { margin-top: 1px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mapp-np-sub { font-size: 13px; color: var(--m-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mapp-np-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--m-s3); padding-top: var(--m-s3); border-top: 1px solid var(--m-line); }
 .mapp-fact { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px 3px 7px; border-radius: 999px; border: 1px solid var(--m-line); font-size: 12px; font-weight: 600; color: var(--m-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -209,7 +209,7 @@
 .mapp-rail-queue #mapp-queue { flex: 1; display: flex; flex-direction: column; }
 .mapp-rail-queue .mapp-empty { margin: auto 0; }
 .mapp-queue-head { display: flex; align-items: center; gap: var(--m-s2); margin-bottom: var(--m-s2); }
-.mapp-queue-head h2 { display: flex; align-items: center; gap: var(--m-s2); flex: 1; font-size: 15px; font-weight: 800; }
+.mapp-queue-head h2 { display: flex; align-items: center; gap: var(--m-s2); flex: 1; font-size: 15px; font-weight: 700; }
 .mapp-queue-head h2 svg { width: 18px; height: 18px; color: var(--m-muted); }
 .mapp-queue-count { font-size: 12px; color: var(--m-faint); font-weight: 600; }
 .mapp-qlist { list-style: none; margin: 0 calc(-1 * var(--m-s2)); padding: 0; }
@@ -288,7 +288,7 @@
     box-shadow: none; transform: none;
 }
 .mapp-view--admin .config-section:hover { transform: none; box-shadow: none; }
-.mapp-view--admin .config-section h2 { font-size: 16px; font-weight: 800; margin: 0 0 var(--m-s1); }
+.mapp-view--admin .config-section h2 { font-size: 16px; font-weight: 700; margin: 0 0 var(--m-s1); }
 .mapp-view--admin .config-section h2::before { display: none; }
 .mapp-view--admin .config-section-description { color: var(--m-muted); margin: 0 0 var(--m-s4); max-width: 70ch; font-size: 13px; }
 .mapp-view--admin .eq-canvas { border-radius: var(--m-r); background: var(--m-bg); border-color: var(--m-line); }
@@ -320,3 +320,75 @@
 .mapp-view--admin .filter-toggle, .mapp-view--admin .preset-btn { font-family: var(--font-display); }
 .mapp-view--admin .config-field, .mapp-view--admin .listener-status, .mapp-view--admin .panel-item { border-radius: var(--m-r); background: var(--m-raised); border-color: var(--m-line); }
 .mapp-view--admin .button.primary { background: var(--m-accent); border-color: transparent; color: var(--m-accent-ink); }
+
+/* ══ v2: centred column, quiet sections, vibes, recommendations, covers ══ */
+.mapp-view { max-width: 960px; margin: 0 auto; padding: var(--m-s6) var(--m-s6) 56px; }
+.mapp-view--lyrics { margin-top: var(--m-s4); padding: var(--m-s6); }
+.mapp-sec { margin-bottom: 40px; }
+.mapp-sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--m-s4); margin-bottom: var(--m-s4); }
+.mapp-sec-head h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.mapp-sec-head p { margin-top: 2px; font-size: 13px; color: var(--m-muted); font-weight: 500; }
+.mapp-sec .mapp-rows { margin: 0 calc(-1 * var(--m-s2)); }
+.mapp-banner { margin-bottom: var(--m-s6); background: color-mix(in srgb, var(--surface-1) 70%, transparent); }
+.mapp-head, .mapp-panel { background: color-mix(in srgb, var(--surface-1) 62%, transparent); }
+.mapp-shelf { grid-auto-columns: 164px; padding-bottom: 2px; }
+
+/* Tiles: quieter, lighter border, crisper art */
+.mapp-card { background: color-mix(in srgb, var(--surface-2) 70%, transparent); border-color: color-mix(in srgb, var(--line) 80%, transparent); }
+.mapp-card:hover, .mapp-card:focus-within { background: var(--surface-2); }
+.mapp-card-title { font-weight: 600; }
+.mapp-card--skel { pointer-events: none; }
+.mapp-skel-block { background: linear-gradient(90deg, var(--m-raised) 0%, var(--m-raised-2) 40%, var(--m-raised) 80%); background-size: 300% 100%; animation: mapp-shimmer 1.3s ease-in-out infinite; }
+.mapp-card--skel .mapp-skel-line { height: 10px; margin: 8px auto 0; }
+.mapp-empty--inline { grid-column: 1 / -1; padding: var(--m-s5); border-radius: var(--m-r); border: 1px dashed var(--m-line); }
+.mapp-recs-group + .mapp-recs-group { margin-top: var(--m-s5); }
+.mapp-recs-cap { display: flex; align-items: center; gap: 6px; margin-bottom: var(--m-s3); font-size: 13px; color: var(--m-muted); }
+.mapp-recs-cap svg { width: 14px; height: 14px; color: var(--m-accent); }
+.mapp-recs-cap b { color: var(--m-text); font-weight: 600; }
+
+/* Vibe tiles: original gradient + pattern art per vibe */
+.mapp-shelf--vibes { grid-auto-columns: 136px; }
+.mapp-vibe {
+    position: relative; display: block; width: 100%; aspect-ratio: 1; padding: 0; overflow: hidden;
+    border: 0; border-radius: var(--m-r); cursor: pointer; text-align: left; color: #fff;
+    background: var(--vp, none), linear-gradient(140deg, var(--v1), var(--v2));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    scroll-snap-align: start; transition: transform var(--m-ease), filter var(--m-ease);
+}
+.mapp-vibe::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.45)); }
+.mapp-vibe:hover { transform: translateY(-2px); filter: saturate(1.15) brightness(1.06); }
+.mapp-vibe:active { transform: none; }
+.mapp-vibe-art { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); backdrop-filter: blur(4px); transition: transform var(--m-ease); }
+.mapp-vibe-art svg { width: 20px; height: 20px; }
+.mapp-vibe:hover .mapp-vibe-art { transform: scale(1.08) rotate(-6deg); }
+.mapp-vibe-name { position: absolute; left: 12px; bottom: 10px; z-index: 1; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35); }
+.vibe-lofi { --v1: #2e2a5a; --v2: #8c76d6; --vp: repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 7px); }
+.vibe-phonk { --v1: #160a1c; --v2: #5a1240; --vp: radial-gradient(circle at 25% 75%, rgba(255,61,127,0.75), transparent 55%); }
+.vibe-chillhop { --v1: #0f5f5a; --v2: #4fd1c5; --vp: radial-gradient(rgba(255,255,255,0.16) 1px, transparent 1.6px) 0 0 / 12px 12px; }
+.vibe-synthwave { --v1: #1e0b3b; --v2: #f97316; --vp: linear-gradient(180deg, transparent 55%, rgba(192,38,211,0.55) 55%, transparent 100%), repeating-linear-gradient(180deg, transparent 0 9px, rgba(255,255,255,0.08) 9px 10px); }
+.vibe-hiphop { --v1: #1f2430; --v2: #d9911a; --vp: repeating-linear-gradient(45deg, rgba(0,0,0,0.14) 0 8px, transparent 8px 16px); }
+.vibe-rock { --v1: #121212; --v2: #b42318; --vp: conic-gradient(from 200deg at 80% 20%, rgba(255,255,255,0.12), transparent 25%, rgba(255,255,255,0.06) 40%, transparent 60%); }
+.vibe-jazz { --v1: #172554; --v2: #4f8ff0; --vp: repeating-radial-gradient(circle at 80% 85%, rgba(255,255,255,0.09) 0 2px, transparent 2px 14px); }
+.vibe-classical { --v1: #3b352a; --v2: #c8b68e; --vp: linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px) 0 0 / 18px 100%; }
+.vibe-kpop { --v1: #db2777; --v2: #a78bfa; --vp: radial-gradient(rgba(255,255,255,0.22) 1.5px, transparent 2px) 0 0 / 16px 16px; }
+.vibe-workout { --v1: #064e3b; --v2: #8fd629; --vp: repeating-linear-gradient(-60deg, rgba(0,0,0,0.12) 0 6px, transparent 6px 18px); }
+.mapp-sug-vibe.vibe-lofi, .mapp-sug-vibe.vibe-phonk, .mapp-sug-vibe.vibe-chillhop, .mapp-sug-vibe.vibe-synthwave, .mapp-sug-vibe.vibe-hiphop,
+.mapp-sug-vibe.vibe-rock, .mapp-sug-vibe.vibe-jazz, .mapp-sug-vibe.vibe-classical, .mapp-sug-vibe.vibe-kpop, .mapp-sug-vibe.vibe-workout { --vb: linear-gradient(140deg, var(--v1), var(--v2)); }
+
+/* Covers: square crop, letterboxed thumbnails zoomed past their bars, soft inner edge */
+.mapp-art img { z-index: 1; transform-origin: center; }
+.mapp-art img.is-lb { transform: scale(1.34); }
+.mapp-art::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 -18px 28px -18px rgba(0, 0, 0, 0.35); pointer-events: none; }
+[data-theme="light"] .mapp-art::after { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
+.mapp-art > svg { position: relative; z-index: 0; }
+.mapp-np-cover { width: 100%; aspect-ratio: 1; margin-bottom: var(--m-s4); border-radius: var(--m-r); overflow: hidden; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
+.mapp-np-cover .mapp-art { border-radius: var(--m-r); }
+.mapp-np-cover + .mapp-np .mapp-np-title { font-size: 18px; }
+
+@media (max-width: 1023px) { .mapp-view { padding: var(--m-s5) var(--m-s5) 48px; } }
+@media (max-width: 767px) {
+    .mapp-view { padding: var(--m-s4) var(--m-s2) var(--m-s5); }
+    .mapp-sec { margin-bottom: var(--m-s6); }
+    .mapp-shelf--vibes { grid-auto-columns: 116px; }
+    .mapp-shelf { grid-auto-columns: 136px; }
+}

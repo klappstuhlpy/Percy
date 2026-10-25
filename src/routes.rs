@@ -42,6 +42,10 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/dashboard/music/:guild_id/history", get(music_app::music_history))
         .route("/dashboard/music/:guild_id/search", get(music_app::music_search))
         .route("/dashboard/music/:guild_id/lyrics", get(music_app::music_lyrics))
+        .route(
+            "/dashboard/music/:guild_id/recommendations",
+            get(music_app::music_recommendations),
+        )
         .route("/dashboard/music/:guild_id/play", post(music_app::music_play))
         .route("/dashboard/music/:guild_id/control", post(music_app::music_control))
         .route("/account/music", get(music_app::account_music))

@@ -406,6 +406,98 @@ pub async fn account_music_playlist(
     }
 }
 
+// ── Recommendations ─────────────────────────────────────────────────────────
+
+/// How many top artists seed recommendations, and how many tracks each contributes.
+const REC_ARTISTS: usize = 3;
+const REC_PER_ARTIST: u8 = 6;
+
+/// The user's most-played artists, in play order, without repeats or blanks.
+fn top_artists(top: &[percy_client::TopTrack]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for a in top.iter().filter_map(|t| t.author.as_deref()).map(str::trim) {
+        if !a.is_empty() && !out.iter().any(|o| o.eq_ignore_ascii_case(a)) {
+            out.push(a.to_string());
+        }
+        if out.len() == REC_ARTISTS {
+            break;
+        }
+    }
+    out
+}
+
+/// Groups search results per artist, dropping tracks the user already plays (by uri or title) and
+/// repeats across groups; empty groups are left out.
+fn build_recommendations(
+    top: &[percy_client::TopTrack],
+    results: Vec<(String, Vec<percy_client::MusicTrack>)>,
+) -> Value {
+    let mut seen: Vec<String> = top
+        .iter()
+        .flat_map(|t| [t.uri.clone().unwrap_or_default(), t.title.to_lowercase()])
+        .filter(|s| !s.is_empty())
+        .collect();
+    let groups: Vec<Value> = results
+        .into_iter()
+        .filter_map(|(artist, tracks)| {
+            let kept: Vec<_> = tracks
+                .into_iter()
+                .filter(|t| {
+                    let keys = [t.uri.clone().unwrap_or_default(), t.title.to_lowercase()];
+                    if keys.iter().any(|k| !k.is_empty() && seen.contains(k)) {
+                        return false;
+                    }
+                    seen.extend(keys.into_iter().filter(|k| !k.is_empty()));
+                    true
+                })
+                .collect();
+            (!kept.is_empty()).then(|| json!({"artist": artist, "tracks": kept}))
+        })
+        .collect();
+    json!({"ok": true, "groups": groups})
+}
+
+/// `GET /dashboard/music/:guild_id/recommendations` — tracks by the user's top artists, searched
+/// through the guild's Lavalink node. Empty (not an error) when the user has no history.
+pub async fn music_recommendations(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let uid = match user_id(&session) {
+        Ok(u) => u,
+        Err(r) => return r,
+    };
+    let library = match percy.get_user_music(uid).await {
+        Ok(l) => l,
+        Err(e) => return percy_fail(&e),
+    };
+    let artists = top_artists(&library.top_tracks);
+    let search = |i: usize| {
+        let artist = artists.get(i).cloned();
+        async move {
+            match artist {
+                Some(a) => {
+                    let tracks = percy
+                        .search_music(guild_id, &a, REC_PER_ARTIST)
+                        .await
+                        .map(|s| s.results)
+                        .unwrap_or_default();
+                    Some((a, tracks))
+                }
+                None => None,
+            }
+        }
+    };
+    let (a, b, c) = tokio::join!(search(0), search(1), search(2));
+    let results = [a, b, c].into_iter().flatten().collect();
+    Json(build_recommendations(&library.top_tracks, results)).into_response()
+}
+
 /// `MusicHistoryItem` length as `m:ss`, for the template.
 pub(crate) fn fmt_ms(ms: u64) -> String {
     let s = ms / 1000;
@@ -491,6 +583,36 @@ mod tests {
     }
 
     #[test]
+    fn recommendations_skip_known_and_repeated_tracks() {
+        let top: Vec<percy_client::TopTrack> = serde_json::from_value(json!([
+            {"title": "Paper Lanterns", "author": "The Quiet Hours", "uri": "u1"},
+            {"title": "Glass Harbour", "author": "the quiet hours"},
+            {"title": "Copper Skies", "author": "Lumen & Vale"},
+        ]))
+        .unwrap();
+        assert_eq!(top_artists(&top), vec!["The Quiet Hours", "Lumen & Vale"]);
+        let t = |title: &str, uri: &str| -> percy_client::MusicTrack {
+            serde_json::from_value(json!({"title": title, "author": "x", "uri": uri})).unwrap()
+        };
+        let out = build_recommendations(
+            &top,
+            vec![
+                (
+                    "The Quiet Hours".into(),
+                    vec![t("Paper Lanterns", "u1"), t("Small Weather", "u2")],
+                ),
+                (
+                    "Lumen & Vale".into(),
+                    vec![t("small weather", "u2"), t("glass harbour", "u3")],
+                ),
+            ],
+        );
+        let groups = out["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), 1, "the second group only held known or repeated tracks");
+        assert_eq!(groups[0]["tracks"][0]["title"], "Small Weather");
+    }
+
+    #[test]
     fn durations_format_as_m_ss() {
         assert_eq!(fmt_ms(239_000), "3:59");
         assert_eq!(fmt_ms(0), "0:00");
@@ -517,6 +639,32 @@ mod render_tests {
         ("Low Tide Radio", "The Foxglove Set"),
     ];
 
+    /// A thumbnail URL in YouTube's shape with an invented id; the screenshot harness answers these
+    /// with generated placeholder images, so no real artwork is ever referenced.
+    fn fake_art(i: usize) -> String {
+        format!("https://i.ytimg.com/vi/placeholder{i:02}/hqdefault.jpg")
+    }
+
+    #[test]
+    fn covers_prefer_unletterboxed_thumbnails() {
+        use crate::templates::{cover_chain, CoverSize};
+        let url = "https://i.ytimg.com/vi/abc/hqdefault.jpg";
+        let large = cover_chain(url, CoverSize::Large);
+        assert_eq!(large[0], ("https://i.ytimg.com/vi/abc/maxresdefault.jpg".into(), false));
+        assert!(large.iter().any(|(u, lb)| u.ends_with("sddefault.jpg") && *lb));
+        assert_eq!(
+            large.iter().filter(|(u, _)| u == url).count(),
+            1,
+            "the original is tried once"
+        );
+        assert_eq!(
+            cover_chain(url, CoverSize::Small)[0].0,
+            "https://i.ytimg.com/vi/abc/mqdefault.jpg"
+        );
+        let other = "https://cdn.example.com/a.png";
+        assert_eq!(cover_chain(other, CoverSize::Large), vec![(other.to_string(), false)]);
+    }
+
     fn chan(name: &str) -> Option<MusicChannelRef> {
         Some(MusicChannelRef {
             id: "9".into(),
@@ -528,7 +676,7 @@ mod render_tests {
         let queue: Vec<Value> = TRACKS[2..9]
             .iter()
             .enumerate()
-            .map(|(i, (t, a))| json!({"title": t, "author": a, "duration": 150_000 + i as u64 * 17_000, "autoplay": i >= 5}))
+            .map(|(i, (t, a))| json!({"title": t, "author": a, "duration": 150_000 + i as u64 * 17_000, "autoplay": i >= 5, "artwork": fake_art(i + 2)}))
             .collect();
         let mut m = json!({
             "active": playing, "equalizer": vec![0.0f64; 15], "filters": {}, "presets": ["Flat", "Bass boost", "Vocal"],
@@ -540,7 +688,7 @@ mod render_tests {
             m["now_playing"] = json!({
                 "title": TRACKS[0].0, "author": TRACKS[0].1, "duration": 214_000, "position": 81_000,
                 "uri": "https://example.com/track/paper-lanterns", "volume": 64, "loop": 0, "shuffle": false,
-                "requester": {"id": "7", "name": "Ferris"},
+                "requester": {"id": "7", "name": "Ferris"}, "artwork": fake_art(0),
             });
         }
         serde_json::from_value(m).unwrap()
@@ -554,6 +702,7 @@ mod render_tests {
                 title: (*t).into(),
                 author: Some((*a).into()),
                 uri: Some(format!("https://example.com/track/{i}")),
+                artwork: (i % 3 != 2).then(|| fake_art(i)),
                 length_ms: Some(170_000 + i as u64 * 9_000),
                 played_at: format!("2026-10-25T1{}:00:00", i % 10),
                 ..Default::default()
@@ -570,9 +719,9 @@ mod render_tests {
                     title: (*t).into(),
                     author: Some((*a).into()),
                     uri: Some(format!("https://example.com/top/{i}")),
+                    artwork: (i % 2 == 0).then(|| fake_art(i + 3)),
                     length_ms: Some(190_000 + i as u64 * 11_000),
                     plays: 42 - i as u64 * 5,
-                    ..Default::default()
                 })
                 .collect(),
             liked: vec![
@@ -729,7 +878,27 @@ mod render_tests {
             true,
         );
 
-        for (name, t) in [("visitor", visitor), ("listener", listener), ("admin", admin)] {
+        // New user: in voice, the server has history, but the user has none of their own yet.
+        let newuser = page(
+            MusicViewer {
+                role: "listener".into(),
+                can_start: true,
+                can_control: true,
+                voice_channel: chan("Lounge"),
+                bot_channel: chan("Lounge"),
+                ..Default::default()
+            },
+            true,
+            UserMusicLibrary::default(),
+            false,
+        );
+
+        for (name, t) in [
+            ("visitor", visitor),
+            ("listener", listener),
+            ("admin", admin),
+            ("newuser", newuser),
+        ] {
             let html = t.render().unwrap();
             assert!(html.contains("mapp-bar"));
             std::fs::write(dir.join(format!("{name}.html")), html).unwrap();

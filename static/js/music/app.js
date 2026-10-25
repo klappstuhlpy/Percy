@@ -20,7 +20,35 @@
     const q = (s) => `“${s}”`;
     /* Mirrors MusicAppTemplate::grad (sum of code points mod 8). */
     const grad = (s) => { let n = 0; for (const ch of String(s || '')) n += ch.codePointAt(0); return n % 8; };
-    const art = (url, seed, cls) => `<span class="mapp-art ${cls} g${grad(seed)}" aria-hidden="true">${url ? `<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ico('music')}</span>`;
+    /* Cover candidates, best first, as [url, letterboxed]; mirrors templates::guild::cover_chain.
+       YouTube hq/sd thumbnails are 4:3 with black bars (CSS zooms .is-lb past them); maxres/mq are 16:9. */
+    function coverChain(url, cls) {
+        const m = /(?:ytimg\.com|img\.youtube\.com)\/vi(?:_webp)?\/([^/]+)\//.exec(url || '');
+        if (!m) return [[url, false]];
+        const base = `https://i.ytimg.com/vi/${m[1]}/`;
+        const size = /np/.test(cls) ? 'lg' : /fill/.test(cls) ? 'card' : 'sm';
+        const names = { lg: [['maxresdefault', false], ['sddefault', true], ['hqdefault', true], ['mqdefault', false]], card: [['hqdefault', true], ['mqdefault', false]], sm: [['mqdefault', false], ['hqdefault', true]] }[size];
+        const out = names.map(([n, lb]) => [`${base}${n}.jpg`, lb]);
+        if (!out.some(([u]) => u === url)) out.push([url, /hqdefault|sddefault/.test(url)]);
+        return out;
+    }
+    function art(url, seed, cls) {
+        let img = '';
+        if (url) {
+            const [first, ...rest] = coverChain(url, cls);
+            img = `<img src="${esc(first[0])}"${first[1] ? ' class="is-lb"' : ''} data-fallback="${esc(rest.map(([u, lb]) => (lb ? 'lb:' : '') + u).join(' '))}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+        }
+        return `<span class="mapp-art ${cls} g${grad(seed)}" aria-hidden="true">${ico('music')}${img}</span>`;
+    }
+    /* Next cover candidate, or drop the image so the placeholder underneath shows. */
+    function nextCover(img) {
+        const rest = (img.dataset.fallback || '').split(' ').filter(Boolean);
+        if (!rest.length) { img.remove(); return; }
+        const nxt = rest.shift();
+        img.dataset.fallback = rest.join(' ');
+        img.classList.toggle('is-lb', nxt.startsWith('lb:'));
+        img.src = nxt.replace(/^lb:/, '');
+    }
     const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } } };
 
     function ago(iso) {
@@ -210,8 +238,8 @@
             return;
         }
         const req = t.requester && t.requester.name;
-        box.innerHTML = `<div class="mapp-np">
-                ${art(t.artwork, t.title, 'mapp-art--np')}
+        box.innerHTML = `<div class="mapp-np-cover">${art(t.artwork, t.title, 'mapp-art--np mapp-art--fill')}</div>
+            <div class="mapp-np">
                 <div class="mapp-np-text">
                     <p class="mapp-np-label">${paused ? 'Paused' : 'Now playing'}</p>
                     <p class="mapp-np-title" title="${esc(t.title)}">${esc(t.title)}</p>
@@ -497,11 +525,12 @@
 
     async function playTrack(t, now) {
         if (blocked(now ? 'playnow' : 'add')) return;
-        const query = t.uri || [t.title, t.author].filter(Boolean).join(' ');
+        const query = t.query || t.uri || [t.title, t.author].filter(Boolean).join(' ');
         if (!query) { toast('error', 'This track has no link to play.'); return; }
         const r = await api(`${BASE}/play`, { method: 'POST', body: { query } });
         if (!r.ok) { toast('error', r.error); return; }
-        const name = t.title || (r.data.queued && r.data.queued[0] && r.data.queued[0].title) || 'that track';
+        const found = r.data.queued && r.data.queued[0] && r.data.queued[0].title;
+        const name = (t.query ? found || `${t.label} mix` : t.title || found) || 'that track';
         if (r.data.started) { toast('success', `Now playing ${q(name)}`); soon(400); return; }
         if (now && canDestroy()) {
             // Jump to the track just queued: it is the last manual (non-autoplay) entry.
@@ -648,7 +677,7 @@
 
     // Search: debounced, newest answer wins.
     const input = $('#mapp-search'), results = $('#mapp-results'), clearBtn = $('#mapp-search-clear');
-    let searchTimer = 0, searchSeq = 0;
+    let searchSeq = 0;
     function searchIdle() {
         if (results) results.innerHTML = empty('search', 'Find something to play', 'Type a song, an artist or paste a link in the search bar above.');
     }
@@ -670,24 +699,144 @@
             : empty('search', `No results for ${q(query)}`, 'Check the spelling, try fewer words, or paste a link instead.');
         applyRole(); syncHearts();
     }
+    // Suggestions under the search field: recent searches, library matches and vibes. Typing only
+    // filters these locally; Enter (or picking a search) runs the live search view.
+    const suggest = $('#mapp-suggest');
+    const RECENT_KEY = 'mapp-recent-searches';
+    const vibes = boot.vibes || [];
+    function recent() {
+        try { const v = JSON.parse(store.get(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter((s) => typeof s === 'string') : []; } catch (_) { return []; }
+    }
+    function remember(text) {
+        const s = text.trim();
+        if (s.length < 2) return;
+        store.set(RECENT_KEY, JSON.stringify([s, ...recent().filter((r) => r.toLowerCase() !== s.toLowerCase())].slice(0, 8)));
+    }
+    function libraryTracks() {
+        const seen = new Set(), out = [];
+        const add = (title, author, uri) => { const k = (title || '').toLowerCase(); if (k && !seen.has(k)) { seen.add(k); out.push({ title, author: author || '', uri: uri || '' }); } };
+        $$('.mapp-row[data-title], .mapp-card[data-title]').forEach((el) => { if (!el.closest('#mapp-results, #mapp-recs')) add(el.dataset.title, el.dataset.author, el.dataset.uri); });
+        liked.forEach((name, url) => add(name, '', url));
+        return out;
+    }
+    let sugItems = [], sugActive = -1;
+    function setSuggestOpen(open) {
+        if (!suggest) return;
+        suggest.hidden = !open;
+        input.setAttribute('aria-expanded', String(open));
+        if (!open) { sugActive = -1; input.removeAttribute('aria-activedescendant'); }
+    }
+    function buildSuggest() {
+        if (!suggest || input.disabled) return;
+        const raw = input.value.trim(), qv = raw.toLowerCase();
+        const rec = recent().filter((r) => !qv || r.toLowerCase().includes(qv)).slice(0, qv ? 4 : 6);
+        const tracks = qv ? libraryTracks().filter((t) => `${t.title} ${t.author}`.toLowerCase().includes(qv)).slice(0, 5) : [];
+        const vb = vibes.filter((v) => !qv || v.label.toLowerCase().includes(qv) || v.query.includes(qv)).slice(0, qv ? 4 : 10);
+        sugItems = [];
+        const opt = (item, inner) => {
+            const i = sugItems.push(item) - 1;
+            return `<div class="mapp-sug${item.kind === 'vibe' ? ' mapp-sug--vibe' : ''}" role="option" id="mapp-sug-${i}" data-sug="${i}" aria-selected="false">${inner}</div>`;
+        };
+        let html = '';
+        if (raw) html += opt({ kind: 'search', value: raw }, `${ico('search')}<span class="mapp-sug-text"><span>Search for <b>${esc(raw)}</b></span></span><kbd>Enter</kbd>`);
+        if (rec.length) {
+            html += '<div class="mapp-sug-head"><span>Recent searches</span><button type="button" class="mapp-sug-clear" data-sug-clear>Clear</button></div>';
+            html += rec.map((r) => opt({ kind: 'recent', value: r }, `${ico('history')}<span class="mapp-sug-text">${esc(r)}</span>`)).join('');
+        }
+        if (tracks.length) {
+            html += '<div class="mapp-sug-head"><span>From your library</span></div>';
+            html += tracks.map((t) => opt({ kind: 'track', value: [t.title, t.author].filter(Boolean).join(' ') },
+                `${ico('music')}<span class="mapp-sug-text">${esc(t.title)}${t.author ? `<small>${esc(t.author)}</small>` : ''}</span>`)).join('');
+        }
+        if (vb.length) {
+            html += '<div class="mapp-sug-head"><span>Vibes</span></div><div class="mapp-sug-vibes">';
+            html += vb.map((v) => opt({ kind: 'vibe', value: v.query, label: v.label },
+                `<span class="mapp-sug-vibe vibe-${esc(v.key)}">${ico(v.icon)}</span><span class="mapp-sug-text">${esc(v.label)}</span>`)).join('');
+            html += '</div>';
+        }
+        suggest.innerHTML = html;
+        sugActive = -1;
+        setSuggestOpen(!!html);
+    }
+    function moveSug(d) {
+        if (!suggest || suggest.hidden || !sugItems.length) return;
+        sugActive += d;
+        if (sugActive < -1) sugActive = sugItems.length - 1;
+        if (sugActive >= sugItems.length) sugActive = -1;
+        $$('[data-sug]', suggest).forEach((el) => el.setAttribute('aria-selected', String(+el.dataset.sug === sugActive)));
+        if (sugActive >= 0) {
+            input.setAttribute('aria-activedescendant', `mapp-sug-${sugActive}`);
+            const el = $(`#mapp-sug-${sugActive}`); if (el) el.scrollIntoView({ block: 'nearest' });
+        } else input.removeAttribute('aria-activedescendant');
+    }
+    function submitSearch(text) {
+        const s = text.trim();
+        setSuggestOpen(false);
+        if (!s) return;
+        remember(s);
+        if (input.value !== s) input.value = s;
+        if (clearBtn) clearBtn.hidden = false;
+        if (currentView !== 'search') go('search');
+        runSearch(s);
+    }
+    function pickSuggestion(item) {
+        if (!item) return;
+        if (item.kind === 'vibe') { setSuggestOpen(false); input.blur(); playVibe(item.value, item.label); return; }
+        submitSearch(item.value);
+    }
     if (input) {
-        input.addEventListener('input', () => {
-            clearTimeout(searchTimer);
-            if (clearBtn) clearBtn.hidden = !input.value;
-            if (input.value.trim() && currentView !== 'search') go('search');
-            searchTimer = setTimeout(() => runSearch(input.value), 300);
-        });
-        $('#mapp-search-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            clearTimeout(searchTimer);
-            if (currentView !== 'search') go('search');
-            runSearch(input.value);
-        });
+        input.addEventListener('input', () => { if (clearBtn) clearBtn.hidden = !input.value; buildSuggest(); });
+        input.addEventListener('focus', buildSuggest);
+        input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) setSuggestOpen(false); }, 150));
+        $('#mapp-search-form').addEventListener('submit', (e) => { e.preventDefault(); submitSearch(input.value); });
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') { input.value = ''; if (clearBtn) clearBtn.hidden = true; runSearch(''); input.blur(); }
+            if (e.key === 'ArrowDown') { e.preventDefault(); if (suggest.hidden) buildSuggest(); else moveSug(1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); moveSug(-1); }
+            else if (e.key === 'Enter' && sugActive >= 0 && !suggest.hidden) { e.preventDefault(); pickSuggestion(sugItems[sugActive]); }
+            else if (e.key === 'Escape') {
+                if (!suggest.hidden) { setSuggestOpen(false); return; }
+                input.value = ''; if (clearBtn) clearBtn.hidden = true; input.blur();
+            }
+        });
+    }
+    if (suggest) {
+        suggest.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus in the field
+        suggest.addEventListener('click', (e) => {
+            if (e.target.closest('[data-sug-clear]')) { store.set(RECENT_KEY, '[]'); buildSuggest(); return; }
+            const el = e.target.closest('[data-sug]');
+            if (el) pickSuggestion(sugItems[+el.dataset.sug]);
         });
     }
     if (clearBtn) clearBtn.addEventListener('click', () => { input.value = ''; clearBtn.hidden = true; runSearch(''); input.focus(); });
+
+    // Vibes: queue a mix when the viewer may; otherwise show what the search finds.
+    function playVibe(query, label) {
+        if (queueHint()) {
+            input.value = query; if (clearBtn) clearBtn.hidden = false;
+            go('search'); runSearch(query);
+            toast('info', `${queueHint()}. Showing ${label} results instead.`);
+            return;
+        }
+        once(`vibe:${query}`, null, () => playTrack({ query, label }, false));
+    }
+
+    // Recommendations: tracks by the user's top artists, fetched after first paint.
+    async function loadRecs() {
+        const box = $('#mapp-recs-body'), sec = $('#mapp-recs');
+        if (!box || !hasGuild) return;
+        const r = await api(`${BASE}/recommendations`);
+        if (!r.ok) {
+            box.innerHTML = empty('alert', 'Could not load recommendations', r.error, '<button type="button" class="mapp-btn" data-act="retry-recs">Try again</button>', 'inline', true);
+            return;
+        }
+        const groups = r.data.groups || [];
+        if (!groups.length) { if (sec) sec.hidden = true; return; }
+        box.innerHTML = groups.map((g) => `<div class="mapp-recs-group">
+                <p class="mapp-recs-cap">${ico('sparkles')}Because you listen to <b>${esc(g.artist)}</b></p>
+                <div class="mapp-shelf">${(g.tracks || []).map((t) => cardHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork })).join('')}</div>
+            </div>`).join('');
+        applyRole(); syncHearts();
+    }
     function focusSearch() { if (input && !input.disabled) { input.focus(); input.select(); } }
 
     // ── Lyrics ───────────────────────────────────────────────────────────
@@ -855,7 +1004,7 @@
         if (railT) { e.preventDefault(); openRail(!railShown()); return; }
         if (e.target.closest('[data-focus-search]')) { if (!wide.matches) openRail(false); setTimeout(focusSearch, 0); }
         const shelfBtn = e.target.closest('[data-shelf]');
-        if (shelfBtn) { const sh = $('#mapp-recents'); if (sh) sh.scrollBy({ left: +shelfBtn.dataset.shelf * sh.clientWidth * 0.8 }); return; }
+        if (shelfBtn) { const sh = document.getElementById(shelfBtn.dataset.target || 'mapp-recents'); if (sh) sh.scrollBy({ left: +shelfBtn.dataset.shelf * sh.clientWidth * 0.8 }); return; }
         // Close popovers on outside click.
         $$('details.mapp-picker[open], details.mapp-me[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
         const btn = e.target.closest('[data-act]');
@@ -903,6 +1052,8 @@
                 toast('info', `Search for a song. It starts playing in ${ch ? '#' + ch : 'your voice channel'}.`);
                 break;
             }
+            case 'vibe': playVibe(btn.dataset.query, btn.dataset.label); break;
+            case 'retry-recs': loadRecs(); break;
             case 'retry-history': historyLoaded = false; refreshHistory(); break;
             case 'retry-search': runSearch(input ? input.value : ''); break;
             case 'retry-lyrics': loadLyrics(true); break;
@@ -919,13 +1070,19 @@
     document.addEventListener('error', (e) => {
         const img = e.target;
         if (img.tagName !== 'IMG') return;
-        if (img.closest('.mapp-art')) img.remove();
+        if (img.closest('.mapp-art')) nextCover(img);
         else if (img.dataset.initial !== undefined) {
             const s = document.createElement('span');
             s.className = 'mapp-me-fallback'; s.textContent = img.dataset.initial || '?';
             img.replaceWith(s);
         }
     }, true);
+
+    // A missing maxres thumbnail is served as a 120x90 grey stand-in, not an error.
+    const tooSmall = (img) => img.naturalWidth > 0 && img.naturalWidth <= 120 && /ytimg\.com/.test(img.src);
+    document.addEventListener('load', (e) => { const img = e.target; if (img.tagName === 'IMG' && img.closest('.mapp-art') && tooSmall(img)) nextCover(img); }, true);
+    // Server-rendered covers may have settled before this script ran.
+    $$('.mapp-art img').forEach((img) => { if (img.complete && (img.naturalWidth === 0 || tooSmall(img))) nextCover(img); });
 
     // ── Keyboard shortcuts ───────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
@@ -957,5 +1114,6 @@
     route();
     requestAnimationFrame(frame);
     refreshLibrary();
+    loadRecs();
     if (hasGuild) soon(boot.status ? 5000 : 50);
 })();
