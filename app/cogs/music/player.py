@@ -52,6 +52,10 @@ class Player(wavelink.Player):
         self.panel: PlayerPanel = MISSING
         self.queue: Queue = Queue()
 
+        # Set once our own teardown starts, so the voice-state update that follows an
+        # explicit disconnect doesn't run it a second time.
+        self._tearing_down: bool = False
+
         # -- 24/7 ("always-on") state --------------------------------------
         # When ``always_on`` is set the player never disconnects on inactivity or an
         # empty queue; instead it refills itself based on ``always_on_mode``:
@@ -548,6 +552,8 @@ class Player(wavelink.Player):
         shutdown — if we deleted the row there, a restart would have nothing to resume.
         So a forced disconnect keeps the session intact for restore.
         """
+        self._tearing_down = True
+
         if self.lyrics_session is not None:
             with suppress(Exception):
                 await self.lyrics_session.stop()
@@ -574,6 +580,16 @@ class Player(wavelink.Player):
                 await self.channel.edit(status=None)
 
         await super().disconnect(**kwargs)
+
+    async def on_voice_state_update(self, data: Any, /) -> None:
+        # Someone else removed the bot from voice (an admin's "Disconnect", or the
+        # channel was deleted). wavelink only destroys the Lavalink player there, which
+        # left the panel, persisted session, lyrics and channel status behind — run the
+        # same teardown `stop` does instead.
+        if not data["channel_id"] and not self._tearing_down:
+            await self.disconnect()
+            return
+        await super().on_voice_state_update(data)
 
     async def cleanupleft(self) -> None:
         """Remove upcoming tracks requested by members who left the voice channel.

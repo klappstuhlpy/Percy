@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, AnyStr, Literal, NamedTuple, Self, TypeVar, override
 
 import discord
@@ -8,7 +9,7 @@ import numpy as np
 from discord.utils import MISSING
 
 from app.core.context import Context
-from app.core.views import View
+from app.core.views import LayoutView, View
 from app.utils import aenumerate, fuzzy, helpers
 from config import Emojis
 
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 __all__ = (
     "BasePaginator",
+    "BasePaginatorV2",
     "EmbedPaginator",
     "FilePaginator",
     "LinePaginator",
@@ -752,4 +754,175 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
             kwargs.pop('view')
 
         self.msg = await self._send(self.ctx, ephemeral, **kwargs, allowed_mentions=discord.AllowedMentions.none())
+        return self
+
+
+class BasePaginatorV2[T](LayoutView, metaclass=ABCMeta):
+    """Components V2 paginator: one container card with First/</>/Last navigation.
+
+    Subclasses implement :meth:`format_page`, returning the container children for a
+    page (text displays, sections, separators, ...). The base appends the navigation
+    row (only when there is more than one page) and whatever :meth:`footer_items`
+    returns, then wraps everything in a single :class:`discord.ui.Container`.
+
+    The whole layout is rebuilt on every page switch, so ``format_page`` and
+    ``footer_items`` may read live state.
+
+    Attributes
+    ----------
+    entries: List[T]
+        All entries, spread across :attr:`pages`.
+    per_page: :class:`int`
+        Entries per page. Keep it small: a CV2 message holds at most 40 components.
+    accent_colour: :class:`discord.Colour` | :class:`int` | None
+        The container's rail colour. Override on the subclass.
+    """
+
+    accent_colour: discord.Colour | int | None = helpers.Colour.brand()
+
+    def __init__(
+        self,
+        *,
+        entries: Collection[T],
+        per_page: int = 5,
+        timeout: float | None = 180,
+        members: discord.abc.Snowflake | None = None,
+    ) -> None:
+        super().__init__(timeout=timeout, members=members, disable_on_timeout=False)
+        self.per_page: int = per_page
+        self.extras: dict[str, Any] = {}
+        self._current_page: int = 0
+        self.entries: list[T] = []
+        self.pages: list[list[T]] = [[]]
+        self.set_entries(entries)
+
+        self.first_button = discord.ui.Button(label="First", style=discord.ButtonStyle.grey)
+        self.prev_button = discord.ui.Button(emoji="\N{LEFTWARDS BLACK ARROW}", style=discord.ButtonStyle.grey)
+        self.next_button = discord.ui.Button(emoji="\N{BLACK RIGHTWARDS ARROW}", style=discord.ButtonStyle.grey)
+        self.last_button = discord.ui.Button(label="Last", style=discord.ButtonStyle.grey)
+        self.first_button.callback = lambda i: self.show_page(i, 0)  # type: ignore[assignment]
+        self.prev_button.callback = lambda i: self.show_page(i, self._current_page - 1)  # type: ignore[assignment]
+        self.next_button.callback = lambda i: self.show_page(i, self._current_page + 1)  # type: ignore[assignment]
+        self.last_button.callback = lambda i: self.show_page(i, self.total_pages - 1)  # type: ignore[assignment]
+
+    @property
+    def current_page(self) -> int:
+        """:class:`int`: The 1-based page the user is on."""
+        return self._current_page + 1
+
+    @property
+    def total_pages(self) -> int:
+        """:class:`int`: The total amount of pages (always at least 1)."""
+        return len(self.pages)
+
+    @property
+    def numerate_start(self) -> int:
+        """:class:`int`: The 1-based number of the first entry on the current page."""
+        return self._current_page * self.per_page + 1
+
+    def set_entries(self, entries: Collection[T]) -> None:
+        """Replace the entries (e.g. after a mutation) and clamp the current page."""
+        self.entries = list(entries)
+        self.pages = [self.entries[i : i + self.per_page] for i in range(0, len(self.entries), self.per_page)] or [[]]
+        self._current_page = max(0, min(self._current_page, self.total_pages - 1))
+
+    @abstractmethod
+    async def format_page(self, entries: list[T], /) -> list[discord.ui.Item[Any]]:
+        """|coro|
+
+        Build the container children for the current page. ``entries`` may be empty.
+        """
+        raise NotImplementedError
+
+    def footer_items(self) -> list[discord.ui.Item[Any]]:
+        """Container children placed below the navigation row (action rows, a muted footer line)."""
+        return []
+
+    async def build(self) -> None:
+        """Recompose the layout for the current page."""
+        container = discord.ui.Container(accent_colour=self.accent_colour)
+        for item in await self.format_page(self.pages[self._current_page]):
+            container.add_item(item)
+
+        if self.total_pages > 1:
+            at_start = self._current_page == 0
+            at_end = self._current_page == self.total_pages - 1
+            self.first_button.disabled = self.prev_button.disabled = at_start
+            self.next_button.disabled = self.last_button.disabled = at_end
+            container.add_item(discord.ui.ActionRow(self.first_button, self.prev_button, self.next_button, self.last_button))
+
+        for item in self.footer_items():
+            container.add_item(item)
+
+        self.clear_items()
+        self.add_item(container)
+
+    async def show_page(self, interaction: discord.Interaction, index: int) -> None:
+        """|coro|
+
+        Switch to the 0-based page ``index`` (clamped) and edit the message.
+        """
+        self._current_page = max(0, min(index, self.total_pages - 1))
+        await self.refresh(interaction)
+
+    async def refresh(self, interaction: discord.Interaction) -> None:
+        """|coro|
+
+        Rebuild the current page and edit the message the interaction came from.
+        """
+        await self.build()
+        if interaction.response.is_done():
+            await interaction.edit_original_response(view=self)
+        else:
+            await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self) -> None:
+        if self.message is None:
+            return
+        for child in self.walk_children():
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)) and getattr(child, "url", None) is None:
+                child.disabled = True
+        with suppress(discord.HTTPException):
+            await self.message.edit(view=self)
+
+    @classmethod
+    async def start(
+        cls,
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: Collection[T],
+        per_page: int = 5,
+        timeout: float | None = 180,
+        author_only: bool = True,
+        ephemeral: bool = False,
+        **kwargs: Any,
+    ) -> Self:
+        """|coro|
+
+        Build and send the paginator. Extra ``kwargs`` land in :attr:`extras`.
+
+        Parameters
+        ----------
+        context: :class:`Context` | :class:`discord.Interaction`
+            Where to send the paginator.
+        entries: Collection[T]
+            The entries to paginate.
+        per_page: :class:`int`
+            Entries per page.
+        timeout: :class:`float` | None
+            Seconds of inactivity before the buttons are disabled.
+        author_only: :class:`bool`
+            Restrict every button to the invoking user.
+        ephemeral: :class:`bool`
+            Whether to send the message ephemerally (interactions only).
+        """
+        self = cls(
+            entries=entries, per_page=per_page, timeout=timeout, members=context.user if author_only else None
+        )
+        self.extras.update(kwargs)
+        await self.build()
+        self.message = await BasePaginator._send(
+            context, ephemeral, view=self, allowed_mentions=discord.AllowedMentions.none()
+        )
         return self

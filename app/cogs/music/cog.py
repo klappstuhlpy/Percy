@@ -41,7 +41,7 @@ from config import Emojis, genius_key
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
 from .player import MAX_CONSECUTIVE_ERRORS, Player
 from .playlist import PlaylistNameOrID
-from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator
+from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator, QueueView
 
 if TYPE_CHECKING:
     from app.utils.progress import ProgressTracker
@@ -1367,70 +1367,12 @@ class Music(Cog):
         if not player:
             return
 
-        # Up Next: the manual queue, plus wavelink's autoplay recommendations when
-        # 24/7 autoplay is active (those play once the manual queue drains).
-        upcoming: list[wavelink.Playable] = player.upcoming
-
-        # History: already-played tracks (merges manual + autoplay history), with the
-        # current track dropped, shown most-recent-first and capped.
-        played: list[wavelink.Playable] = [t for t in player.played_history if t is not player.current][::-1][:100]
-
-        if player.current is None and not upcoming and not played:
+        if player.current is None and not QueueView.collect(player):
             await ctx.send_error("No items currently in the queue.", ephemeral=True)
             return
 
         await ctx.defer()
-
-        PER_PAGE = 20
-        current = player.current
-        djs = ", ".join(x.mention for x in player.djs)
-
-        def fmt(track: wavelink.Playable, index: int) -> str:
-            tag = " *(autoplay)*" if track.recommended else ""
-            dur = convert_duration(track.length) if not track.is_stream else "LIVE"
-            return f"`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** [`{dur}`]{tag}"
-
-        # Pre-build the pages: Up Next chunk(s) first, then History chunk(s). Each
-        # page is a (section, lines) tuple so the paginator can flip between them.
-        up_lines = [fmt(t, i) for i, t in enumerate(upcoming, 1)]
-        hist_lines = [fmt(t, i) for i, t in enumerate(played, 1)]
-
-        pages: list[tuple[str, list[str]]] = [("Up Next", chunk) for chunk in (WrapList(up_lines, PER_PAGE) or [[]])]
-        pages += [("History", chunk) for chunk in WrapList(hist_lines, PER_PAGE)]
-
-        total_up, total_hist = len(upcoming), len(played)
-
-        class QueuePaginator(BasePaginator):
-            async def format_page(self, entries: list, /) -> discord.Embed:
-                assert ctx.guild is not None
-                section, lines = entries[0]
-                embed = discord.Embed(color=helpers.Colour.white())
-                icon_url = ctx.guild.icon.url if ctx.guild.icon else None
-                embed.set_author(name=f"{ctx.guild.name}'s Current Queue", icon_url=icon_url)
-
-                embed.description = ""
-                if current is not None:
-                    cur_dur = convert_duration(current.length) if not current.is_stream else "LIVE"
-                    embed.description = (
-                        "**╔ Now Playing:**\n"
-                        f"[{current.title}]({current.uri}) by **{current.author or 'Unknown'}** [`{cur_dur}`]\n\n"
-                    )
-
-                if section == "Up Next":
-                    body = "\n".join(lines) if lines else (
-                        "*It seems like there are currently no upcoming tracks.*\n"
-                        "Add one with </play:1207828024037216283>."
-                    )
-                    embed.description += "**╠ Up Next:**\n" + body
-                else:
-                    body = "\n".join(lines) if lines else "*Nothing has played yet.*"
-                    embed.description += "**╠ History** *(most recent first)*\n" + body
-
-                embed.add_field(name="╚ Settings:", value=f"DJ(s): {djs}", inline=False)
-                embed.set_footer(text=f"Up Next: {total_up} • History: {total_hist}")
-                return embed
-
-        await QueuePaginator.start(ctx, entries=pages, per_page=1)
+        await QueueView.for_player(ctx, player)
 
     # Lyrics Stuff
 

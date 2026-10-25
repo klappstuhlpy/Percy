@@ -12,7 +12,7 @@ from discord.utils import MISSING
 from wavelink import QueueMode
 
 from app.core import Bot, Context, LayoutView
-from app.core.pagination import BasePaginator
+from app.core.pagination import BasePaginator, BasePaginatorV2
 from app.core.views import ConfirmationView
 from app.services import LyricsResult
 from app.utils import (
@@ -28,6 +28,8 @@ from config import Emojis
 from .models import DJMode, PlayerState, Playlist, ShuffleMode, is_dj
 
 if TYPE_CHECKING:
+    import wavelink
+
     from app.database.base import GuildConfig
 
     from .cog import Music
@@ -743,6 +745,140 @@ class PlaylistPaginator(BasePaginator[discord.Embed | Any]):
 
         self.msg = await cls._send(context, ephemeral, view=self, embed=page)
         return self
+
+
+type QueueEntry = tuple[str, int, wavelink.Playable]
+
+
+class QueueView(BasePaginatorV2[QueueEntry]):
+    """CV2 queue card: now playing, then Up Next and History rows with a re-queue button each."""
+
+    @property
+    def player(self) -> Player:
+        return self.extras["player"]
+
+    @staticmethod
+    def collect(player: Player) -> list[QueueEntry]:
+        """Up Next (play order) followed by History (most recent first, current dropped, capped at 100)."""
+        played = [t for t in player.played_history if t is not player.current][::-1][:100]
+        return [("Up Next", i, t) for i, t in enumerate(player.upcoming, 1)] + [
+            ("History", i, t) for i, t in enumerate(played, 1)
+        ]
+
+    @classmethod
+    async def for_player(cls, ctx: Context, player: Player) -> QueueView:
+        return await cls.start(ctx, entries=cls.collect(player), author_only=False, timeout=300, player=player)
+
+    @staticmethod
+    def _duration(track: wavelink.Playable) -> str:
+        return "LIVE" if track.is_stream else convert_duration(track.length)
+
+    async def format_page(self, entries: list[QueueEntry], /) -> list[discord.ui.Item[Any]]:
+        player = self.player
+        up_count = sum(1 for section, _, _ in self.entries if section == "Up Next")
+        hist_count = len(self.entries) - up_count
+
+        header = (
+            f"## {Emojis.Music.queue} Music Queue\n"
+            f"**{pluralize(up_count):track} up next • {hist_count} played**\n"
+            f"-# Page {self.current_page}/{self.total_pages}"
+        )
+        items: list[discord.ui.Item[Any]] = [discord.ui.TextDisplay(header)]
+
+        if (current := player.current) is not None:
+            now = f"**Now Playing**\n[{truncate(current.title, 80)}]({current.uri}) - {current.author or 'Unknown'}\n-# `{self._duration(current)}`"
+            items.append(
+                discord.ui.Section(now, accessory=discord.ui.Thumbnail(current.artwork))
+                if current.artwork
+                else discord.ui.TextDisplay(now)
+            )
+
+        items.append(discord.ui.Separator())
+
+        if not entries:
+            items.append(discord.ui.TextDisplay("*Nothing queued.* Add a track with </play:1207828024037216283>."))
+
+        section_shown: str | None = None
+        for section, index, track in entries:
+            if section != section_shown:
+                label = "Up Next" if section == "Up Next" else "History *(most recent first)*"
+                items.append(discord.ui.TextDisplay(f"### {label}"))
+                section_shown = section
+
+            tag = " • *autoplay*" if track.recommended else ""
+            text = f"**{index}.** [{truncate(track.title, 60)}]({track.uri}) - {track.author or 'Unknown'}\n-# `{self._duration(track)}`{tag}"
+            if section == "Up Next":
+                # already queued, so nothing to add: plain row
+                items.append(discord.ui.TextDisplay(text))
+                continue
+            button = discord.ui.Button(emoji=Emojis.Music.queue_add, style=discord.ButtonStyle.grey)
+            button.callback = self._make_add_callback([track])  # type: ignore[assignment]
+            items.append(discord.ui.Section(text, accessory=button))
+
+        return items
+
+    def footer_items(self) -> list[discord.ui.Item[Any]]:
+        player = self.player
+        history = [track for section, _, track in self.entries if section == "History"]
+        buttons: list[discord.ui.Button[Any]] = []
+
+        if history:
+            requeue = discord.ui.Button(label=f"Queue History ({len(history)})", style=discord.ButtonStyle.green)
+            # oldest first, so the re-queued run plays in its original order
+            requeue.callback = self._make_add_callback(history[::-1])  # type: ignore[assignment]
+            buttons.append(requeue)
+
+        panel_msg = getattr(player.panel, "msg", MISSING) if player.panel is not MISSING else MISSING
+        if panel_msg is not MISSING and panel_msg is not None:
+            buttons.append(
+                discord.ui.Button(label="Open music controls", emoji=Emojis.Music.volume, url=panel_msg.jump_url)
+            )
+
+        items: list[discord.ui.Item[Any]] = []
+        if buttons:
+            items.append(discord.ui.ActionRow(*buttons))
+        djs = ", ".join(m.mention for m in player.djs) or "none"
+        items.append(discord.ui.TextDisplay(f"-# DJ(s): {djs}"))
+        return items
+
+    def _make_add_callback(self, tracks: list[wavelink.Playable]) -> Any:
+        async def callback(interaction: discord.Interaction) -> None:
+            await self._add_tracks(interaction, tracks)
+
+        return callback
+
+    async def _add_tracks(self, interaction: discord.Interaction, tracks: list[wavelink.Playable]) -> None:
+        """Append tracks to the queue. Same gate as ``play``: listener in the bot's channel, or a DJ."""
+        assert isinstance(interaction.user, discord.Member)
+        player = self.player
+
+        if not player.connected:
+            await interaction.response.send_message(f"{Emojis.error} I'm not connected to a voice channel.", ephemeral=True)
+            return
+        if player.queue.listen_together is not MISSING:
+            await interaction.response.send_message(
+                f"{Emojis.error} Stop the listen-together activity before queueing tracks.", ephemeral=True
+            )
+            return
+
+        member = interaction.user
+        in_channel = member.voice is not None and member.voice.channel == player.channel
+        if not in_channel and not (is_dj(member) or member.guild_permissions.manage_guild):
+            await interaction.response.send_message(
+                f"{Emojis.error} You must be in {player.channel.mention} to queue tracks.", ephemeral=True
+            )
+            return
+
+        await player.queue.put_wait(tracks)
+        if not player.playing:
+            await player.play(player.queue.get())
+
+        self.set_entries(self.collect(player))
+        await self.refresh(interaction)
+        await player.refresh_panel()
+
+        what = f"**{tracks[0].title}**" if len(tracks) == 1 else f"**{len(tracks)}** tracks"
+        await interaction.followup.send(f"{Emojis.success} Added {what} to the queue.", ephemeral=True)
 
 
 DEFAULT_CHANNEL_DESCRIPTION = """
