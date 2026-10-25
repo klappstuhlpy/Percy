@@ -1,4 +1,4 @@
-{# Client wiring for the manager sections above. Moved from the retired guild/music.html; Task 8 replaces it. #}
+{# Client wiring for the manager sections above. Moved from the retired guild/music.html #}
 {% if let Some(music) = music %}
 <script>
 const GUILD_ID = '{{ self.guild_id() }}';
@@ -9,6 +9,7 @@ const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ se
 </script>
 <script src="/static/js/guild/music.js"></script>
 <script>
+function musicErr(m) { if (window.showToast) window.showToast('error', m); }
 // 24/7 always-on controls
 (function () {
     const modeSel = document.getElementById('ao-mode');
@@ -33,8 +34,8 @@ const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ se
 
     enableBtn.addEventListener('click', async () => {
         const source = sourceInput.value.trim();
-        if (!source) { alert('Please provide a source (stream URL, playlist, or seed).'); return; }
-        if (!channelSel.value) { alert('Please pick a voice channel.'); return; }
+        if (!source) { musicErr('Please provide a source (stream URL, playlist, or seed).'); return; }
+        if (!channelSel.value) { musicErr('Please pick a voice channel.'); return; }
         enableBtn.disabled = true;
         const data = await post({ enabled: true, mode: modeSel.value, source, voice_channel_id: channelSel.value });
         enableBtn.disabled = false;
@@ -42,7 +43,7 @@ const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ se
             if (indicator) indicator.classList.add('active');
             statusText.innerHTML = 'Active — mode: <strong>' + modeSel.value + '</strong>';
         } else {
-            alert('Failed to enable 24/7: ' + (data.error || 'unknown error'));
+            musicErr('Failed to enable 24/7: ' + (data.error || 'unknown error'));
         }
     });
 
@@ -54,7 +55,7 @@ const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ se
             if (indicator) indicator.classList.remove('active');
             statusText.textContent = 'Inactive';
         } else {
-            alert('Failed to disable 24/7: ' + (data.error || 'unknown error'));
+            musicErr('Failed to disable 24/7: ' + (data.error || 'unknown error'));
         }
     });
 })();
@@ -86,7 +87,7 @@ const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ se
             if (data.ok) {
                 if (desc) desc.textContent = descriptions[String(mode)] || '';
             } else {
-                alert('Failed to update DJ mode: ' + (data.error || 'unknown error'));
+                musicErr('Failed to update DJ mode: ' + (data.error || 'unknown error'));
             }
         } finally {
             select.disabled = false;

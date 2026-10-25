@@ -63,3 +63,14 @@
     .mapp-bar { grid-template-columns: 1fr; text-align: center; }
     .mapp-bar-right { justify-content: center; }
 }
+
+/* Client-driven states (music/app.js). */
+.mapp-ico.on { color: var(--accent-violet); }
+.mapp-queue li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.mapp-queue li.dragging { opacity: 0.4; }
+.mapp-queue li[draggable] { cursor: grab; }
+.mapp-grip { opacity: 0.5; }
+.mapp-lyrics { max-height: 60vh; overflow: auto; font-size: 1.1rem; white-space: pre-wrap; }
+.mapp-lyrics p { margin: 0.4rem 0; opacity: 0.5; }
+.mapp-lyrics p.on { opacity: 1; color: var(--accent-violet); }
+[hidden] { display: none !important; }
