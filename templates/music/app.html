@@ -1,241 +1,503 @@
 {% extends "layout/layout.html" %}
 
-{# One music app for the personal and the guild route. Everything below is server-rendered, so the
-   read-only view works with JS off; the client script (Task 8) upgrades the controls. What a
-   viewer may press is Percy's role (visitor / listener / manager), never decided here. #}
+{# The music app: one full-viewport player for the personal route and the guild route. Everything
+   is server-rendered so the read-only view works with JS off; static/js/music/app.js upgrades it
+   (live poll, controls, search, lyrics, queue editing, toasts). What a viewer may press is Percy's
+   role (visitor / listener / DJ), never decided here — the template only mirrors it. #}
+
+{% macro art(url, seed, cls) %}<span class="mapp-art {{ cls }} g{{ self.grad(seed) }}" aria-hidden="true">{% match url %}{% when Some with (a) %}<img src="{{ a }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% when None %}<svg><use href="/static/icons/sprite.svg#i-music"/></svg>{% endmatch %}</span>{% endmacro %}
+
+{% macro icon(name) %}<svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-{{ name }}"/></svg>{% endmacro %}
 
 {% block title %}Music | Percy{% endblock %}
 
-{% block body_attrs %} data-guild-id="{{ self.guild_id() }}" data-role="{{ self.role() }}" data-manager-view="{{ manager_view }}"{% endblock %}
+{% block body_attrs %} class="mapp-page" data-guild-id="{{ self.guild_id() }}" data-role="{{ self.role() }}" data-manager-view="{{ manager_view }}" data-admin="{{ is_admin }}"{% endblock %}
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/music/app.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/music/player.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/music/views.css" type="text/css"/>
 {% if is_admin %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/guild/music.css" type="text/css"/>
 {% endif %}
 {% endblock %}
 
-{% block body %}
-<div class="mapp">
+{% block shell %}
+<div class="mapp" id="mapp" data-boot="{{ self.boot_json() }}">
+    <a class="mapp-skip" href="#mapp-main">Skip to content</a>
+
+    {# ─── Top bar ─────────────────────────────────────────────────────── #}
     <header class="mapp-top">
-        <span class="icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>
-        <details class="mapp-picker">
-            <summary class="btn-pill">
+        <a class="mapp-logo" href="/dashboard/music{% if !self.guild_id().is_empty() %}?guild={{ self.guild_id() }}{% endif %}" aria-label="Percy Music">
+            <span class="mapp-logo-mark">{% call icon("music") %}</span>
+            <span class="mapp-logo-text">Percy<b>Music</b></span>
+        </a>
+
+        <details class="mapp-picker" id="mapp-picker">
+            <summary class="mapp-picker-btn" aria-label="Choose a server">
                 {% match selected %}
-                {% when Some with (g) %}<span class="mapp-dot{% if g.playing %} is-live{% endif %}"></span>{{ g.name }}
-                {% when None %}Pick a server
+                {% when Some with (g) %}
+                <span class="mapp-dot{% if g.playing %} is-live{% endif %}" title="{% if g.playing %}Playing now{% else %}Idle{% endif %}"></span>
+                <span class="mapp-picker-name">{{ g.name }}</span>
+                {% when None %}
+                <span class="mapp-dot"></span>
+                <span class="mapp-picker-name">Pick a server</span>
                 {% endmatch %}
+                {% call icon("chevron-down") %}
             </summary>
-            <ul class="mapp-picker-list">
+            <div class="mapp-picker-pop" role="menu">
+                <p class="mapp-pop-label">Your servers</p>
+                {% if guilds.is_empty() %}
+                <p class="mapp-pop-empty">No servers shared with Percy.</p>
+                {% endif %}
                 {% for g in guilds %}
-                <li><a href="/dashboard/music?guild={{ g.id }}">
-                    <span class="mapp-dot{% if g.playing %} is-live{% endif %}"></span>{{ g.name }}
-                </a></li>
+                <a role="menuitem" class="mapp-picker-item{% if g.id == self.guild_id() %} is-on{% endif %}" href="/dashboard/music?guild={{ g.id }}">
+                    {% match g.icon %}
+                    {% when Some with (i) %}<img class="mapp-guild-ico" src="{{ i }}" alt="" loading="lazy">
+                    {% when None %}<span class="mapp-guild-ico g{{ self.grad(g.name) }}">{{ self.initial(g.name) }}</span>
+                    {% endmatch %}
+                    <span class="mapp-picker-item-name">{{ g.name }}</span>
+                    {% if g.playing %}<span class="mapp-dot is-live" title="Playing now"></span>{% endif %}
+                </a>
                 {% endfor %}
-            </ul>
+            </div>
         </details>
-        <form class="mapp-search" role="search" action="/dashboard/music" method="get">
-            {% if !self.guild_id().is_empty() %}<input type="hidden" name="guild" value="{{ self.guild_id() }}">{% endif %}
-            <svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-search"/></svg>
-            <input type="search" id="mapp-search" placeholder="Search songs or artists" autocomplete="off" aria-label="Search songs or artists">
-            <div class="mapp-results" id="mapp-results" hidden></div>
+
+        <form class="mapp-search" role="search" action="#search" id="mapp-search-form">
+            {% call icon("search") %}
+            <input type="search" id="mapp-search" name="q" autocomplete="off" spellcheck="false"
+                   placeholder="{% if self.guild_id().is_empty() %}Pick a server to search{% else %}What do you want to hear?{% endif %}"
+                   aria-label="Search songs or artists"{% if self.guild_id().is_empty() %} disabled{% endif %}>
+            <kbd class="mapp-kbd" aria-hidden="true">/</kbd>
+            <button type="button" class="mapp-search-clear" id="mapp-search-clear" aria-label="Clear search" hidden>{% call icon("x") %}</button>
         </form>
+
+        <div class="mapp-top-end">
+            {% if selected.is_some() %}
+            <span class="mapp-role" id="mapp-role" data-role="{{ self.role() }}">{{ self.role_label() }}</span>
+            {% endif %}
+            <button type="button" class="mapp-ibtn" id="theme-toggle" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">{% call icon("contrast") %}</button>
+            <details class="mapp-me">
+                <summary aria-label="Account menu">
+                    {% match account %}
+                    {% when Some with (a) %}
+                    {% if a.has_discord() %}<img src="/account/discord/avatar" alt="" width="32" height="32" data-initial="{{ self.initial(a.name) }}">{% else %}<span class="mapp-me-fallback">{{ self.initial(a.name) }}</span>{% endif %}
+                    {% when None %}<span class="mapp-me-fallback">?</span>
+                    {% endmatch %}
+                </summary>
+                <div class="mapp-me-pop" role="menu">
+                    {% match account %}{% when Some with (a) %}<p class="mapp-pop-label">{{ a.name }}</p>{% when None %}{% endmatch %}
+                    <a role="menuitem" href="/dashboard">My servers</a>
+                    <a role="menuitem" href="/account">Account</a>
+                    <a role="menuitem" href="/">Percy home</a>
+                    <hr>
+                    <a role="menuitem" href="/logout">Log out</a>
+                </div>
+            </details>
+        </div>
     </header>
 
-    <div class="mapp-body">
-        <nav class="mapp-side" aria-label="Music">
-            {% if manager_view %}<a href="/dashboard/guild/{{ self.guild_id() }}"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-home"/></svg>Back to server dashboard</a><hr>{% endif %}
-            {% if selected.is_some() %}
-            <a href="#home" class="on"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-home"/></svg>Home</a>
-            <a href="#history"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-history"/></svg>History</a>
-            {% endif %}
-            <a href="#liked"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart"/></svg>Liked Songs</a>
-            <a href="#playlists"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-playlist"/></svg>Playlists</a>
-            {% if is_admin %}
-            <hr>
-            <a href="#dj-mode-section" class="mgr"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-settings"/></svg>Session settings <span class="chip">DJ</span></a>
-            <a href="#eq-section" class="mgr"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-sliders"/></svg>Equalizer &amp; filters <span class="chip">DJ</span></a>
-            <a href="#setup-section" class="mgr"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-hash"/></svg>Music channel setup <span class="chip">Admin</span></a>
-            {% endif %}
-        </nav>
+    {# ─── Left navigation (becomes the bottom tab bar on phones) ─────── #}
+    <nav class="mapp-nav" aria-label="Music">
+        {% if manager_view %}
+        <a class="mapp-nav-back" href="/dashboard/guild/{{ self.guild_id() }}">{% call icon("arrow-left") %}<span>Server dashboard</span></a>
+        {% endif %}
+        {% if selected.is_some() %}
+        <a href="#home" data-view-link="home" class="mapp-nav-link">{% call icon("home") %}<span>Home</span></a>
+        <a href="#search" data-view-link="search" class="mapp-nav-link mapp-nav-mobile">{% call icon("search") %}<span>Search</span></a>
+        <a href="#history" data-view-link="history" class="mapp-nav-link">{% call icon("history") %}<span>History</span></a>
+        {% else %}
+        <a href="#home" data-view-link="home" class="mapp-nav-link">{% call icon("home") %}<span>Servers</span></a>
+        {% endif %}
+        <a href="#liked" data-view-link="liked" class="mapp-nav-link">{% call icon("heart") %}<span>Liked Songs</span><span class="mapp-nav-count" id="mapp-liked-count">{{ library.liked.len() }}</span></a>
+        <a href="#playlists" data-view-link="playlists" class="mapp-nav-link">{% call icon("playlist") %}<span>Playlists</span><span class="mapp-nav-count">{{ library.playlists.len() }}</span></a>
+        {% if is_admin %}
+        <p class="mapp-nav-label">Manage</p>
+        <a href="#session" data-view-link="session" class="mapp-nav-link mapp-nav-mgr">{% call icon("settings") %}<span>Session settings</span><span class="mapp-chip">DJ</span></a>
+        <a href="#audio" data-view-link="audio" class="mapp-nav-link mapp-nav-mgr">{% call icon("sliders") %}<span>Equalizer</span><span class="mapp-chip">DJ</span></a>
+        <a href="#setup" data-view-link="setup" class="mapp-nav-link mapp-nav-mgr">{% call icon("hash") %}<span>Music channel</span><span class="mapp-chip mapp-chip--admin">Admin</span></a>
+        {% endif %}
+        {% if selected.is_some() %}
+        <a href="#queue" class="mapp-nav-link mapp-nav-mobile" data-rail-toggle>{% call icon("queue") %}<span>Queue</span></a>
+        {% endif %}
+        <div class="mapp-nav-foot">
+            <div class="mapp-keys" aria-label="Keyboard shortcuts">
+                <p>{% call icon("keyboard") %}Shortcuts</p>
+                <dl>
+                    <dt><kbd>Space</kbd></dt><dd>Play / pause</dd>
+                    <dt><kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt><dd>Seek 5 s</dd>
+                    <dt><kbd>M</kbd></dt><dd>Mute</dd>
+                    <dt><kbd>/</kbd></dt><dd>Search</dd>
+                </dl>
+            </div>
+        </div>
+    </nav>
 
-        <main class="mapp-main">
+    {# ─── Main ─────────────────────────────────────────────────────────── #}
+    <main class="mapp-main" id="mapp-main" tabindex="-1">
+        <div class="mapp-conn" id="mapp-conn" role="status" hidden>
+            {% call icon("wifi-off") %}<span><b>Connection lost</b> — retrying…</span>
+        </div>
+
+        {# Home #}
+        <section class="mapp-view" data-view="home" aria-labelledby="mapp-h-home">
             {% if guilds.is_empty() %}
-            <div class="card mapp-empty">
+            <h1 class="mapp-title" id="mapp-h-home">Music</h1>
+            <div class="mapp-empty mapp-empty--lg">
+                <span class="mapp-empty-ico">{% call icon("wifi-off") %}</span>
                 <h2>No servers to show</h2>
                 <p>Percy is unreachable right now, or you do not share a server with it yet. Try again in a moment.</p>
+                <a class="mapp-btn" href="/dashboard">Go to my servers</a>
             </div>
             {% else if selected.is_none() %}
-            <div class="card mapp-empty">
-                <h2>Pick a server</h2>
-                <p>Choose a server above to see what is playing and what you can do with it.</p>
+            <h1 class="mapp-title" id="mapp-h-home">Pick a server</h1>
+            <p class="mapp-lede">Choose where you want to listen. You can see what is playing everywhere Percy is; controls unlock when you join its voice channel.</p>
+            <div class="mapp-guilds">
+                {% for g in guilds %}
+                <a class="mapp-guild" href="/dashboard/music?guild={{ g.id }}">
+                    {% match g.icon %}
+                    {% when Some with (i) %}<img class="mapp-guild-art" src="{{ i }}" alt="" loading="lazy">
+                    {% when None %}<span class="mapp-guild-art g{{ self.grad(g.name) }}">{{ self.initial(g.name) }}</span>
+                    {% endmatch %}
+                    <span class="mapp-guild-name">{{ g.name }}</span>
+                </a>
+                {% endfor %}
             </div>
-            {% else if music.is_none() %}
-            <div class="card mapp-empty">
-                <h2>Player unavailable</h2>
-                <p>Percy is unreachable for this server right now, so the player cannot be shown.</p>
-            </div>
-            {% endif %}
-
-            {% if selected.is_some() %}
-            <section id="home" class="mapp-section">
-                {% if self.can_start() %}
-                <div class="card card--accent-violet mapp-banner">
-                    <div>
-                        <b>You are in {% match viewer %}{% when Some with (v) %}{% match v.voice_channel %}{% when Some with (c) %}#{{ c.name }}{% when None %}a voice channel{% endmatch %}{% when None %}a voice channel{% endmatch %}</b>
-                        <span class="mapp-muted">Nothing playing. Start a session here.</span>
-                    </div>
-                    <button type="button" class="btn-pill" data-action="start" disabled>Start session</button>
-                </div>
-                {% else if !self.can_control() %}
-                <div class="card mapp-banner">
-                    <div>
-                        <b>Listening only</b>
-                        <span class="mapp-muted">{% match viewer %}{% when Some with (v) %}{% match v.bot_channel %}{% when Some with (c) %}Join #{{ c.name }} to control playback.{% when None %}Join a voice channel to start playback.{% endmatch %}{% when None %}Join a voice channel to control playback.{% endmatch %}</span>
-                    </div>
-                </div>
-                {% endif %}
-
-                <h2 class="mapp-h">Recently played in this server</h2>
-                {% if history.is_empty() %}
-                <p class="mapp-muted">Nothing has played here yet.</p>
-                {% else %}
-                <div class="mapp-cards">
-                    {% for t in history.iter().take(8) %}
-                    <div class="card mapp-card" data-uri="{{ t.uri.as_deref().unwrap_or("") }}">
-                        {% match t.artwork %}{% when Some with (a) %}<img class="mapp-art" src="{{ a }}" alt="" loading="lazy">{% when None %}<span class="mapp-art icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                        <p title="{{ t.title }} - {{ t.author.as_deref().unwrap_or("") }}">{{ t.title }}</p>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                <h2 class="mapp-h">Your top tracks</h2>
-                {% if library.top_tracks.is_empty() %}
-                <p class="mapp-muted">Play something and your favourites show up here.</p>
-                {% else %}
-                <ul class="mapp-tracks">
-                    {% for t in library.top_tracks.iter().take(10) %}
-                    <li class="mapp-track" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-name="{{ t.title }}">
-                        {% match t.artwork %}{% when Some with (a) %}<img class="mapp-thumb" src="{{ a }}" alt="" loading="lazy">{% when None %}<span class="mapp-thumb icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                        <span class="mapp-track-text">{{ t.title }}<small>{{ t.author.as_deref().unwrap_or("") }}</small></span>
-                        <span class="mapp-muted">{{ t.plays }} plays</span>
-                        <span class="mapp-muted">{{ self.dur(t.length_ms) }}</span>
-                        <button type="button" class="mapp-ico" data-action="queue" aria-label="Add to queue" disabled><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-plus"/></svg></button>
-                        <button type="button" class="mapp-ico" data-action="like" aria-label="Like" disabled><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart"/></svg></button>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </section>
-
-            <section id="history" class="mapp-section">
-                <h2 class="mapp-h">History</h2>
-                {% if history.is_empty() %}
-                <p class="mapp-muted">No plays recorded in this server yet.</p>
-                {% else %}
-                <ul class="mapp-tracks">
-                    {% for t in history %}
-                    <li class="mapp-track" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-name="{{ t.title }}">
-                        {% match t.artwork %}{% when Some with (a) %}<img class="mapp-thumb" src="{{ a }}" alt="" loading="lazy">{% when None %}<span class="mapp-thumb icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                        <span class="mapp-track-text">{{ t.title }}<small>{{ t.author.as_deref().unwrap_or("") }}</small></span>
-                        <span class="mapp-muted">{{ self.dur(t.length_ms) }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </section>
-            {% endif %}
-
-            <section id="liked" class="mapp-section">
-                <h2 class="mapp-h">Liked Songs</h2>
-                {% if library.liked.is_empty() %}
-                <p class="mapp-muted">Songs you like show up here.</p>
-                {% else %}
-                <ul class="mapp-tracks">
-                    {% for t in library.liked %}
-                    <li class="mapp-track" data-uri="{{ t.url }}" data-name="{{ t.name }}">
-                        <span class="mapp-thumb icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart-fill"/></svg></span>
-                        <span class="mapp-track-text">{{ t.name }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </section>
-
-            <section id="playlists" class="mapp-section">
-                <h2 class="mapp-h">Playlists</h2>
-                {% if library.playlists.is_empty() %}
-                <p class="mapp-muted">Playlists you save with Percy show up here.</p>
-                {% else %}
-                <ul class="mapp-tracks">
-                    {% for p in library.playlists %}
-                    <li class="mapp-track" data-playlist-id="{{ p.id }}">
-                        <span class="mapp-thumb icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-playlist"/></svg></span>
-                        <span class="mapp-track-text">{{ p.name }}<small>{{ p.track_count }} tracks</small></span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </section>
-
-            {% if is_admin %}
-            {% include "music/manager_session.html" %}
-            {% include "music/manager_audio.html" %}
-            {% include "music/manager_panel.html" %}
-            {% endif %}
-        </main>
-
-        <aside class="mapp-rail" aria-label="Now playing">
-            {% match music %}
-            {% when Some with (m) %}
-            {% match m.now_playing %}
-            {% when Some with (np) %}
-            <div class="card mapp-np">
-                {% match np.artwork %}{% when Some with (a) %}<img class="mapp-thumb mapp-thumb--lg" src="{{ a }}" alt="">{% when None %}<span class="mapp-thumb mapp-thumb--lg icon-tile"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>{% endmatch %}
-                <div><small class="mapp-muted">Now playing{% match m.channel_name %}{% when Some with (c) %} in #{{ c }}{% when None %}{% endmatch %}</small><br><b>{{ np.title }}</b><br><small>{{ np.author }}</small></div>
-            </div>
-            {% when None %}
-            <div class="card mapp-np"><span class="mapp-muted">Nothing is playing.</span></div>
-            {% endmatch %}
-            <h3 class="mapp-h">Queue</h3>
-            {% if m.queue.is_empty() %}
-            <p class="mapp-muted">The queue is empty.</p>
             {% else %}
-            <ol class="mapp-queue" id="mapp-queue">
-                {% for t in m.queue.iter().take(25) %}
-                <li data-index="{{ loop.index0 }}"><span>{{ t.title }}</span><small>{{ t.author }}</small></li>
+            <h1 class="mapp-sr" id="mapp-h-home">Music in {% match selected %}{% when Some with (g) %}{{ g.name }}{% when None %}{% endmatch %}</h1>
+            <div id="mapp-banner">
+                {% if let Some(b) = self.banner() %}
+                <div class="mapp-banner is-{{ b.kind }}">
+                    <span class="mapp-banner-ico">{% call icon(b.icon) %}</span>
+                    <div class="mapp-banner-text"><b>{{ b.title }}</b><span>{{ b.text }}</span></div>
+                    {% if !b.cta.is_empty() %}<button type="button" class="mapp-btn mapp-btn--accent" data-act="start">{% call icon("play") %}{{ b.cta }}</button>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="mapp-panel">
+            <div class="mapp-panel-head">
+                <div><h2>Recently played</h2><p>{% call icon("history") %}What this server listened to lately</p></div>
+                <div class="mapp-shelf-nav"><a href="#history" class="mapp-link">Show all</a><button type="button" class="mapp-ibtn mapp-ibtn--sm" data-shelf="-1" aria-label="Scroll left">{% call icon("arrow-left") %}</button><button type="button" class="mapp-ibtn mapp-ibtn--sm mapp-flip" data-shelf="1" aria-label="Scroll right">{% call icon("arrow-left") %}</button></div>
+            </div>
+            <div class="mapp-shelf" id="mapp-recents">
+                {% if history.is_empty() %}
+                <div class="mapp-empty">
+                    <span class="mapp-empty-ico">{% call icon("history") %}</span>
+                    <h3>Nothing played here yet</h3>
+                    <p>Songs played in this server will show up here.</p>
+                </div>
+                {% else %}
+                {% for t in history.iter().take(10) %}
+                <div class="mapp-card" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}">
+                    <div class="mapp-card-art">
+                        {% call art(t.artwork, t.title, "mapp-art--fill") %}
+                        <span class="mapp-card-badge">{% call icon("history") %}<time datetime="{{ t.played_at }}">{{ t.played_at }}</time></span>
+                        <div class="mapp-card-hover">
+                            <button type="button" class="mapp-card-play" data-act="playnow" aria-label="Play {{ t.title }} now" title="Play now">{% call icon("play") %}</button>
+                            <button type="button" class="mapp-card-add" data-act="add" aria-label="Add {{ t.title }} to queue" title="Add to queue">{% call icon("plus") %}</button>
+                        </div>
+                    </div>
+                    <p class="mapp-card-title" title="{{ t.title }}">{{ t.title }}</p>
+                    <p class="mapp-card-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</p>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+            </div>
+
+            <div class="mapp-panel">
+            <div class="mapp-panel-head"><div><h2>Your top tracks</h2><p>{% call icon("star") %}The songs you play most with Percy</p></div></div>
+            {% if library.top_tracks.is_empty() %}
+            <div class="mapp-empty">
+                <span class="mapp-empty-ico">{% call icon("star") %}</span>
+                <h3>No top tracks yet</h3>
+                <p>Play a few songs with Percy and your favourites collect here.</p>
+            </div>
+            {% else %}
+            <ol class="mapp-rows" id="mapp-top">
+                {% for t in library.top_tracks.iter().take(10) %}
+                <li class="mapp-row" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}">
+                    <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.title }} now" title="Play now">{% call icon("play") %}</button></span>
+                    {% call art(t.artwork, t.title, "mapp-art--sm") %}
+                    <span class="mapp-row-text"><span class="mapp-row-title">{{ t.title }}</span><span class="mapp-row-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</span></span>
+                    <span class="mapp-row-meta">{{ t.plays }} play{% if t.plays != 1 %}s{% endif %}</span>
+                    <span class="mapp-row-acts">
+                        <button type="button" class="mapp-ibtn" data-act="add" aria-label="Add {{ t.title }} to queue" title="Add to queue">{% call icon("plus") %}</button>
+                        <button type="button" class="mapp-ibtn mapp-like" data-act="like" aria-pressed="false" aria-label="Like {{ t.title }}" title="Like">{% call icon("heart") %}</button>
+                    </span>
+                    <span class="mapp-row-dur">{{ self.dur(t.length_ms) }}</span>
+                </li>
                 {% endfor %}
             </ol>
             {% endif %}
-            <p class="mapp-muted">{{ m.listeners.len() }} listening</p>
-            {% when None %}
-            <p class="mapp-muted">No player data.</p>
-            {% endmatch %}
-        </aside>
-    </div>
-
-    <footer class="mapp-bar" aria-label="Player controls">
-        <div class="mapp-bar-now">
-            {% match music %}{% when Some with (m) %}{% match m.now_playing %}{% when Some with (np) %}<b>{{ np.title }}</b><br><small class="mapp-muted">{{ np.author }}</small>{% when None %}<span class="mapp-muted">Nothing playing</span>{% endmatch %}{% when None %}<span class="mapp-muted">Nothing playing</span>{% endmatch %}
-        </div>
-        <div class="mapp-bar-ctr">
-            <div class="mapp-ctrls">
-                <button type="button" class="mapp-ico" data-action="shuffle" aria-label="Shuffle"{% if !self.can_control() %} disabled{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-shuffle"/></svg></button>
-                <button type="button" class="mapp-ico" data-action="back" aria-label="Previous"{% if !self.can_control() %} disabled{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-prev"/></svg></button>
-                <button type="button" class="mapp-ico mapp-ico--main" data-action="toggle" aria-label="Play or pause"{% if !self.can_control() %} disabled{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-play"/></svg></button>
-                <button type="button" class="mapp-ico" data-action="skip" aria-label="Next"{% if !self.can_control() %} disabled{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-next"/></svg></button>
-                <button type="button" class="mapp-ico" data-action="loop" aria-label="Repeat"{% if !self.can_control() %} disabled{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-repeat"/></svg></button>
             </div>
-            <div class="mapp-prog"><i></i></div>
+            {% endif %}
+        </section>
+
+        {% if selected.is_some() %}
+        {# History #}
+        <section class="mapp-view" data-view="history" aria-labelledby="mapp-h-history" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico">{% call icon("history") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-history">History</h1><p class="mapp-lede">Everything played in this server recently, newest first.</p></div>
+            </div>
+            <div class="mapp-panel" id="mapp-history">
+                {% if history.is_empty() %}
+                <div class="mapp-empty">
+                    <span class="mapp-empty-ico">{% call icon("history") %}</span>
+                    <h3>No history yet</h3>
+                    <p>Nothing has been played in this server. Start a session and it fills up.</p>
+                </div>
+                {% else %}
+                <ol class="mapp-rows">
+                    {% for t in history %}
+                    <li class="mapp-row" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}">
+                        <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.title }} now" title="Play now">{% call icon("play") %}</button></span>
+                        {% call art(t.artwork, t.title, "mapp-art--sm") %}
+                        <span class="mapp-row-text"><span class="mapp-row-title">{{ t.title }}</span><span class="mapp-row-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</span></span>
+                        <span class="mapp-row-meta"><time datetime="{{ t.played_at }}" data-ago>{{ t.played_at }}</time></span>
+                        <span class="mapp-row-acts">
+                            <button type="button" class="mapp-ibtn" data-act="add" aria-label="Add {{ t.title }} to queue" title="Add to queue">{% call icon("plus") %}</button>
+                            <button type="button" class="mapp-ibtn mapp-like" data-act="like" aria-pressed="false" aria-label="Like {{ t.title }}" title="Like">{% call icon("heart") %}</button>
+                        </span>
+                        <span class="mapp-row-dur">{{ self.dur(t.length_ms) }}</span>
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% endif %}
+            </div>
+        </section>
+
+        {# Search results (filled by app.js) #}
+        <section class="mapp-view" data-view="search" aria-labelledby="mapp-h-search" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico">{% call icon("search") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-search">Search</h1><p class="mapp-lede">Results play in this server's voice channel.</p></div>
+            </div>
+            <div class="mapp-panel" id="mapp-results" aria-live="polite">
+                <div class="mapp-empty">
+                    <span class="mapp-empty-ico">{% call icon("search") %}</span>
+                    <h3>Find something to play</h3>
+                    <p>Type a song, an artist or paste a link in the search bar above.</p>
+                </div>
+            </div>
+        </section>
+
+        {# Lyrics (filled by app.js) #}
+        <section class="mapp-view mapp-view--lyrics" data-view="lyrics" aria-labelledby="mapp-h-lyrics" hidden>
+            <p class="mapp-eyebrow">Lyrics</p>
+            <h1 class="mapp-title" id="mapp-h-lyrics">{% match self.now_playing() %}{% when Some with (np) %}{{ np.title }}{% when None %}Nothing playing{% endmatch %}</h1>
+            <div id="mapp-lyrics"></div>
+        </section>
+        {% endif %}
+
+        {# Liked Songs #}
+        <section class="mapp-view" data-view="liked" aria-labelledby="mapp-h-liked" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico mapp-head-ico--like">{% call icon("heart-fill") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-liked">Liked Songs</h1><p class="mapp-lede" id="mapp-liked-sum">{{ library.liked.len() }} song{% if library.liked.len() != 1 %}s{% endif %}</p></div>
+            </div>
+            <div class="mapp-panel" id="mapp-liked">
+                {% if library.liked.is_empty() %}
+                <div class="mapp-empty">
+                    <span class="mapp-empty-ico">{% call icon("heart") %}</span>
+                    <h3>Songs you like appear here</h3>
+                    <p>Tap the heart on any track — in the player, your history or search — to save it.</p>
+                </div>
+                {% else %}
+                <ol class="mapp-rows">
+                    {% for t in library.liked %}
+                    <li class="mapp-row" data-uri="{{ t.url }}" data-title="{{ t.name }}" data-author="">
+                        <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.name }} now" title="Play now">{% call icon("play") %}</button></span>
+                        <span class="mapp-art mapp-art--sm g{{ self.grad(t.name) }}" aria-hidden="true">{% call icon("heart-fill") %}</span>
+                        <span class="mapp-row-text"><span class="mapp-row-title">{{ t.name }}</span><span class="mapp-row-sub">Liked song</span></span>
+                        <span class="mapp-row-meta"></span>
+                        <span class="mapp-row-acts">
+                            <button type="button" class="mapp-ibtn" data-act="add" aria-label="Add {{ t.name }} to queue" title="Add to queue">{% call icon("plus") %}</button>
+                            <button type="button" class="mapp-ibtn mapp-like is-on" data-act="like" aria-pressed="true" aria-label="Unlike {{ t.name }}" title="Remove from Liked Songs">{% call icon("heart-fill") %}</button>
+                        </span>
+                        <span class="mapp-row-dur"></span>
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% endif %}
+            </div>
+        </section>
+
+        {# Playlists #}
+        <section class="mapp-view" data-view="playlists" aria-labelledby="mapp-h-playlists" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico">{% call icon("playlist") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-playlists">Playlists</h1><p class="mapp-lede">Playlists you saved with Percy.</p></div>
+            </div>
+            <div class="mapp-panel">
+            {% if library.playlists.is_empty() %}
+            <div class="mapp-empty">
+                <span class="mapp-empty-ico">{% call icon("playlist") %}</span>
+                <h3>No playlists yet</h3>
+                <p>Create one in Discord with <code>/playlist create</code> and it shows up here.</p>
+            </div>
+            {% else %}
+            <div class="mapp-grid">
+                {% for p in library.playlists %}
+                <a class="mapp-card mapp-card--link" href="#playlist/{{ p.id }}">
+                    <div class="mapp-card-art"><span class="mapp-art mapp-art--fill g{{ self.grad(p.name) }}" aria-hidden="true">{% call icon("playlist") %}</span></div>
+                    <p class="mapp-card-title" title="{{ p.name }}">{{ p.name }}</p>
+                    <p class="mapp-card-sub">{{ p.track_count }} track{% if p.track_count != 1 %}s{% endif %}</p>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            </div>
+        </section>
+
+        {# One playlist (filled by app.js) #}
+        <section class="mapp-view" data-view="playlist" aria-label="Playlist" hidden>
+            <div id="mapp-playlist"></div>
+        </section>
+
+        {% if is_admin %}
+        <section class="mapp-view mapp-view--admin" data-view="session" aria-labelledby="mapp-h-session" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico">{% call icon("settings") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-session">Session settings <span class="mapp-chip">DJ</span></h1><p class="mapp-lede">Who may steer the player, and whether Percy stays in voice around the clock.</p></div>
+            </div>
+            {% include "music/manager_session.html" %}
+        </section>
+        <section class="mapp-view mapp-view--admin" data-view="audio" aria-labelledby="mapp-h-audio" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico">{% call icon("sliders") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-audio">Equalizer &amp; filters <span class="mapp-chip">DJ</span></h1><p class="mapp-lede">Shape the sound of the live player. Changes apply to everyone listening.</p></div>
+            </div>
+            {% include "music/manager_audio.html" %}
+            {% if music.is_none() %}<div class="mapp-empty"><span class="mapp-empty-ico">{% call icon("wifi-off") %}</span><h3>Player unavailable</h3><p>Percy could not be reached, so the equalizer cannot be shown.</p></div>{% endif %}
+        </section>
+        <section class="mapp-view mapp-view--admin" data-view="setup" aria-labelledby="mapp-h-setup" hidden>
+            <div class="mapp-head">
+                <span class="mapp-head-ico">{% call icon("hash") %}</span>
+                <div><h1 class="mapp-title" id="mapp-h-setup">Music channel <span class="mapp-chip mapp-chip--admin">Admin</span></h1><p class="mapp-lede">The interactive now-playing panel Percy posts in Discord.</p></div>
+            </div>
+            {% include "music/manager_panel.html" %}
+            {% if music.is_none() %}<div class="mapp-empty"><span class="mapp-empty-ico">{% call icon("wifi-off") %}</span><h3>Player unavailable</h3><p>Percy could not be reached, so the panel settings cannot be shown.</p></div>{% endif %}
+        </section>
+        {% endif %}
+    </main>
+
+    {# ─── Right rail: now playing + queue (a drawer below 1200px) ─────── #}
+    <aside class="mapp-rail" id="mapp-rail" aria-label="Now playing and queue">
+        <div class="mapp-panel mapp-rail-np" id="mapp-np">
+            {% match self.now_playing() %}
+            {% when Some with (np) %}
+            <div class="mapp-np">
+                {% call art(np.artwork, np.title, "mapp-art--np") %}
+                <div class="mapp-np-text">
+                    <p class="mapp-np-label">{% if np.paused %}Paused{% else %}Now playing{% endif %}</p>
+                    <p class="mapp-np-title" title="{{ np.title }}">{{ np.title }}</p>
+                    <p class="mapp-np-sub">{{ np.author }}</p>
+                </div>
+                <button type="button" class="mapp-ibtn mapp-like" data-act="like" data-np aria-pressed="false" aria-label="Like {{ np.title }}" title="Like">{% call icon("heart") %}</button>
+            </div>
+            <div class="mapp-np-facts">
+                {% match music %}{% when Some with (m) %}{% match m.channel_name %}{% when Some with (c) %}<span class="mapp-fact">{% call icon("voice") %}#{{ c }}</span>{% when None %}{% endmatch %}{% when None %}{% endmatch %}
+                <span class="mapp-fact">{% call icon("users") %}{{ self.listeners() }} listening</span>
+                {% match np.requester %}{% when Some with (r) %}{% match r.name %}{% when Some with (n) %}<span class="mapp-fact">{% call icon("user") %}{{ n }}</span>{% when None %}{% endmatch %}{% when None %}{% endmatch %}
+            </div>
+            {% when None %}
+            <div class="mapp-np">
+                <span class="mapp-art mapp-art--np mapp-art--idle" aria-hidden="true">{% call icon("disc") %}</span>
+                <div class="mapp-np-text">
+                    <p class="mapp-np-label">Now playing</p>
+                    <p class="mapp-np-title">{% if selected.is_some() %}Nothing playing{% else %}No server picked{% endif %}</p>
+                    <p class="mapp-np-sub">{% if selected.is_some() %}Start a song to see it here{% else %}Pick a server above{% endif %}</p>
+                </div>
+            </div>
+            {% endmatch %}
         </div>
-        <div class="mapp-bar-right">
-            <button type="button" class="mapp-ico" data-action="lyrics" aria-label="Lyrics"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-lyrics"/></svg></button>
-            <button type="button" class="mapp-ico" data-action="like" aria-label="Like this track" hidden><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart"/></svg></button>
-            <svg class="mapp-vol" aria-hidden="true"><use href="/static/icons/sprite.svg#i-volume"/></svg>
-            <input type="range" id="mapp-volume" class="mapp-volume" min="0" max="100" value="70" aria-label="Volume"{% if !self.can_control() %} disabled{% endif %}>
+        <div class="mapp-panel mapp-rail-queue">
+            <div class="mapp-queue-head">
+                <h2>{% call icon("queue") %}Queue</h2>
+                <span class="mapp-queue-count" id="mapp-queue-count">{% match music %}{% when Some with (m) %}{% if !m.queue.is_empty() %}{{ m.queue.len() }} track{% if m.queue.len() != 1 %}s{% endif %}{% endif %}{% when None %}{% endmatch %}</span>
+                <button type="button" class="mapp-ibtn mapp-rail-close" data-rail-toggle aria-label="Close queue">{% call icon("x") %}</button>
+            </div>
+            <div id="mapp-queue">
+            {% match music %}
+            {% when Some with (m) %}
+            {% if m.queue.is_empty() %}
+            <div class="mapp-empty mapp-empty--sm">
+                <span class="mapp-empty-ico">{% call icon("queue") %}</span>
+                <h3>Queue is empty</h3>
+                <p>Add songs from search or your library and they line up here.</p>
+                <div class="mapp-empty-acts"><a class="mapp-btn" href="#search" data-focus-search>Search</a><a class="mapp-btn mapp-btn--ghost" href="#liked">Library</a></div>
+            </div>
+            {% else %}
+            <ol class="mapp-qlist">
+                {% for t in m.queue.iter().take(50) %}
+                {% if loop.first && !t.autoplay %}<li class="mapp-qlabel">Next up</li>{% endif %}
+                <li class="mapp-qrow{% if t.autoplay %} is-auto{% endif %}" data-index="{{ loop.index0 }}" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author }}">
+                    {% call art(t.artwork, t.title, "mapp-art--xs") %}
+                    <span class="mapp-row-text"><span class="mapp-row-title">{{ t.title }}</span><span class="mapp-row-sub">{{ t.author }}</span></span>
+                    {% if t.autoplay %}<span class="mapp-tag">Autoplay</span>{% endif %}
+                    <span class="mapp-row-dur">{{ self.ms(t.duration) }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% endif %}
+            {% when None %}
+            <div class="mapp-empty mapp-empty--sm">
+                <span class="mapp-empty-ico">{% call icon("queue") %}</span>
+                <h3>{% if selected.is_some() %}Queue unavailable{% else %}No queue yet{% endif %}</h3>
+                <p>{% if selected.is_some() %}Percy could not be reached for this server.{% else %}Pick a server to see what is lined up.{% endif %}</p>
+            </div>
+            {% endmatch %}
+        </div>
+        </div>
+    </aside>
+
+    {# ─── Bottom player bar ──────────────────────────────────────────── #}
+    <footer class="mapp-bar" aria-label="Player controls">
+        <div class="mapp-bar-now" id="mapp-bar-now">
+            {% match self.now_playing() %}
+            {% when Some with (np) %}
+            {% call art(np.artwork, np.title, "mapp-art--md") %}
+            <div class="mapp-bar-text"><p class="mapp-bar-title" title="{{ np.title }}">{{ np.title }}</p><p class="mapp-bar-sub">{{ np.author }}</p></div>
+            <button type="button" class="mapp-ibtn mapp-like" data-act="like" data-np aria-pressed="false" aria-label="Like {{ np.title }}" title="Like">{% call icon("heart") %}</button>
+            {% when None %}
+            <span class="mapp-art mapp-art--md mapp-art--idle" aria-hidden="true">{% call icon("disc") %}</span>
+            <div class="mapp-bar-text"><p class="mapp-bar-title">Nothing playing</p><p class="mapp-bar-sub">{% if selected.is_some() %}Pick a song to get started{% else %}Pick a server first{% endif %}</p></div>
+            {% endmatch %}
+        </div>
+        <div class="mapp-bar-mid">
+            <div class="mapp-ctrls">
+                <button type="button" class="mapp-ctl" data-act="shuffle" aria-label="Shuffle" aria-pressed="false" title="{{ self.ctl_title(true) }}"{% if !self.ctl_title(true).is_empty() %} disabled{% endif %}>{% call icon("shuffle") %}</button>
+                <button type="button" class="mapp-ctl" data-act="back" aria-label="Previous" title="{{ self.ctl_title(true) }}"{% if !self.ctl_title(true).is_empty() %} disabled{% endif %}>{% call icon("prev") %}</button>
+                <button type="button" class="mapp-ctl mapp-ctl--main" data-act="toggle" aria-label="{% match self.now_playing() %}{% when Some with (np) %}{% if np.paused %}Play{% else %}Pause{% endif %}{% when None %}Play{% endmatch %}" title="{{ self.ctl_title(false) }}"{% if !self.ctl_title(false).is_empty() %} disabled{% endif %}>{% match self.now_playing() %}{% when Some with (np) %}{% if np.paused %}{% call icon("play") %}{% else %}{% call icon("pause") %}{% endif %}{% when None %}{% call icon("play") %}{% endmatch %}</button>
+                <button type="button" class="mapp-ctl" data-act="skip" aria-label="Next" title="{{ self.ctl_title(true) }}"{% if !self.ctl_title(true).is_empty() %} disabled{% endif %}>{% call icon("next") %}</button>
+                <button type="button" class="mapp-ctl" data-act="loop" aria-label="Repeat: off" aria-pressed="false" title="{{ self.ctl_title(true) }}"{% if !self.ctl_title(true).is_empty() %} disabled{% endif %}>{% call icon("repeat") %}</button>
+            </div>
+            <div class="mapp-seekrow">
+                <span class="mapp-time" id="mapp-elapsed">{% match self.now_playing() %}{% when Some with (np) %}{{ self.ms(np.position) }}{% when None %}0:00{% endmatch %}</span>
+                <div class="mapp-seek" id="mapp-seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0:00">
+                    <div class="mapp-seek-track"><div class="mapp-seek-fill" id="mapp-seek-fill"></div></div>
+                    <span class="mapp-seek-tip" id="mapp-seek-tip" hidden></span>
+                </div>
+                <span class="mapp-time" id="mapp-total">{% match self.now_playing() %}{% when Some with (np) %}{% if np.is_stream %}LIVE{% else %}{{ self.ms(np.duration) }}{% endif %}{% when None %}0:00{% endmatch %}</span>
+            </div>
+        </div>
+        <div class="mapp-bar-end">
+            <button type="button" class="mapp-ibtn" data-act="lyrics" aria-label="Lyrics" aria-pressed="false" title="Lyrics"{% if selected.is_none() %} disabled{% endif %}>{% call icon("lyrics") %}</button>
+            <button type="button" class="mapp-ibtn" data-rail-toggle aria-label="Queue" aria-pressed="true" title="Queue">{% call icon("queue") %}</button>
+            <button type="button" class="mapp-ibtn" data-act="stop" aria-label="Stop and disconnect" title="Stop and disconnect"{% if !self.can_destroy() || self.now_playing().is_none() %} hidden{% endif %}>{% call icon("stop") %}</button>
+            <div class="mapp-vol">
+                <button type="button" class="mapp-ibtn" data-act="mute" aria-label="Mute" title="{% if self.can_control() %}Mute (M){% else %}{{ self.lock_hint() }}{% endif %}"{% if !self.can_control() %} disabled{% endif %}>{% call icon("volume") %}</button>
+                <input type="range" id="mapp-volume" class="mapp-range" min="0" max="100" step="1" value="{% match self.now_playing() %}{% when Some with (np) %}{{ np.volume }}{% when None %}70{% endmatch %}" aria-label="Volume" title="{% if self.can_control() %}Volume{% else %}{{ self.lock_hint() }}{% endif %}"{% if !self.can_control() %} disabled{% endif %}>
+            </div>
         </div>
     </footer>
+
+    <div class="mapp-scrim" id="mapp-scrim" data-rail-toggle hidden></div>
+    <div class="mapp-toasts" id="mapp-toasts"></div>
 </div>
 {% endblock %}
 

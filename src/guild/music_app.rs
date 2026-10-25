@@ -173,7 +173,7 @@ pub async fn music_status(State(app): State<AppState>, session: Session, Path(gu
     }
 }
 
-fn status_json(m: &MusicInfo) -> Value {
+pub(crate) fn status_json(m: &MusicInfo) -> Value {
     json!({
         "ok": true,
         "active": m.active,
@@ -501,30 +501,135 @@ mod tests {
 mod render_tests {
     use super::*;
     use askama::Template;
+    use percy_client::{MusicChannelRef, MusicHistoryItem, PlaylistSummary, PlaylistTrack, TopTrack};
+
+    // Made-up sample data only: invented titles, no real artwork URLs (gradients render instead).
+    const TRACKS: [(&str, &str); 10] = [
+        ("Paper Lanterns", "The Quiet Hours"),
+        ("Glass Harbour", "Mira Okafor"),
+        ("Night Bus to Nowhere", "Static Orchard"),
+        ("Copper Skies", "Lumen & Vale"),
+        ("Small Weather", "June Arbor"),
+        ("Rooftop Static", "Neon Pasture"),
+        ("Saltwater Letters", "Hollow Pines"),
+        ("Velvet Engine", "Kite Theory"),
+        ("Second Sunrise", "Amber Lowlands"),
+        ("Low Tide Radio", "The Foxglove Set"),
+    ];
+
+    fn chan(name: &str) -> Option<MusicChannelRef> {
+        Some(MusicChannelRef {
+            id: "9".into(),
+            name: name.into(),
+        })
+    }
+
+    fn music(playing: bool) -> MusicInfo {
+        let queue: Vec<Value> = TRACKS[2..9]
+            .iter()
+            .enumerate()
+            .map(|(i, (t, a))| json!({"title": t, "author": a, "duration": 150_000 + i as u64 * 17_000, "autoplay": i >= 5}))
+            .collect();
+        let mut m = json!({
+            "active": playing, "equalizer": vec![0.0f64; 15], "filters": {}, "presets": ["Flat", "Bass boost", "Vocal"],
+            "queue": if playing { queue } else { vec![] },
+            "channel_name": "Lounge", "listeners": ["1", "2", "3", "4", "5"],
+            "setup": {"channel_id": null, "message_id": null, "use_panel": true, "dj_mode": 2},
+        });
+        if playing {
+            m["now_playing"] = json!({
+                "title": TRACKS[0].0, "author": TRACKS[0].1, "duration": 214_000, "position": 81_000,
+                "uri": "https://example.com/track/paper-lanterns", "volume": 64, "loop": 0, "shuffle": false,
+                "requester": {"id": "7", "name": "Ferris"},
+            });
+        }
+        serde_json::from_value(m).unwrap()
+    }
+
+    fn history() -> Vec<MusicHistoryItem> {
+        TRACKS
+            .iter()
+            .enumerate()
+            .map(|(i, (t, a))| MusicHistoryItem {
+                title: (*t).into(),
+                author: Some((*a).into()),
+                uri: Some(format!("https://example.com/track/{i}")),
+                length_ms: Some(170_000 + i as u64 * 9_000),
+                played_at: format!("2026-10-25T1{}:00:00", i % 10),
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    fn library() -> UserMusicLibrary {
+        UserMusicLibrary {
+            top_tracks: TRACKS[3..10]
+                .iter()
+                .enumerate()
+                .map(|(i, (t, a))| TopTrack {
+                    title: (*t).into(),
+                    author: Some((*a).into()),
+                    uri: Some(format!("https://example.com/top/{i}")),
+                    length_ms: Some(190_000 + i as u64 * 11_000),
+                    plays: 42 - i as u64 * 5,
+                    ..Default::default()
+                })
+                .collect(),
+            liked: vec![
+                PlaylistTrack {
+                    name: "Glass Harbour".into(),
+                    url: "https://example.com/track/1".into(),
+                },
+                PlaylistTrack {
+                    name: "Copper Skies".into(),
+                    url: "https://example.com/top/0".into(),
+                },
+            ],
+            playlists: vec![
+                PlaylistSummary {
+                    id: "11".into(),
+                    name: "Late night drive".into(),
+                    track_count: 24,
+                },
+                PlaylistSummary {
+                    id: "12".into(),
+                    name: "Focus mode".into(),
+                    track_count: 9,
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    fn guilds(playing: bool) -> (Vec<GuildPick>, GuildPick) {
+        let home = GuildPick {
+            id: "5".into(),
+            name: "Klappstuhl Lounge".into(),
+            icon: None,
+            playing,
+        };
+        let other = GuildPick {
+            id: "6".into(),
+            name: "Study Hall".into(),
+            icon: None,
+            playing: false,
+        };
+        (vec![home.clone(), other], home)
+    }
 
     fn template(is_manager: bool, is_admin: bool) -> MusicAppTemplate {
-        let pick = GuildPick {
-            id: "5".into(),
-            name: "Home".into(),
-            icon: None,
-            playing: true,
-        };
-        let music: MusicInfo = serde_json::from_value(json!({
-            "active": true, "equalizer": [0.0], "filters": {}, "presets": [],
-            "now_playing": {"title": "Song", "author": "Band", "duration": 1000, "position": 0},
-        }))
-        .unwrap();
+        let (guilds, selected) = guilds(true);
         MusicAppTemplate {
             account: None,
             page_title: "Music",
-            guilds: vec![pick.clone()],
-            selected: Some(pick),
+            guilds,
+            selected: Some(selected),
             viewer: Some(MusicViewer {
                 is_manager,
                 role: "listener".into(),
                 ..Default::default()
             }),
-            music: Some(music),
+            music: Some(music(true)),
             history: vec![],
             library: UserMusicLibrary::default(),
             channels: vec![],
@@ -536,7 +641,7 @@ mod render_tests {
     #[test]
     fn admin_forms_render_only_for_admins() {
         let plain = template(false, false).render().unwrap();
-        assert!(plain.contains("Song") && plain.contains(r#"data-role="listener""#));
+        assert!(plain.contains("Paper Lanterns") && plain.contains(r#"data-role="listener""#));
         assert!(!plain.contains("eq-section") && !plain.contains("setup-section"));
 
         // A DJ (manager) without Manage Server sees no admin form: those routes would refuse them.
@@ -545,5 +650,89 @@ mod render_tests {
 
         let admin = template(true, true).render().unwrap();
         assert!(admin.contains("eq-section") && admin.contains("dj-mode-section") && admin.contains("setup-section"));
+    }
+
+    #[test]
+    fn visitor_controls_are_locked_with_a_reason() {
+        let mut t = template(false, false);
+        t.viewer = Some(MusicViewer {
+            role: "visitor".into(),
+            bot_channel: chan("Lounge"),
+            ..Default::default()
+        });
+        let html = t.render().unwrap();
+        assert!(html.contains(r#"title="Join #Lounge to control" disabled"#));
+        assert!(html.contains("You are listening in"));
+    }
+
+    /// Renders three representative states to `target/music-preview/` for visual review.
+    #[test]
+    fn write_music_previews() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/music-preview");
+        std::fs::create_dir_all(&dir).unwrap();
+        let account = || Some(Viewer { name: "Ferris".into() });
+        let page = |viewer: MusicViewer, playing: bool, lib: UserMusicLibrary, admin: bool| {
+            let (guilds, selected) = guilds(playing);
+            MusicAppTemplate {
+                account: account(),
+                page_title: "Music",
+                guilds,
+                selected: Some(selected),
+                viewer: Some(viewer),
+                music: Some(music(playing)),
+                history: history(),
+                library: lib,
+                channels: vec![],
+                manager_view: admin,
+                is_admin: admin,
+            }
+        };
+
+        // Visitor: a server picked, nothing playing, not in voice.
+        let visitor = page(
+            MusicViewer {
+                role: "visitor".into(),
+                ..Default::default()
+            },
+            false,
+            UserMusicLibrary::default(),
+            false,
+        );
+        // Listener: in voice with Percy, a track playing, queue + history + library.
+        let listener = page(
+            MusicViewer {
+                role: "listener".into(),
+                can_control: true,
+                dj_mode: 2,
+                voice_channel: chan("Lounge"),
+                bot_channel: chan("Lounge"),
+                ..Default::default()
+            },
+            true,
+            library(),
+            false,
+        );
+        // Admin: DJ + Manage Server on the guild route.
+        let admin = page(
+            MusicViewer {
+                role: "dj".into(),
+                can_start: true,
+                can_control: true,
+                can_destroy: true,
+                is_manager: true,
+                dj_mode: 2,
+                voice_channel: chan("Lounge"),
+                bot_channel: chan("Lounge"),
+            },
+            true,
+            library(),
+            true,
+        );
+
+        for (name, t) in [("visitor", visitor), ("listener", listener), ("admin", admin)] {
+            let html = t.render().unwrap();
+            assert!(html.contains("mapp-bar"));
+            std::fs::write(dir.join(format!("{name}.html")), html).unwrap();
+        }
     }
 }

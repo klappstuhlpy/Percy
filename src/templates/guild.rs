@@ -297,6 +297,9 @@ impl MusicAppTemplate {
     pub(crate) fn can_control(&self) -> bool {
         self.viewer.as_ref().is_some_and(|v| v.can_control)
     }
+    pub(crate) fn can_destroy(&self) -> bool {
+        self.viewer.as_ref().is_some_and(|v| v.can_destroy)
+    }
     pub(crate) fn can_start(&self) -> bool {
         self.viewer.as_ref().is_some_and(|v| v.can_start)
     }
@@ -309,6 +312,144 @@ impl MusicAppTemplate {
     }
     pub(crate) fn guild_id(&self) -> &str {
         self.selected.as_ref().map_or("", |g| g.id.as_str())
+    }
+    /// The role chip text; `app.js` `roleLabel()` mirrors it.
+    pub(crate) fn role_label(&self) -> String {
+        match self.role() {
+            "dj" => "DJ".into(),
+            "" => "Visitor".into(),
+            r => {
+                let mut c = r.chars();
+                c.next()
+                    .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+            }
+        }
+    }
+    /// `m:ss` for a plain millisecond count.
+    pub(crate) fn ms(&self, ms: &u64) -> String {
+        crate::music_app::fmt_ms(*ms)
+    }
+    /// Gradient slot (0-7) for artwork fallbacks; `static/js/music/app.js` `grad()` mirrors it.
+    pub(crate) fn grad(&self, seed: &str) -> u32 {
+        seed.chars().map(|c| c as u32).sum::<u32>() % 8
+    }
+    /// First letter of a server name, for picker tiles without an icon.
+    pub(crate) fn initial(&self, name: &str) -> String {
+        name.chars()
+            .next()
+            .map_or_else(|| "?".into(), |c| c.to_uppercase().to_string())
+    }
+    pub(crate) fn now_playing(&self) -> Option<&NowPlaying> {
+        self.music.as_ref().and_then(|m| m.now_playing.as_ref())
+    }
+    pub(crate) fn listeners(&self) -> usize {
+        self.music.as_ref().map_or(0, |m| m.listeners.len())
+    }
+    /// Why the transport is locked for this viewer, worded as `app.js` `lockHint()` words it.
+    pub(crate) fn lock_hint(&self) -> String {
+        let Some(v) = &self.viewer else {
+            return "Pick a server first".into();
+        };
+        if v.dj_mode == 1 && !v.is_manager {
+            return "Only DJs can control the player".into();
+        }
+        match &v.bot_channel {
+            Some(c) => format!("Join #{} to control", c.name),
+            None => "Join Percy's voice channel to control".into(),
+        }
+    }
+    /// Title attribute for a transport button: empty when it may be pressed.
+    pub(crate) fn ctl_title(&self, dj_only: bool) -> String {
+        if !self.can_control() {
+            self.lock_hint()
+        } else if dj_only && !self.viewer.as_ref().is_some_and(|v| v.can_destroy) {
+            "Needs the DJ role".into()
+        } else {
+            String::new()
+        }
+    }
+    /// The context banner above Home; `app.js` `banner()` computes the same from live data.
+    pub(crate) fn banner(&self) -> Option<MusicBanner> {
+        self.selected.as_ref()?;
+        let Some(m) = &self.music else {
+            return Some(MusicBanner::new(
+                "danger",
+                "wifi-off",
+                "Percy is offline",
+                "The player for this server cannot be reached right now. We will keep retrying.",
+                "",
+            ));
+        };
+        let v = self.viewer.clone().unwrap_or_default();
+        let playing = m.active && m.now_playing.is_some();
+        if !playing {
+            if v.can_start {
+                let ch = v
+                    .voice_channel
+                    .map_or_else(|| "a voice channel".into(), |c| format!("#{}", c.name));
+                return Some(MusicBanner::new(
+                    "accent",
+                    "headphones",
+                    &format!("You are in {ch}"),
+                    "Nothing is playing. Search for a song to start a session here.",
+                    "Start session",
+                ));
+            }
+            return Some(MusicBanner::new(
+                "info",
+                "voice",
+                "Nothing is playing",
+                "Join a voice channel in this server, then start a session from here.",
+                "",
+            ));
+        }
+        if !v.can_control {
+            let text = if v.dj_mode == 1 && !v.is_manager {
+                "This server is in DJ-only mode, so only DJs can steer the player.".to_string()
+            } else {
+                match &v.bot_channel {
+                    Some(c) => format!("Join #{} in Discord to control playback and add songs.", c.name),
+                    None => "Join Percy's voice channel to control playback.".into(),
+                }
+            };
+            return Some(MusicBanner::new(
+                "info",
+                "headphones",
+                "You are listening in",
+                &text,
+                "",
+            ));
+        }
+        None
+    }
+    /// Initial viewer + status for `app.js`, so progress interpolation starts before the first poll.
+    pub(crate) fn boot_json(&self) -> String {
+        serde_json::json!({
+            "viewer": self.viewer,
+            "status": self.music.as_ref().map(crate::music_app::status_json),
+        })
+        .to_string()
+    }
+}
+
+/// The context card at the top of Home (start a session / listening only / Percy offline).
+pub(crate) struct MusicBanner {
+    pub(crate) kind: &'static str,
+    pub(crate) icon: &'static str,
+    pub(crate) title: String,
+    pub(crate) text: String,
+    pub(crate) cta: &'static str,
+}
+
+impl MusicBanner {
+    fn new(kind: &'static str, icon: &'static str, title: &str, text: &str, cta: &'static str) -> Self {
+        Self {
+            kind,
+            icon,
+            title: title.into(),
+            text: text.into(),
+            cta,
+        }
     }
 }
 

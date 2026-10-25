@@ -71,6 +71,9 @@
     </script>
 </head>
 <body{% block body_attrs %}{% endblock %}>
+{# Full-viewport apps (the music player) replace the whole site chrome by overriding `shell`;
+   theme, fonts and the shared scripts below stay. #}
+{% block shell %}
 <div class="percy-shell">
     <header class="percy-topbar">
         <nav class="percy-nav">
@@ -164,6 +167,7 @@
         <span class="percy-footer-copy">&copy; 2026 Klappstuhl65</span>
     </footer>
 </div>
+{% endblock %}
 <script src="/kls/timestamps.js"></script>
 <script src="/kls/base.js"></script>
 <script src="/static/js/common/nav.js"></script>

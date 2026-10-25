@@ -1,0 +1,322 @@
+/* Music app content: panels, view headers, cards, track rows, the rail's now-playing card and
+   queue, empty states, skeletons, banners, toasts, lyrics and the restyled manager forms.
+   Quiet neutral surfaces; the accent is reserved for primary actions and the active state. */
+
+/* ── Scaffolding ──────────────────────────────────────────────────────── */
+.mapp-view { padding: 0 0 var(--m-s5); animation: mapp-in 200ms ease-out; }
+@keyframes mapp-in { from { opacity: 0; transform: translateY(4px); } }
+.mapp-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mapp-panel {
+    margin-bottom: var(--m-s2); padding: var(--m-s5);
+    border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel);
+}
+.mapp-panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--m-s4); margin-bottom: var(--m-s4); }
+.mapp-panel-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.015em; }
+.mapp-panel-head p { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 13px; color: var(--m-muted); }
+.mapp-panel-head p svg { width: 14px; height: 14px; }
+.mapp-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--m-s2); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; overflow-wrap: anywhere; }
+.mapp-lede { color: var(--m-muted); max-width: 64ch; margin-top: 2px; }
+.mapp-eyebrow { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 12px; font-weight: 700; color: var(--m-muted); }
+.mapp-eyebrow svg { width: 14px; height: 14px; }
+.mapp-link { display: inline-flex; align-items: center; gap: 4px; color: var(--m-muted); font-size: 13px; font-weight: 700; text-decoration: none; }
+.mapp-link svg { width: 14px; height: 14px; }
+.mapp-link:hover { color: var(--m-text); }
+.mapp-page code { padding: 1px 6px; border-radius: var(--m-r-xs); background: var(--m-raised); font-size: 0.92em; }
+
+/* View header: a neutral icon tile, title, one line of context. */
+.mapp-head { display: flex; align-items: center; gap: var(--m-s4); margin: 0 0 var(--m-s2); padding: var(--m-s5); border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel); }
+.mapp-head-ico { display: grid; place-items: center; flex: none; width: 56px; height: 56px; border-radius: var(--m-r); background: var(--m-raised); border: 1px solid var(--m-line); color: var(--m-text); }
+.mapp-head-ico svg { width: 24px; height: 24px; }
+.mapp-head-ico--like { color: var(--accent-pink); }
+
+/* Buttons */
+.mapp-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--m-s2);
+    height: 36px; padding: 0 var(--m-s4); border-radius: 999px;
+    border: 1px solid var(--m-line); background: var(--m-raised); color: var(--m-text);
+    font-weight: 700; font-size: 13px; text-decoration: none; white-space: nowrap; cursor: pointer;
+    transition: background var(--m-ease), border-color var(--m-ease);
+}
+.mapp-btn svg { width: 14px; height: 14px; }
+.mapp-btn:hover { background: var(--m-raised-2); border-color: color-mix(in srgb, var(--m-text) 22%, transparent); }
+.mapp-btn--accent { background: var(--m-accent); border-color: transparent; color: var(--m-accent-ink); }
+.mapp-btn--accent:hover { background: color-mix(in srgb, var(--m-accent) 86%, #fff); border-color: transparent; }
+.mapp-btn--ghost { background: none; }
+.mapp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Context banner (one slim row) + connection banner ────────────────── */
+.mapp-banner {
+    display: flex; align-items: center; gap: var(--m-s3);
+    margin-bottom: var(--m-s2); padding: var(--m-s3) var(--m-s3) var(--m-s3) var(--m-s4);
+    border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel);
+}
+.mapp-banner-ico { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--m-raised); color: var(--m-muted); }
+.mapp-banner-ico svg { width: 18px; height: 18px; }
+.mapp-banner-text { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px var(--m-s2); }
+.mapp-banner-text b { font-size: 14px; white-space: nowrap; }
+.mapp-banner-text span { color: var(--m-muted); font-size: 13px; }
+.mapp-banner.is-accent .mapp-banner-ico { background: var(--m-accent-soft); color: var(--m-accent); }
+.mapp-banner.is-info .mapp-banner-ico { color: var(--accent-cyan); background: color-mix(in srgb, var(--accent-cyan) 14%, transparent); }
+.mapp-banner.is-danger { border-color: color-mix(in srgb, var(--error-text) 35%, var(--m-line)); }
+.mapp-banner.is-danger .mapp-banner-ico { background: color-mix(in srgb, var(--error-text) 14%, transparent); color: var(--error-text); }
+
+.mapp-conn {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: center; gap: var(--m-s2);
+    margin-bottom: var(--m-s2); padding: 10px var(--m-s4);
+    border-radius: var(--m-r); border: 1px solid var(--warning-border);
+    background: var(--warning-bg); color: var(--warning-text); font-size: 13px;
+}
+.mapp-conn svg { width: 16px; height: 16px; animation: mapp-blink 1.6s ease-in-out infinite; }
+@keyframes mapp-blink { 50% { opacity: 0.35; } }
+
+/* ── Shelves + tiles ──────────────────────────────────────────────────── */
+.mapp-shelf-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--m-s4); margin-bottom: var(--m-s3); }
+.mapp-shelf-head h2 { font-size: 16px; font-weight: 800; }
+.mapp-shelf-nav { display: flex; align-items: center; gap: var(--m-s1); }
+.mapp-shelf-nav .mapp-link { margin-right: var(--m-s2); }
+.mapp-ibtn--sm { width: 30px; height: 30px; border: 1px solid var(--m-line); }
+.mapp-ibtn--sm svg { width: 14px; height: 14px; }
+.mapp-flip svg { transform: scaleX(-1); }
+.mapp-shelf {
+    display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: var(--m-s3);
+    overflow-x: auto; scroll-snap-type: x proximity; scroll-behavior: smooth; scrollbar-width: none;
+}
+.mapp-shelf::-webkit-scrollbar { display: none; }
+.mapp-shelf > .mapp-empty { grid-column: 1 / -1; min-width: 260px; }
+.mapp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--m-s3); }
+.mapp-guilds { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--m-s3); }
+
+/* A tile: bordered, inset artwork, centred text. */
+.mapp-card {
+    display: block; min-width: 0; padding: 10px 10px var(--m-s3);
+    border-radius: var(--m-r); border: 1px solid var(--m-line); background: var(--m-raised);
+    text-align: center; text-decoration: none; scroll-snap-align: start;
+    transition: background var(--m-ease), border-color var(--m-ease);
+}
+.mapp-card:hover, .mapp-card:focus-within { background: var(--m-raised-2); border-color: color-mix(in srgb, var(--m-text) 16%, var(--m-line)); }
+.mapp-card--link { cursor: pointer; }
+.mapp-card-art { position: relative; aspect-ratio: 1; margin-bottom: 10px; border-radius: var(--m-r-sm); overflow: hidden; }
+.mapp-card-title { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-card-sub { margin-top: 1px; font-size: 13px; color: var(--m-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-card-badge {
+    position: absolute; top: 6px; right: 6px; z-index: 1;
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px 2px 5px;
+    border-radius: 999px; background: rgba(10, 10, 12, 0.72); color: #f4f4f5;
+    font-size: 11px; font-weight: 700; backdrop-filter: blur(4px);
+}
+.mapp-card-badge svg { width: 11px; height: 11px; }
+.mapp-card-hover {
+    position: absolute; inset: 0; z-index: 2;
+    display: grid; place-items: center;
+    background: rgba(8, 8, 10, 0.45);
+    opacity: 0; transition: opacity var(--m-ease);
+}
+.mapp-card:hover .mapp-card-hover, .mapp-card:focus-within .mapp-card-hover { opacity: 1; }
+.mapp-card-play, .mapp-card-add { display: grid; place-items: center; border: 0; cursor: pointer; transition: transform var(--m-ease), background var(--m-ease); }
+.mapp-card-play { width: 48px; height: 48px; border-radius: 50%; background: rgba(250, 250, 250, 0.95); color: #0b0b0c; }
+.mapp-card-play svg { width: 18px; height: 18px; margin-left: 2px; }
+.mapp-card-add { position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px; border-radius: 50%; background: rgba(10, 10, 12, 0.72); color: #fff; }
+.mapp-card-add svg { width: 16px; height: 16px; }
+.mapp-card-play:hover, .mapp-card-add:hover { transform: scale(1.06); }
+.mapp-card-play:disabled, .mapp-card-add:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.mapp-guild {
+    display: flex; flex-direction: column; gap: 10px; padding: 10px 10px var(--m-s3);
+    border-radius: var(--m-r); border: 1px solid var(--m-line); background: var(--m-raised);
+    text-align: center; text-decoration: none; font-weight: 700;
+    transition: background var(--m-ease), border-color var(--m-ease);
+}
+.mapp-guild:hover { background: var(--m-raised-2); border-color: color-mix(in srgb, var(--m-text) 16%, var(--m-line)); }
+.mapp-guild-art { display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: var(--m-r-sm); object-fit: cover; font-size: 36px; font-weight: 800; }
+.mapp-guild-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Track rows ───────────────────────────────────────────────────────── */
+.mapp-rows { list-style: none; margin: 0 calc(-1 * var(--m-s2)); padding: 0; }
+.mapp-row {
+    display: grid; grid-template-columns: 28px 40px minmax(0, 1fr) minmax(0, 140px) auto 48px;
+    align-items: center; gap: var(--m-s3);
+    min-height: 56px; padding: var(--m-s2); border-radius: var(--m-r-sm);
+    transition: background var(--m-ease);
+}
+.mapp-row + .mapp-row { margin-top: 2px; }
+.mapp-row:hover, .mapp-row:focus-within { background: var(--m-raised); }
+.mapp-row.is-current .mapp-row-title { color: var(--m-accent); }
+.mapp-row-idx { position: relative; display: grid; place-items: center; height: 32px; font-size: 13px; color: var(--m-faint); font-variant-numeric: tabular-nums; }
+.mapp-row-idx button {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    border: 0; border-radius: 50%; background: none; color: var(--m-text); cursor: pointer; opacity: 0;
+}
+.mapp-row-idx button svg { width: 14px; height: 14px; }
+.mapp-row:hover .mapp-row-idx > span, .mapp-row:focus-within .mapp-row-idx > span { opacity: 0; }
+.mapp-row:hover .mapp-row-idx button, .mapp-row-idx button:focus-visible { opacity: 1; }
+.mapp-row-idx button:disabled { cursor: not-allowed; color: var(--m-faint); }
+.mapp-row-text { display: flex; flex-direction: column; min-width: 0; }
+.mapp-row-title, .mapp-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-row-title { font-weight: 700; }
+.mapp-row-sub { font-size: 13px; color: var(--m-muted); }
+.mapp-row-meta { font-size: 13px; color: var(--m-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-row-acts { display: flex; gap: 2px; opacity: 0; transition: opacity var(--m-ease); }
+.mapp-row-acts .mapp-ibtn { width: 32px; height: 32px; }
+.mapp-row-acts .mapp-ibtn svg { width: 18px; height: 18px; }
+.mapp-row:hover .mapp-row-acts, .mapp-row:focus-within .mapp-row-acts { opacity: 1; }
+.mapp-row:not(:hover):not(:focus-within) .mapp-row-acts:has(.mapp-like[aria-pressed="true"]) { opacity: 1; }
+.mapp-row:not(:hover):not(:focus-within) .mapp-row-acts:has(.mapp-like[aria-pressed="true"]) [data-act="add"] { visibility: hidden; }
+.mapp-row-dur { font-size: 13px; color: var(--m-muted); text-align: right; font-variant-numeric: tabular-nums; }
+@media (hover: none) { .mapp-row-acts { opacity: 1; } }
+
+/* ── Empty states + skeletons ─────────────────────────────────────────── */
+.mapp-empty {
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;
+    padding: var(--m-s6) var(--m-s5);
+}
+.mapp-empty h2, .mapp-empty h3 { font-size: 15px; font-weight: 800; color: var(--m-muted); }
+.mapp-empty p { max-width: 40ch; font-size: 13px; color: var(--m-faint); }
+.mapp-empty-ico { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: var(--m-s1); border-radius: var(--m-r); border: 1px solid var(--m-line); background: var(--m-raised); color: var(--m-muted); }
+.mapp-empty-ico svg { width: 22px; height: 22px; }
+.mapp-empty-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--m-s2); margin-top: var(--m-s2); }
+.mapp-empty--lg { padding: 64px var(--m-s5); border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel); }
+.mapp-empty--lg h2 { font-size: 18px; color: var(--m-text); }
+.mapp-empty--sm { padding: var(--m-s6) var(--m-s3); }
+.mapp-empty.is-error .mapp-empty-ico { color: var(--error-text); border-color: color-mix(in srgb, var(--error-text) 30%, var(--m-line)); }
+
+.mapp-skel { display: grid; gap: var(--m-s1); }
+.mapp-skel-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 48px; align-items: center; gap: var(--m-s3); padding: var(--m-s2) 0; }
+.mapp-skel-row i, .mapp-skel-line {
+    display: block; height: 12px; border-radius: 6px;
+    background: linear-gradient(90deg, var(--m-raised) 0%, var(--m-raised-2) 40%, var(--m-raised) 80%);
+    background-size: 300% 100%; animation: mapp-shimmer 1.3s ease-in-out infinite;
+}
+.mapp-skel-row i:first-child { width: 40px; height: 40px; border-radius: var(--m-r-xs); }
+.mapp-skel-row span { display: grid; gap: 6px; }
+.mapp-skel-row span i:last-child { width: 45%; height: 10px; }
+.mapp-skel-line { height: 22px; margin: 14px 0; width: var(--w, 70%); border-radius: 8px; }
+@keyframes mapp-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ── Rail: now-playing card ───────────────────────────────────────────── */
+.mapp-rail .mapp-panel { margin: 0; padding: var(--m-s4); }
+.mapp-np { display: flex; align-items: center; gap: var(--m-s3); min-width: 0; }
+.mapp-np-text { flex: 1; min-width: 0; }
+.mapp-np-label { font-size: 12px; color: var(--m-faint); font-weight: 600; }
+.mapp-np-title { margin-top: 1px; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-np-sub { font-size: 13px; color: var(--m-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-np-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--m-s3); padding-top: var(--m-s3); border-top: 1px solid var(--m-line); }
+.mapp-fact { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px 3px 7px; border-radius: 999px; border: 1px solid var(--m-line); font-size: 12px; font-weight: 600; color: var(--m-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp-fact svg { width: 13px; height: 13px; }
+
+/* ── Rail: queue ──────────────────────────────────────────────────────── */
+.mapp-rail-queue { flex: 1; min-height: 240px; display: flex; flex-direction: column; }
+.mapp-rail-queue #mapp-queue { flex: 1; display: flex; flex-direction: column; }
+.mapp-rail-queue .mapp-empty { margin: auto 0; }
+.mapp-queue-head { display: flex; align-items: center; gap: var(--m-s2); margin-bottom: var(--m-s2); }
+.mapp-queue-head h2 { display: flex; align-items: center; gap: var(--m-s2); flex: 1; font-size: 15px; font-weight: 800; }
+.mapp-queue-head h2 svg { width: 18px; height: 18px; color: var(--m-muted); }
+.mapp-queue-count { font-size: 12px; color: var(--m-faint); font-weight: 600; }
+.mapp-qlist { list-style: none; margin: 0 calc(-1 * var(--m-s2)); padding: 0; }
+.mapp-qlabel { padding: var(--m-s3) var(--m-s2) var(--m-s1); font-size: 12px; font-weight: 700; color: var(--m-faint); }
+.mapp-qrow {
+    position: relative; display: flex; align-items: center; gap: 10px;
+    min-height: 54px; padding: 7px var(--m-s2); border-radius: var(--m-r-sm);
+    transition: background var(--m-ease), opacity var(--m-ease);
+}
+.mapp-qrow:hover, .mapp-qrow:focus-within { background: var(--m-raised); }
+.mapp-qrow .mapp-row-text { flex: 1; }
+.mapp-qrow .mapp-row-title { font-size: 13px; }
+.mapp-qrow .mapp-row-sub, .mapp-qrow .mapp-row-dur { font-size: 12px; }
+.mapp-qrow.is-auto .mapp-row-title { font-weight: 600; color: var(--m-muted); }
+.mapp-qrow[draggable="true"] { cursor: grab; }
+.mapp-qrow.is-dragging { opacity: 0.35; }
+.mapp-qrow.is-over-top::before, .mapp-qrow.is-over-bottom::after {
+    content: ""; position: absolute; left: var(--m-s2); right: var(--m-s2); height: 2px; border-radius: 2px; background: var(--m-accent);
+}
+.mapp-qrow.is-over-top::before { top: -1px; }
+.mapp-qrow.is-over-bottom::after { bottom: -1px; }
+.mapp-grip { display: grid; place-items: center; width: 16px; margin: 0 -4px 0 -2px; color: var(--m-faint); cursor: grab; }
+.mapp-grip svg { width: 14px; height: 14px; }
+.mapp-qrow .mapp-q-remove { width: 28px; height: 28px; opacity: 0; }
+.mapp-qrow .mapp-q-remove svg { width: 14px; height: 14px; }
+.mapp-qrow:hover .mapp-q-remove, .mapp-q-remove:focus-visible { opacity: 1; }
+.mapp-qrow:hover .mapp-row-dur:has(+ .mapp-q-remove) { display: none; }
+@media (hover: none) { .mapp-qrow .mapp-q-remove { opacity: 1; } }
+.mapp-tag { flex: none; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--m-line); color: var(--m-faint); font-size: 11px; font-weight: 700; }
+
+/* ── Lyrics ───────────────────────────────────────────────────────────── */
+.mapp-view--lyrics { padding: var(--m-s5); border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel); min-height: 100%; }
+.mapp-view--lyrics .mapp-title { font-size: 20px; margin-bottom: var(--m-s3); }
+.mapp-lyrics { padding: var(--m-s3) 0 40vh; }
+.mapp-lyric {
+    display: block; width: 100%; margin: 0; padding: 6px 0; border: 0; background: none; text-align: left;
+    font: 800 clamp(22px, 2.4vw, 32px)/1.3 var(--font-display); letter-spacing: -0.02em;
+    color: color-mix(in srgb, var(--m-text) 30%, transparent);
+    transition: color 220ms ease; cursor: default;
+}
+.mapp-lyric.is-past { color: color-mix(in srgb, var(--m-text) 52%, transparent); }
+.mapp-lyric.is-on { color: var(--m-text); }
+.mapp-lyrics.is-seekable .mapp-lyric { cursor: pointer; }
+.mapp-lyrics.is-seekable .mapp-lyric:hover { color: color-mix(in srgb, var(--m-text) 80%, transparent); }
+.mapp-lyrics-plain { white-space: pre-wrap; font-size: 18px; line-height: 1.8; font-weight: 600; color: var(--m-muted); }
+.mapp-lyrics-src { margin-top: var(--m-s5); font-size: 12px; color: var(--m-faint); }
+
+/* ── Toasts ───────────────────────────────────────────────────────────── */
+.mapp-toasts {
+    position: fixed; z-index: 60; right: var(--m-s4); bottom: calc(var(--m-bar-h) + var(--m-s2));
+    display: flex; flex-direction: column; align-items: flex-end; gap: var(--m-s2);
+    width: min(360px, calc(100vw - 2 * var(--m-s4))); pointer-events: none;
+}
+.mapp-toast {
+    display: flex; align-items: center; gap: var(--m-s3); width: 100%;
+    padding: 10px var(--m-s2) 10px var(--m-s3);
+    border-radius: var(--m-r); background: var(--m-raised); border: 1px solid var(--m-line);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+    pointer-events: auto; animation: mapp-toast-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.mapp-toast > svg { flex: none; width: 24px; height: 24px; padding: 4px; border-radius: 50%; color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); }
+.mapp-toast-msg { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.mapp-toast .mapp-ibtn { width: 28px; height: 28px; }
+.mapp-toast .mapp-ibtn svg { width: 14px; height: 14px; }
+.mapp-toast.is-success { --tc: var(--success-text); }
+.mapp-toast.is-info { --tc: var(--info-text); }
+.mapp-toast.is-error { --tc: var(--error-text); }
+.mapp-toast.is-leaving { animation: mapp-toast-out 180ms ease-in forwards; }
+@keyframes mapp-toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes mapp-toast-out { to { opacity: 0; transform: translateX(12px); } }
+
+/* ── Manager views: the admin forms as panels ─────────────────────────── */
+.mapp-view--admin .config-section {
+    margin: 0 0 var(--m-s2); padding: var(--m-s5);
+    border-radius: var(--m-r-lg); border: 1px solid var(--m-line); background: var(--m-panel);
+    box-shadow: none; transform: none;
+}
+.mapp-view--admin .config-section:hover { transform: none; box-shadow: none; }
+.mapp-view--admin .config-section h2 { font-size: 16px; font-weight: 800; margin: 0 0 var(--m-s1); }
+.mapp-view--admin .config-section h2::before { display: none; }
+.mapp-view--admin .config-section-description { color: var(--m-muted); margin: 0 0 var(--m-s4); max-width: 70ch; font-size: 13px; }
+.mapp-view--admin .eq-canvas { border-radius: var(--m-r); background: var(--m-bg); border-color: var(--m-line); }
+.mapp-view--admin .config-select, .mapp-view--admin .config-input { border-radius: var(--m-r-sm); }
+.mapp-view--admin .button { border-radius: 999px; }
+
+/* ── Responsive content ───────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+    .mapp-row { grid-template-columns: 28px 40px minmax(0, 1fr) auto 44px; }
+    .mapp-row-meta { display: none; }
+}
+@media (max-width: 767px) {
+    .mapp-panel, .mapp-head { padding: var(--m-s4); border-radius: var(--m-r); }
+    .mapp-head-ico { width: 44px; height: 44px; }
+    .mapp-title { font-size: 20px; }
+    .mapp-shelf { grid-auto-columns: 136px; gap: var(--m-s2); }
+    .mapp-shelf-nav .mapp-ibtn--sm { display: none; }
+    .mapp-banner { flex-wrap: wrap; }
+    .mapp-banner .mapp-btn { width: 100%; }
+    .mapp-row { grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--m-s3); }
+    .mapp-row-idx, .mapp-row-dur { display: none; }
+    .mapp-row-acts { opacity: 1; }
+    .mapp-toasts { right: 6px; left: 6px; width: auto; bottom: calc(var(--m-bar-h) + var(--m-tab-h, 60px) + 12px); }
+}
+
+/* Manager forms come from the dashboard stylesheet; bring their type and colours in line. */
+.mapp-view--admin .config-section h2 { font-family: var(--font-display); text-transform: none; letter-spacing: -0.01em; color: var(--m-text); }
+.mapp-view--admin .config-select, .mapp-view--admin .config-input, .mapp-view--admin .button,
+.mapp-view--admin .filter-toggle, .mapp-view--admin .preset-btn { font-family: var(--font-display); }
+.mapp-view--admin .config-field, .mapp-view--admin .listener-status, .mapp-view--admin .panel-item { border-radius: var(--m-r); background: var(--m-raised); border-color: var(--m-line); }
+.mapp-view--admin .button.primary { background: var(--m-accent); border-color: transparent; color: var(--m-accent-ink); }
