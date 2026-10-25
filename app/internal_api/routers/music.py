@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import time
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -69,6 +70,7 @@ class DJModeBody(BaseModel):
 class PlayBody(BaseModel):
     user_id: int | str
     query: str
+    limit: int = Field(1, ge=1, le=25)  # >1 queues a mix of the top results
 
 
 class ControlBody(BaseModel):
@@ -519,13 +521,33 @@ def _flatten(result: Any) -> list[wavelink.Playable]:
     return list(result) if isinstance(result, list) else []
 
 
+_SEARCH_TTL = 300.0
+_SEARCH_MAX = 256
+_search_cache: dict[tuple[str, int], tuple[float, list[wavelink.Playable]]] = {}
+
+
+async def _cached_search(q: str, limit: int) -> list[wavelink.Playable]:
+    """Search results per (query, limit) for 5 min; empty/failed searches are never cached."""
+    from app.cogs.music.player import Player
+
+    key = (q.casefold().strip(), limit)
+    now = time.monotonic()
+    hit = _search_cache.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    tracks = _flatten(await Player.search(q))[:limit]
+    if tracks:
+        if len(_search_cache) >= _SEARCH_MAX:
+            for k in [k for k, (exp, _) in _search_cache.items() if exp <= now] or [next(iter(_search_cache))]:
+                del _search_cache[k]
+        _search_cache[key] = (now + _SEARCH_TTL, tracks)
+    return tracks
+
+
 @router.get("/music/search")
 async def get_music_search(guild: GuildDep, q: str, limit: int = Query(10, ge=1, le=25)) -> dict:
     """Search tracks (needs a Lavalink node, not a player)."""
-    from app.cogs.music.player import Player
-
-    tracks = _flatten(await Player.search(q))[:limit]
-    return {'results': [_serialize_track(guild, t) for t in tracks]}
+    return {'results': [_serialize_track(guild, t) for t in await _cached_search(q, limit)]}
 
 
 @router.post("/music/play")
@@ -546,7 +568,13 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
     elif getattr(player, 'always_on', False):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='A 24/7 session is active.')
 
-    result = await Player.search(body.query, return_first=True)
+    if body.limit > 1:
+        result = await Player.search(body.query)
+        if isinstance(result, list):
+            seen: set[str | None] = set()
+            result = [t for t in result if not (t.uri in seen or seen.add(t.uri))][: body.limit]
+    else:
+        result = await Player.search(body.query, return_first=True)
     tracks = _flatten(result)
     if not tracks:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='No results for that search.')
@@ -561,7 +589,8 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         player.autoplay = wavelink.AutoPlayMode.partial
 
-    await player.queue.put_wait(result if isinstance(result, wavelink.Playlist) else tracks[0])
+    for item in [result] if isinstance(result, wavelink.Playlist) else tracks:
+        await player.queue.put_wait(item)
     started = not player.playing
     if started:
         await player.play(player.queue.get(), volume=70)

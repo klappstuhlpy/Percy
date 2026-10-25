@@ -118,3 +118,57 @@ async def test_control_move_accepts_from_key() -> None:
     with patch.object(api, '_get_guild_player', return_value=(guild, player)):
         await api.post_music_control(guild, _bot(0), body)
     assert player.queue._items == [1, 0, 2]
+
+
+def _tracks(n: int) -> list[MagicMock]:
+    out = []
+    for i in range(n):
+        t = MagicMock(spec=wavelink.Playable)
+        t.uri = f'u{i % 18}'  # last two repeat earlier uris
+        t.extras = SimpleNamespace()
+        out.append(t)
+    return out
+
+
+async def test_play_limit_queues_distinct_mix() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _player(queued=0)
+    with (
+        patch.object(api, '_get_guild_player', return_value=(guild, player)),
+        patch.object(api, '_serialize_track', return_value={'title': 't'}),
+        patch('app.cogs.music.player.Player.search', AsyncMock(return_value=_tracks(20))),
+    ):
+        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x', limit=15))
+        assert len(out['queued']) == 15 and len(player.queue._items) == 15
+        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x', limit=25))
+        assert len(out['queued']) == 18  # deduped by uri
+
+
+async def test_play_default_limit_queues_one_of_list() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _player(queued=0)
+    with (
+        patch.object(api, '_get_guild_player', return_value=(guild, player)),
+        patch.object(api, '_serialize_track', return_value={'title': 't'}),
+        patch('app.cogs.music.player.Player.search', AsyncMock(return_value=_tracks(1)[0])),
+    ):
+        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x'))
+    assert len(out['queued']) == 1
+
+
+@pytest.mark.parametrize('n', [0, 26])
+def test_play_limit_bounds(n: int) -> None:
+    with pytest.raises(ValueError):
+        api.PlayBody(user_id=5, query='x', limit=n)
+
+
+async def test_search_is_cached() -> None:
+    api._search_cache.clear()
+    node = AsyncMock(return_value=_tracks(3))
+    with patch.object(api, '_serialize_track', return_value={'title': 't'}), patch('app.cogs.music.player.Player.search', node):
+        a = await api.get_music_search(MagicMock(), ' Lofi ', 10)
+        b = await api.get_music_search(MagicMock(), 'lofi', 10)
+    assert a == b and node.await_count == 1
+    node.return_value = []
+    with patch('app.cogs.music.player.Player.search', node):
+        await api.get_music_search(MagicMock(), 'nothing', 10)
+        await api.get_music_search(MagicMock(), 'nothing', 10)
+    assert node.await_count == 3  # empties are not cached
