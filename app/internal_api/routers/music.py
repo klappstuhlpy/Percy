@@ -570,6 +570,16 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
     return {'queued': [_serialize_track(guild, t) for t in tracks], 'started': started}
 
 
+def serialize_play(r: Any) -> dict:
+    """One ``music_plays`` row as the history item the dashboard renders (shared with the user library)."""
+    return {
+        'title': r['title'], 'author': r['author'], 'uri': r['uri'], 'artwork': r['artwork'],
+        'length_ms': r['length_ms'],
+        'user_id': str(r['user_id']) if r['user_id'] else None,
+        'played_at': r['played_at'].isoformat(),
+    }
+
+
 @router.get("/music/history")
 async def get_music_history(
     guild: GuildDep, bot: BotDep, limit: int = Query(50, ge=1, le=100), before: str | None = None
@@ -584,15 +594,7 @@ async def get_music_history(
         if cursor.tzinfo is not None:
             cursor = cursor.astimezone(datetime.UTC).replace(tzinfo=None)  # the column is naive UTC
     rows = await bot.db.music_plays.guild_history(guild.id, limit=limit, before=cursor)
-    return {'items': [
-        {
-            'title': r['title'], 'author': r['author'], 'uri': r['uri'], 'artwork': r['artwork'],
-            'length_ms': r['length_ms'],
-            'user_id': str(r['user_id']) if r['user_id'] else None,
-            'played_at': r['played_at'].isoformat(),
-        }
-        for r in rows
-    ]}
+    return {'items': [serialize_play(r) for r in rows]}
 
 
 @router.post("/music/control")

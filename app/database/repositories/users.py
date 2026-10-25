@@ -336,6 +336,10 @@ class PlaylistsRepository(BaseRepository):
                 playlist_id, name, url),
         )
 
+    async def remove_track_by_url(self, playlist_id: int, url: str) -> None:
+        """Removes every track with ``url`` from a playlist."""
+        await self.execute("DELETE FROM playlist_lookup WHERE playlist_id = $1 AND url = $2;", playlist_id, url)
+
     async def remove_track(self, track_id: int) -> None:
         """Removes a single track by its id."""
         await self.delete_where("playlist_lookup", ("id",), (track_id,))

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.rendering.card_style import clean_style, resolve_style, style_options
 
 from ..dependencies import BotDep, verify_token
+from .music import serialize_play
 
 if TYPE_CHECKING:
     from app.cogs.leveling.cog import Leveling
@@ -278,3 +279,77 @@ async def delete_user_reminder(discord_id: int, reminder_id: int, bot: BotDep) -
     if timers and timers._loaded_timer and timers._loaded_timer.id == reminder_id:
         timers.reset_task()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Music library (top tracks, recents, liked songs, playlists)
+# ---------------------------------------------------------------------------
+
+LIKED = "Liked Songs"
+
+
+class LikeBody(BaseModel):
+    name: str
+    url: str
+
+
+def _invalidate_playlists(bot: Any, user_id: int) -> None:
+    """The Music cog memoizes ``get_playlists``; drop it so Discord sees dashboard writes."""
+    cog: Any = bot.get_cog("Music")
+    if cog is not None:
+        cog.get_playlists.invalidate(user_id)
+
+
+@router.get("/music")
+async def get_user_music(discord_id: int, bot: BotDep) -> dict:
+    plays = bot.db.music_plays
+    top = await plays.user_top_tracks(discord_id)
+    recent = await plays.user_recent(discord_id)
+    liked: list[dict] = []
+    playlists: list[dict] = []
+    for p in await bot.db.playlists.get_user_playlists(discord_id):
+        tracks = await bot.db.playlists.get_playlist_tracks(p["id"])
+        if p["name"] == LIKED:
+            liked = [{"name": t["name"], "url": t["url"]} for t in tracks]
+        else:
+            playlists.append({"id": str(p["id"]), "name": p["name"], "track_count": len(tracks)})
+    return {
+        "top_tracks": [
+            {k: r[k] for k in ("title", "author", "uri", "artwork", "length_ms", "plays")} for r in top
+        ],
+        "recent": [serialize_play(r) for r in recent],
+        "liked": liked,
+        "playlists": playlists,
+    }
+
+
+@router.post("/music/liked")
+async def like_track(discord_id: int, body: LikeBody, bot: BotDep) -> dict:
+    repo = bot.db.playlists
+    row = await repo.get_liked_songs(discord_id)
+    if row is None:
+        pid = await repo.create_playlist(discord_id, LIKED, discord.utils.utcnow())
+    else:
+        pid = row["id"]
+    if not any(t["url"] == body.url for t in await repo.get_playlist_tracks(pid)):
+        await repo.add_track(pid, body.name, body.url)
+    _invalidate_playlists(bot, discord_id)
+    return {"liked": True}
+
+
+@router.delete("/music/liked")
+async def unlike_track(discord_id: int, bot: BotDep, url: str = Query(...)) -> dict:
+    row = await bot.db.playlists.get_liked_songs(discord_id)
+    if row is not None:
+        await bot.db.playlists.remove_track_by_url(row["id"], url)
+        _invalidate_playlists(bot, discord_id)
+    return {"liked": False}
+
+
+@router.get("/music/playlists/{playlist_id}")
+async def get_user_playlist(discord_id: int, playlist_id: int, bot: BotDep) -> dict:
+    row = await bot.db.playlists.get_playlist_by_id(playlist_id)
+    if row is None or row["user_id"] != discord_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playlist not found")
+    tracks = await bot.db.playlists.get_playlist_tracks(playlist_id)
+    return {"id": str(row["id"]), "name": row["name"], "tracks": [{"name": t["name"], "url": t["url"]} for t in tracks]}

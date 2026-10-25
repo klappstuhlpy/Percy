@@ -521,6 +521,7 @@ class PlayerPanel(LayoutView):
 
         if not liked_songs:
             await music_cog.initizalize_user(interaction.user)
+            liked_songs = await music_cog.get_liked_songs(interaction.user.id)
 
         assert self.player.current is not None
         track_urls = [t.url for t in liked_songs.tracks]
