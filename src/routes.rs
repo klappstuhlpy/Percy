@@ -365,11 +365,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/starboard",
             get(community::guild_starboard).post(community::guild_starboard_update),
         )
-        .route("/dashboard/guild/:guild_id/automod", get(community::guild_automod))
-        .route(
-            "/dashboard/guild/:guild_id/automod/:preset",
-            post(community::guild_automod_update),
-        )
         .route(
             "/dashboard/guild/:guild_id/tags/create",
             post(community::guild_tag_create),

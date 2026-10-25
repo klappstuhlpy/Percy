@@ -419,20 +419,6 @@ pub(crate) struct RoleMenusTemplate {
 
 #[allow(dead_code)]
 #[derive(Template)]
-#[template(path = "guild/automod.html")]
-pub(crate) struct AutoModTemplate {
-    pub(crate) account: Option<Viewer>,
-    pub(crate) guild_id: u64,
-    pub(crate) guild_name: String,
-    pub(crate) nav_active: &'static str,
-    pub(crate) page_title: &'static str,
-    pub(crate) automod: percy_client::AutoModInfo,
-    pub(crate) roles: Vec<Role>,
-    pub(crate) channels: Vec<Channel>,
-}
-
-#[allow(dead_code)]
-#[derive(Template)]
 #[template(path = "guild/starboard.html")]
 pub(crate) struct StarboardTemplate {
     pub(crate) account: Option<Viewer>,

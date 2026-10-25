@@ -444,7 +444,7 @@
                         {% if guild.flags.alerts && guild.alert_channel.is_none() %}<span class="gk-required-tag">REQUIRED</span>{%
                         endif %}
                     </label>
-                    <span class="config-description">Channel for raid/automod alerts</span>
+                    <span class="config-description">Channel for raid alerts</span>
                     <select name="alert_channel_id" id="alert_channel" data-needs="post" class="config-select">
                         <option value="">Not set</option>
                         {% for ch in channels %}
