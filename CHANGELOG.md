@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Music: play history is now recorded, and the queue list is a paginated Components V2 view that is cleaned up when Percy is disconnected from voice.
+- Music: new dashboard routes for search, play, history, removing and moving queued tracks, and your liked songs and playlists.
 - `voteclaim`: claim 1,500 coins once per bot-list vote in each server (use `vote` to vote).
 - `balance leaderboard` can now rank by net worth, prestige, daily streak or game profit.
 - `profile [member]`: one card with net worth, rank, prestige, job, pet, achievements, best game and daily streak; `profile title <achievement>` equips an earned achievement as your title.
