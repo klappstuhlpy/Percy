@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.services.music_access import MusicViewer, resolve_viewer
+from app.services.music_audio import EFFECTS, EQ_PRESETS, audio_state
 
 from ..dependencies import BotDep, GuildDep, verify_token
 
@@ -25,12 +26,7 @@ router = APIRouter(prefix="/guilds/{guild_id}", tags=["Music"], dependencies=[De
 # Constants
 # ---------------------------------------------------------------------------
 
-PRESETS = {
-    'flat': [0.0] * 15,
-    'bassboost': [0.2, 0.15, 0.1, 0.05, 0.0, -0.05, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
-    'treble': [-0.1, -0.1, -0.1, -0.05, 0.0, 0.05, 0.1, 0.12, 0.15, 0.18, 0.2, 0.22, 0.24, 0.25, 0.25],
-    'vocal': [-0.1, -0.05, 0.0, 0.1, 0.2, 0.25, 0.25, 0.2, 0.15, 0.1, 0.0, -0.05, -0.1, -0.1, -0.1],
-}
+PRESETS = EQ_PRESETS
 
 DEFAULT_CHANNEL_DESCRIPTION = """
 This is the Channel where you can see {bot}'s current playing songs.
@@ -56,11 +52,32 @@ class SetupBody(BaseModel):
 class EqualizerBody(BaseModel):
     preset: str | None = None
     bands: list[float] | None = None
+    user_id: int | str | None = None  # set by the member-facing dashboard; absent = admin form
 
 
 class FiltersBody(BaseModel):
     action: str
     smoothing: float | None = None
+
+
+class WobbleBody(BaseModel):
+    frequency: float = Field(ge=0.1, le=14.0)
+    depth: float = Field(ge=0.0, le=1.0)
+
+
+class AudioBody(BaseModel):
+    """One call for every effect: a named preset (toggled with ``enabled``), fine values, or ``reset``."""
+
+    user_id: int | str
+    effect: str | None = None
+    enabled: bool = True
+    reset: bool = False
+    speed: float | None = Field(None, ge=0.5, le=2.0)
+    pitch: float | None = Field(None, ge=0.5, le=2.0)
+    rotation: float | None = Field(None, ge=0.0, le=1.0)
+    low_pass: float | None = Field(None, ge=2.5, le=50.0)  # 0 / null leaves it; use effect=lowpass enabled=false
+    tremolo: WobbleBody | None = None
+    vibrato: WobbleBody | None = None
 
 
 class DJModeBody(BaseModel):
@@ -371,6 +388,9 @@ async def post_music_equalizer(guild: GuildDep, bot: BotDep, body: EqualizerBody
     if player is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no active player in this guild')
 
+    if body.user_id is not None:
+        await _require_audio_access(bot, guild, body.user_id)
+
     if body.preset:
         if body.preset not in PRESETS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'unknown preset: {body.preset}')
@@ -393,6 +413,81 @@ async def post_music_equalizer(guild: GuildDep, bot: BotDep, body: EqualizerBody
     await player.set_filters(filters)
 
     return {'ok': True, 'equalizer': gains}
+
+
+async def _require_audio_access(bot: Bot, guild: discord.Guild, user_id: int | str) -> None:
+    """Same gate as the Discord ``filter`` commands: be in the bot's voice channel (a DJ needn't be).
+
+    ``can_control`` is that rule plus DJ-only mode, where only DJs may touch anything.
+    """
+    _, viewer, dj_mode = await _viewer_for(bot, guild, user_id)
+    if not viewer.can_control:
+        if viewer.role == 'visitor' and dj_mode == 1:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='only members with the DJ role can change the sound')
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="join the bot's voice channel to change the sound")
+
+
+def _audio_payload(player: wavelink.Player | None) -> dict:
+    names = ('timescale', 'karaoke', 'tremolo', 'vibrato', 'rotation', 'distortion', 'channel_mix', 'low_pass')
+    if player is None:
+        state = audio_state({}, {})
+    else:
+        f = player.filters
+        state = audio_state(f.equalizer.payload, {n: getattr(f, n).payload for n in names})
+    return {
+        'active': player is not None,
+        **state,
+        'presets': {'equalizer': list(EQ_PRESETS), 'filters': list(EFFECTS)},
+    }
+
+
+@router.get("/music/audio")
+async def get_music_audio(guild: GuildDep, bot: BotDep) -> dict:
+    """Equalizer + every Lavalink filter as the sound panel shows them; defaults when no player is active."""
+    _, player = _get_guild_player(bot, guild.id)
+    return _audio_payload(player)
+
+
+@router.post("/music/audio")
+async def post_music_audio(guild: GuildDep, bot: BotDep, body: AudioBody) -> dict:
+    """Apply a named effect (``enabled`` false removes it), fine values, or ``reset`` all filters."""
+    _, player = _get_guild_player(bot, guild.id)
+    if player is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no active player in this guild')
+    await _require_audio_access(bot, guild, body.user_id)
+
+    filters: wavelink.Filters = player.filters
+    if body.reset:
+        filters.reset()
+    if body.effect is not None:
+        if body.effect not in EFFECTS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'unknown effect: {body.effect}')
+        attr, options = EFFECTS[body.effect]
+        if body.enabled:
+            getattr(filters, attr).set(**options)
+        else:
+            getattr(filters, attr).reset()
+    if body.speed is not None or body.pitch is not None:
+        ts = filters.timescale.payload
+        filters.timescale.set(
+            speed=body.speed if body.speed is not None else ts.get('speed', 1.0),
+            pitch=body.pitch if body.pitch is not None else ts.get('pitch', 1.0),
+            rate=ts.get('rate', 1.0),
+        )
+    if body.rotation is not None:
+        if body.rotation:
+            filters.rotation.set(rotation_hz=body.rotation)
+        else:
+            filters.rotation.reset()
+    if body.low_pass is not None:
+        filters.low_pass.set(smoothing=body.low_pass)
+    if body.tremolo is not None:
+        filters.tremolo.set(frequency=body.tremolo.frequency, depth=body.tremolo.depth)
+    if body.vibrato is not None:
+        filters.vibrato.set(frequency=body.vibrato.frequency, depth=body.vibrato.depth)
+
+    await player.set_filters(filters)
+    return {'ok': True, **_audio_payload(player)}
 
 
 @router.post("/music/filters")

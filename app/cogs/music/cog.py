@@ -24,6 +24,7 @@ from app.clients import LRCLibClient
 from app.core import Bot, Cog, Context, Flags, PermissionTemplate, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
 from app.services import LyricsResult, MusicIntentParser, SyncedLyrics, clean_track_title, parse_lrc
+from app.services.music_audio import EQ_PRESETS
 from app.utils import (
     ProgressBar,
     WrapList,
@@ -1254,25 +1255,7 @@ class Music(Cog):
         await ctx.defer()
 
         filters: wavelink.Filters = player.filters
-        filters.equalizer.set(
-            bands=[  # type: ignore
-                {"band": 0, "gain": 0.2},
-                {"band": 1, "gain": 0.15},
-                {"band": 2, "gain": 0.1},
-                {"band": 3, "gain": 0.05},
-                {"band": 4, "gain": 0.0},
-                {"band": 5, "gain": -0.05},
-                {"band": 6, "gain": -0.1},
-                {"band": 7, "gain": -0.1},
-                {"band": 8, "gain": -0.1},
-                {"band": 9, "gain": -0.1},
-                {"band": 10, "gain": -0.1},
-                {"band": 11, "gain": -0.1},
-                {"band": 12, "gain": -0.1},
-                {"band": 13, "gain": -0.1},
-                {"band": 14, "gain": -0.1},
-            ]
-        )
+        filters.equalizer.set(bands=[{"band": i, "gain": g} for i, g in enumerate(EQ_PRESETS["bassboost"])])  # type: ignore
         await player.set_filters(filters)
 
         embed = discord.Embed(

@@ -200,3 +200,75 @@ async def test_play_now_needs_destroy() -> None:
     with patch.object(api, '_get_guild_player', return_value=(guild, player)), pytest.raises(HTTPException) as exc:
         await api.post_music_play(guild, _bot(2), api.PlayBody(user_id=5, query='x', play_now=True))
     assert exc.value.status_code == 403
+
+
+def _fx_player() -> MagicMock:
+    """A player whose wavelink filters are real, so presets round-trip through ``payload``."""
+    player = _player()
+    player.filters = wavelink.Filters()
+    player.set_filters = AsyncMock()
+    return player
+
+
+async def test_audio_state_defaults_without_player() -> None:
+    with patch.object(api, '_get_guild_player', return_value=(None, None)):
+        out = await api.get_music_audio(_guild(member_vc=10, bot_vc=10), _bot())
+    assert out['active'] is False
+    assert out['equalizer'] == {'preset': 'flat', 'bands': [0.0] * 15}
+    assert out['filters']['timescale']['speed'] == 1.0
+    assert out['filters']['channel_mix'] == {'preset': None}
+    assert 'pop' in out['presets']['equalizer'] and 'vaporwave' in out['presets']['filters']
+
+
+async def test_audio_effect_preset_applies_and_reports() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _fx_player()
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)):
+        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='nightcore'))
+        assert out['effects'] == ['nightcore'] and out['filters']['timescale']['speed'] == 1.25
+        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='mono'))
+        assert out['filters']['channel_mix']['preset'] == 'mono'
+        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='nightcore', enabled=False))
+        assert 'nightcore' not in out['effects']
+    assert player.set_filters.await_count == 3
+
+
+async def test_audio_fine_values_and_reset() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _fx_player()
+    body = api.AudioBody(user_id=5, speed=1.5, rotation=0.4, low_pass=10, tremolo={'frequency': 3, 'depth': 0.4})
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)):
+        out = await api.post_music_audio(guild, _bot(0), body)
+        f = out['filters']
+        assert f['timescale']['speed'] == 1.5 and f['rotation']['rotation_hz'] == 0.4
+        assert f['low_pass']['smoothing'] == 10 and f['tremolo']['depth'] == 0.4
+        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, reset=True))
+    assert out['effects'] == [] and out['filters']['timescale']['speed'] == 1.0
+
+
+def test_audio_body_rejects_out_of_range() -> None:
+    from pydantic import ValidationError
+
+    for bad in ({'speed': 3.0}, {'pitch': 0.1}, {'rotation': 2}, {'low_pass': 99}, {'tremolo': {'frequency': 50, 'depth': 0.5}}):
+        with pytest.raises(ValidationError):
+            api.AudioBody(user_id=5, **bad)
+
+
+async def test_audio_requires_voice_presence() -> None:
+    guild, player = _guild(member_vc=None, bot_vc=10), _fx_player()
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)):
+        with pytest.raises(HTTPException) as exc:
+            await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='8d'))
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException) as exc:
+            await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset='pop', user_id=5))
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException) as exc:
+            await api.post_music_audio(_guild(member_vc=10, bot_vc=10), _bot(1), api.AudioBody(user_id=5, effect='8d'))
+        assert exc.value.status_code == 403  # DJ-only mode, no DJ role
+    player.set_filters.assert_not_awaited()
+
+
+async def test_equalizer_preset_with_user() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _fx_player()
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)):
+        out = await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset='rock', user_id=5))
+    assert out['equalizer'] == api.EQ_PRESETS['rock']
