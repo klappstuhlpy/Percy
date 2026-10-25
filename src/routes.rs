@@ -48,6 +48,11 @@ pub(crate) fn build_router(state: AppState) -> Router {
         )
         .route("/dashboard/music/:guild_id/play", post(music_app::music_play))
         .route("/dashboard/music/:guild_id/control", post(music_app::music_control))
+        .route(
+            "/dashboard/music/:guild_id/audio",
+            get(music_app::music_audio).post(music_app::music_audio_set),
+        )
+        .route("/dashboard/music/:guild_id/equalizer", post(music_app::music_equalizer))
         .route("/account/music", get(music_app::account_music))
         .route("/account/music/liked", post(music_app::account_music_like))
         .route("/account/music/liked/remove", post(music_app::account_music_unlike))
@@ -276,14 +281,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/music/reset",
             post(actions::guild_music_reset),
-        )
-        .route(
-            "/dashboard/guild/:guild_id/music/equalizer",
-            post(actions::guild_music_equalizer),
-        )
-        .route(
-            "/dashboard/guild/:guild_id/music/filters",
-            post(actions::guild_music_filters),
         )
         .route("/dashboard/guild/:guild_id/music/247", post(actions::guild_music_247))
         .route(

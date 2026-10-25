@@ -665,34 +665,6 @@ pub async fn guild_autoresponders_action(
 
 // ── Music ───────────────────────────────────────────────────────────────────
 
-/// `POST /dashboard/guild/:guild_id/music/equalizer`
-pub async fn guild_music_equalizer(
-    State(app): State<AppState>,
-    session: Session,
-    Path(guild_id): Path<u64>,
-    Json(body): Json<serde_json::Value>,
-) -> Response {
-    let percy = match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => percy,
-        Err(response) => return response,
-    };
-    ok_or_err(percy.post_music_equalizer(guild_id, &body).await)
-}
-
-/// `POST /dashboard/guild/:guild_id/music/filters`
-pub async fn guild_music_filters(
-    State(app): State<AppState>,
-    session: Session,
-    Path(guild_id): Path<u64>,
-    Json(body): Json<serde_json::Value>,
-) -> Response {
-    let percy = match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => percy,
-        Err(response) => return response,
-    };
-    ok_or_err(percy.post_music_filters(guild_id, &body).await)
-}
-
 /// `GET /dashboard/guild/:guild_id/music/status` — live player poll.
 pub async fn guild_music_status(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
     let percy = match gate_json(&app, &session, guild_id).await {

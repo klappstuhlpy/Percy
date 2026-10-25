@@ -183,6 +183,8 @@
         const chip = $('#mapp-role');
         if (chip && viewer.role) { chip.textContent = roleLabel(viewer.role); chip.dataset.role = viewer.role; }
     }
+    /* What the Sound panel (music/sound.js) borrows; it never reaches into app state directly. */
+    window.mapp = { api, toast, ico, esc, BASE, hasGuild, lockHint, viewer: () => viewer, status: () => status };
 
     // ── Rendering: banner, now playing, queue, bar ───────────────────────
     let keys = {};
@@ -340,6 +342,7 @@
     function renderAll() {
         renderBanner(); renderNp(); renderQueue(); renderBarNow(); renderTransport();
         applyRole(); syncHearts();
+        document.dispatchEvent(new CustomEvent('mapp:status'));
     }
 
     function applyStatus(d) {
@@ -925,7 +928,6 @@
         else if (v === 'lyrics') loadLyrics(false);
         else if (v === 'history' && !historyLoaded) refreshHistory();
         else if (v === 'search') { if (input && !input.value) searchIdle(); }
-        else if (v === 'audio') window.dispatchEvent(new Event('resize')); // the EQ canvas sizes itself on resize
     }
     window.addEventListener('hashchange', route);
 

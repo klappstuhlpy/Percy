@@ -409,6 +409,62 @@ pub async fn music_control(
     }
 }
 
+/// `GET /dashboard/music/:guild_id/audio` — equalizer and every filter of the live player.
+pub async fn music_audio(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    match percy.get_music_audio(guild_id).await {
+        Ok(a) => {
+            let mut j = serde_json::to_value(&a).unwrap_or_else(|_| json!({}));
+            j["ok"] = json!(true);
+            Json(j).into_response()
+        }
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// `POST /dashboard/music/:guild_id/audio` — an effect, fine values or a reset; Percy gates on the session user.
+pub async fn music_audio_set(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<Value>,
+) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let body = with_session_user(body, &session.discord_user_id);
+    match percy.set_music_audio(guild_id, &body).await {
+        Ok(a) => {
+            let mut j = serde_json::to_value(&a).unwrap_or_else(|_| json!({}));
+            j["ok"] = json!(true);
+            Json(j).into_response()
+        }
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// `POST /dashboard/music/:guild_id/equalizer` — a preset or 15 band gains, as the session user.
+pub async fn music_equalizer(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<Value>,
+) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let body = with_session_user(body, &session.discord_user_id);
+    match percy.post_music_equalizer(guild_id, &body).await {
+        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Err(e) => percy_fail(&e),
+    }
+}
+
 // ── Account JSON (the user's own library) ───────────────────────────────────
 
 async fn account_gate<'a>(app: &'a AppState, session: &Session) -> Result<(&'a PercyClient, u64), Response> {
@@ -673,6 +729,57 @@ mod tests {
         let got = seen.lock().unwrap().clone().expect("Percy was called");
         assert_eq!(got["user_id"], "42");
         assert_eq!(got["action"], "pause");
+    }
+
+    #[tokio::test]
+    async fn music_audio_writes_carry_the_session_user() {
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<Value>>> = Default::default();
+        let (a, b) = (seen.clone(), seen.clone());
+        let fake = axum::Router::new()
+            .route(
+                "/api/v1/users/42/guilds",
+                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "owner": false}])) }),
+            )
+            .route(
+                "/api/v1/guilds/5/music/audio",
+                axum::routing::post(move |Json(v): Json<Value>| async move {
+                    a.lock().unwrap().push(v);
+                    Json(json!({"active": true, "effects": ["8d"]}))
+                }),
+            )
+            .route(
+                "/api/v1/guilds/5/music/equalizer",
+                axum::routing::post(move |Json(v): Json<Value>| async move {
+                    b.lock().unwrap().push(v);
+                    Json(json!({}))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, fake).await });
+        let mut config = Config::test_default();
+        config.percy.api_url = Some(format!("http://{addr}"));
+        let app = build_state_with(config, FsPath::new(":memory:")).await.unwrap();
+
+        let r = music_audio_set(
+            State(app.clone()),
+            Session::new("42", "ferris"),
+            Path(5),
+            Json(json!({"effect": "8d", "user_id": "666"})),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::OK);
+        let r = music_equalizer(
+            State(app),
+            Session::new("42", "ferris"),
+            Path(5),
+            Json(json!({"preset": "pop"})),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::OK);
+        let got = seen.lock().unwrap().clone();
+        assert_eq!(got.len(), 2);
+        assert!(got.iter().all(|b| b["user_id"] == "42"));
     }
 
     /// Fake Percy where user 42 shares guild 7001; `hits` counts search calls and `fail` flips them to 500.
@@ -962,14 +1069,16 @@ mod render_tests {
     fn admin_forms_render_only_for_admins() {
         let plain = template(false, false).render().unwrap();
         assert!(plain.contains("Paper Lanterns") && plain.contains(r#"data-role="listener""#));
-        assert!(!plain.contains("eq-section") && !plain.contains("setup-section"));
+        assert!(!plain.contains("setup-section"));
+        // The sound panel is for every member, not an admin form.
+        assert!(plain.contains("id=\"mapp-sound\"") && plain.contains(r#"data-act="sound""#));
 
         // A DJ (manager) without Manage Server sees no admin form: those routes would refuse them.
         let dj = template(true, false).render().unwrap();
-        assert!(!dj.contains("eq-section") && !dj.contains("setup-section") && !dj.contains("dj-mode-section"));
+        assert!(!dj.contains("setup-section") && !dj.contains("dj-mode-section"));
 
         let admin = template(true, true).render().unwrap();
-        assert!(admin.contains("eq-section") && admin.contains("dj-mode-section") && admin.contains("setup-section"));
+        assert!(admin.contains("dj-mode-section") && admin.contains("setup-section"));
     }
 
     #[test]

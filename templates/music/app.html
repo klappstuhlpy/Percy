@@ -33,6 +33,7 @@
 <link rel="stylesheet" href="/static/css/music/app.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/music/player.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/music/views.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/music/sound.css" type="text/css"/>
 {% if is_admin %}
 <link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/guild/music.css" type="text/css"/>
@@ -128,7 +129,6 @@
         {% if is_admin %}
         <p class="mapp-nav-label">Manage</p>
         <a href="#session" data-view-link="session" class="mapp-nav-link mapp-nav-mgr">{% call icon("settings") %}<span>Session settings</span><span class="mapp-chip">DJ</span></a>
-        <a href="#audio" data-view-link="audio" class="mapp-nav-link mapp-nav-mgr">{% call icon("sliders") %}<span>Equalizer</span><span class="mapp-chip">DJ</span></a>
         <a href="#setup" data-view-link="setup" class="mapp-nav-link mapp-nav-mgr">{% call icon("hash") %}<span>Music channel</span><span class="mapp-chip mapp-chip--admin">Admin</span></a>
         {% endif %}
         {% if selected.is_some() %}
@@ -401,14 +401,6 @@
             </div>
             {% include "music/manager_session.html" %}
         </section>
-        <section class="mapp-view mapp-view--admin" data-view="audio" aria-labelledby="mapp-h-audio" hidden>
-            <div class="mapp-head">
-                <span class="mapp-head-ico">{% call icon("sliders") %}</span>
-                <div><h1 class="mapp-title" id="mapp-h-audio">Equalizer &amp; filters <span class="mapp-chip">DJ</span></h1><p class="mapp-lede">Shape the sound of the live player. Changes apply to everyone listening.</p></div>
-            </div>
-            {% include "music/manager_audio.html" %}
-            {% if music.is_none() %}<div class="mapp-empty"><span class="mapp-empty-ico">{% call icon("wifi-off") %}</span><h3>Player unavailable</h3><p>Percy could not be reached, so the equalizer cannot be shown.</p></div>{% endif %}
-        </section>
         <section class="mapp-view mapp-view--admin" data-view="setup" aria-labelledby="mapp-h-setup" hidden>
             <div class="mapp-head">
                 <span class="mapp-head-ico">{% call icon("hash") %}</span>
@@ -450,6 +442,7 @@
             </div>
             {% endmatch %}
         </div>
+        <div class="mapp-fx" id="mapp-fx" aria-label="Active sound settings" hidden></div>
         <div class="mapp-panel mapp-rail-queue">
             <div class="mapp-queue-head">
                 <h2>{% call icon("queue") %}Queue</h2>
@@ -521,6 +514,7 @@
             </div>
         </div>
         <div class="mapp-bar-end">
+            <button type="button" class="mapp-ibtn" data-act="sound" aria-label="Sound: equalizer and effects" aria-haspopup="dialog" aria-expanded="false" aria-controls="mapp-sound" title="Sound"{% if selected.is_none() %} disabled{% endif %}>{% call icon("equalizer") %}</button>
             <button type="button" class="mapp-ibtn" data-act="lyrics" aria-label="Lyrics" aria-pressed="false" title="Lyrics"{% if selected.is_none() %} disabled{% endif %}>{% call icon("lyrics") %}</button>
             <button type="button" class="mapp-ibtn" data-rail-toggle aria-label="Queue" aria-pressed="true" title="Queue">{% call icon("queue") %}</button>
             <button type="button" class="mapp-ibtn" data-act="stop" aria-label="Stop and disconnect" title="Stop and disconnect"{% if !self.can_destroy() || self.now_playing().is_none() %} hidden{% endif %}>{% call icon("stop") %}</button>
@@ -530,6 +524,24 @@
             </div>
         </div>
     </footer>
+
+    {# ─── Sound panel (equalizer + effects); contents are built by static/js/music/sound.js ─── #}
+    <section class="mapp-sound" id="mapp-sound" role="dialog" aria-labelledby="mapp-sound-h" hidden>
+        <header class="mapp-sound-head">
+            <span class="mapp-sound-ico">{% call icon("equalizer") %}</span>
+            <div class="mapp-sound-titles"><h2 id="mapp-sound-h">Sound</h2><p id="mapp-sound-sub">Changes apply to everyone listening</p></div>
+            <button type="button" class="mapp-ibtn" data-sound-close aria-label="Close sound panel">{% call icon("x") %}</button>
+        </header>
+        <p class="mapp-sound-lock" id="mapp-sound-lock" role="status" hidden></p>
+        <div class="mapp-sound-tabs" role="tablist" aria-label="Sound settings">
+            <button type="button" role="tab" id="mapp-tab-eq" aria-controls="mapp-pane-eq" aria-selected="true" data-sound-tab="eq">Equalizer</button>
+            <button type="button" role="tab" id="mapp-tab-fx" aria-controls="mapp-pane-fx" aria-selected="false" tabindex="-1" data-sound-tab="fx">Effects</button>
+        </div>
+        <div class="mapp-sound-body">
+            <div role="tabpanel" id="mapp-pane-eq" aria-labelledby="mapp-tab-eq"></div>
+            <div role="tabpanel" id="mapp-pane-fx" aria-labelledby="mapp-tab-fx" hidden></div>
+        </div>
+    </section>
 
     <div class="mapp-scrim" id="mapp-scrim" data-rail-toggle hidden></div>
     <div class="mapp-toasts" id="mapp-toasts"></div>
@@ -541,6 +553,7 @@
 <script src="/static/js/common/confirm.js"></script>
 <script src="/static/js/common/unsaved.js"></script>
 <script src="/static/js/music/app.js"></script>
+<script src="/static/js/music/sound.js"></script>
 {% if is_admin %}
 {% include "music/manager_scripts.html" %}
 {% endif %}

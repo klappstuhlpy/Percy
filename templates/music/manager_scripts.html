@@ -2,8 +2,6 @@
 {% if let Some(music) = music %}
 <script>
 const GUILD_ID = '{{ self.guild_id() }}';
-const MUSIC_INITIAL_ACTIVE = {{ music.active }};
-const MUSIC_EQUALIZER = [{% for g in music.equalizer %}{{ g }}{% if !loop.last %},{% endif %}{% endfor %}];
 const ALWAYS_ON_MODE = '{{ music.always_on.mode.as_deref().unwrap_or("") }}';
 const DJ_MODE_INITIAL = {% match music.setup %}{% when Some with (setup) %}{{ setup.dj_mode }}{% when None %}0{% endmatch %};
 </script>
