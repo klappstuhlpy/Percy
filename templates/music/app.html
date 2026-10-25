@@ -10,7 +10,7 @@
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/music/app.css" type="text/css"/>
-{% if self.is_manager() %}
+{% if is_admin %}
 <link rel="stylesheet" href="/static/css/guild/music.css" type="text/css"/>
 {% endif %}
 {% endblock %}
@@ -48,13 +48,11 @@
             <a href="#history"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-history"/></svg>History</a>
             <a href="#liked"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-heart"/></svg>Liked Songs</a>
             <a href="#playlists"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-playlist"/></svg>Playlists</a>
-            {% if self.is_manager() %}
+            {% if is_admin %}
             <hr>
             <a href="#dj-mode-section" class="mgr"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-settings"/></svg>Session settings <span class="chip">DJ</span></a>
             <a href="#eq-section" class="mgr"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-sliders"/></svg>Equalizer &amp; filters <span class="chip">DJ</span></a>
-            {% if manager_view %}
             <a href="#setup-section" class="mgr"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-hash"/></svg>Music channel setup <span class="chip">Admin</span></a>
-            {% endif %}
             {% endif %}
         </nav>
 
@@ -178,12 +176,10 @@
                 {% endif %}
             </section>
 
-            {% if self.is_manager() %}
+            {% if is_admin %}
             {% include "music/manager_session.html" %}
             {% include "music/manager_audio.html" %}
-            {% if manager_view %}
             {% include "music/manager_panel.html" %}
-            {% endif %}
             {% endif %}
         </main>
 
@@ -242,7 +238,7 @@
 <script src="/static/js/common/common.js"></script>
 <script src="/static/js/common/confirm.js"></script>
 <script src="/static/js/common/unsaved.js"></script>
-{% if self.is_manager() %}
+{% if is_admin %}
 {% include "music/manager_scripts.html" %}
 {% endif %}
 {% endblock %}

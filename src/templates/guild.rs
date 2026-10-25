@@ -261,20 +261,6 @@ impl EconomyTemplate {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Template)]
-#[template(path = "guild/music.html")]
-pub(crate) struct MusicTemplate {
-    pub(crate) account: Option<Viewer>,
-    pub(crate) guild_id: u64,
-    pub(crate) guild_name: String,
-    pub(crate) nav_active: &'static str,
-    pub(crate) page_title: &'static str,
-    pub(crate) music: MusicInfo,
-    pub(crate) guild: GuildInfo,
-    pub(crate) channels: Vec<Channel>,
-}
-
 /// One server in the music app's picker.
 #[derive(Debug, Clone)]
 pub(crate) struct GuildPick {
@@ -296,10 +282,12 @@ pub(crate) struct MusicAppTemplate {
     pub(crate) music: Option<MusicInfo>,
     pub(crate) history: Vec<MusicHistoryItem>,
     pub(crate) library: UserMusicLibrary,
-    /// Channels for the manager forms; empty unless the viewer manages the server.
+    /// Channels for the admin forms; empty unless `is_admin`.
     pub(crate) channels: Vec<Channel>,
     /// True on `/dashboard/guild/:id/music`, where the guild-admin gate has already passed.
     pub(crate) manager_view: bool,
+    /// The viewer passes the guild-admin gate (Manage Server); the admin-only forms need it.
+    pub(crate) is_admin: bool,
 }
 
 impl MusicAppTemplate {

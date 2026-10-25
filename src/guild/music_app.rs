@@ -100,6 +100,8 @@ pub(crate) async fn render_app(
     manager_view: bool,
 ) -> Response {
     let mutual = fetch_mutual_guilds(app, &session.discord_user_id).await;
+    // The guild-admin routes gate on `manageable`; the admin-only forms show under the same rule.
+    let admin_ids: Vec<String> = mutual.iter().filter(|g| g.manageable).map(|g| g.id.clone()).collect();
     let mut guilds: Vec<GuildPick> = mutual
         .into_iter()
         .map(|g| GuildPick {
@@ -115,6 +117,7 @@ pub(crate) async fn render_app(
     let mut music = None;
     let mut history = Vec::new();
     let mut channels = Vec::new();
+    let mut is_admin = false;
     let mut library = UserMusicLibrary::default();
 
     if let (Some(percy), Some(i), Ok(uid)) = (&app.percy, selected_idx, user_id(session)) {
@@ -131,7 +134,8 @@ pub(crate) async fn render_app(
         library = lib.unwrap_or_default();
         // ponytail: only the picked server's dot is live; one get_music per server is too many calls.
         guilds[i].playing = music.as_ref().is_some_and(|m| m.active);
-        if viewer.as_ref().is_some_and(|v| v.is_manager) {
+        is_admin = admin_ids.contains(&guilds[i].id);
+        if is_admin {
             channels = percy.get_guild_channels(gid).await.unwrap_or_default();
         }
     } else if let (Some(percy), Ok(uid)) = (&app.percy, user_id(session)) {
@@ -150,6 +154,7 @@ pub(crate) async fn render_app(
         library,
         channels,
         manager_view,
+        is_admin,
     }
     .into_response()
 }
@@ -448,12 +453,41 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
-    #[test]
-    fn music_control_overwrites_user_id() {
-        let sent = json!({"action": "pause", "user_id": "666"});
-        let forwarded = with_session_user(sent, "42");
-        assert_eq!(forwarded["user_id"], "42");
-        assert_eq!(forwarded["action"], "pause");
+    #[tokio::test]
+    async fn music_control_overwrites_user_id() {
+        // Fake Percy: user 42 shares guild 5; the control call records the body it receives.
+        let seen: std::sync::Arc<std::sync::Mutex<Option<Value>>> = Default::default();
+        let sink = seen.clone();
+        let fake = axum::Router::new()
+            .route(
+                "/api/v1/users/42/guilds",
+                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "owner": false}])) }),
+            )
+            .route(
+                "/api/v1/guilds/5/music/control",
+                axum::routing::post(move |Json(b): Json<Value>| async move {
+                    *sink.lock().unwrap() = Some(b);
+                    Json(json!({}))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, fake).await });
+        let mut config = Config::test_default();
+        config.percy.api_url = Some(format!("http://{addr}"));
+        let app = build_state_with(config, FsPath::new(":memory:")).await.unwrap();
+
+        let resp = music_control(
+            State(app),
+            Session::new("42", "ferris"),
+            Path(5),
+            Json(json!({"action": "pause", "user_id": "666"})),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let got = seen.lock().unwrap().clone().expect("Percy was called");
+        assert_eq!(got["user_id"], "42");
+        assert_eq!(got["action"], "pause");
     }
 
     #[test]
@@ -468,7 +502,7 @@ mod render_tests {
     use super::*;
     use askama::Template;
 
-    fn template(is_manager: bool, manager_view: bool) -> MusicAppTemplate {
+    fn template(is_manager: bool, is_admin: bool) -> MusicAppTemplate {
         let pick = GuildPick {
             id: "5".into(),
             name: "Home".into(),
@@ -494,20 +528,22 @@ mod render_tests {
             history: vec![],
             library: UserMusicLibrary::default(),
             channels: vec![],
-            manager_view,
+            manager_view: false,
+            is_admin,
         }
     }
 
     #[test]
-    fn manager_sections_render_only_for_managers() {
+    fn admin_forms_render_only_for_admins() {
         let plain = template(false, false).render().unwrap();
         assert!(plain.contains("Song") && plain.contains(r#"data-role="listener""#));
         assert!(!plain.contains("eq-section") && !plain.contains("setup-section"));
 
+        // A DJ (manager) without Manage Server sees no admin form: those routes would refuse them.
         let dj = template(true, false).render().unwrap();
-        assert!(dj.contains("eq-section") && dj.contains("dj-mode-section"));
-        assert!(!dj.contains("setup-section"), "channel setup is guild-admin only");
+        assert!(!dj.contains("eq-section") && !dj.contains("setup-section") && !dj.contains("dj-mode-section"));
 
-        assert!(template(true, true).render().unwrap().contains("setup-section"));
+        let admin = template(true, true).render().unwrap();
+        assert!(admin.contains("eq-section") && admin.contains("dj-mode-section") && admin.contains("setup-section"));
     }
 }
