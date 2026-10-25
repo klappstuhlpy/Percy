@@ -217,7 +217,7 @@ async def test_audio_state_defaults_without_player() -> None:
     assert out['equalizer'] == {'preset': 'flat', 'bands': [0.0] * 15}
     assert out['filters']['timescale']['speed'] == 1.0
     assert out['filters']['channel_mix'] == {'preset': None}
-    assert 'pop' in out['presets']['equalizer'] and 'vaporwave' in out['presets']['filters']
+    assert out['presets']['equalizer_bands']['pop'] and 'pop' in out['presets']['equalizer'] and 'vaporwave' in out['presets']['filters']
 
 
 async def test_audio_effect_preset_applies_and_reports() -> None:

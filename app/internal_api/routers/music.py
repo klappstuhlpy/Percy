@@ -437,7 +437,7 @@ def _audio_payload(player: wavelink.Player | None) -> dict:
     return {
         'active': player is not None,
         **state,
-        'presets': {'equalizer': list(EQ_PRESETS), 'filters': list(EFFECTS)},
+        'presets': {'equalizer': list(EQ_PRESETS), 'filters': list(EFFECTS), 'equalizer_bands': EQ_PRESETS},
     }
 
 
