@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-26
+
+### Fixed
+- The dashboard now builds against the tagged kls-core v0.13.0 (percy-client 0.13.0) instead of a local checkout.
+- Tab bars lay out correctly on the restyled pages.
+
 ## [0.15.0] - 2026-10-26
 
 ### Changed
