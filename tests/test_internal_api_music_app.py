@@ -10,6 +10,7 @@ import pytest
 import wavelink
 from fastapi import HTTPException
 
+from app.cogs.music.player import Player
 from app.internal_api.routers import music as api
 
 
@@ -56,6 +57,9 @@ def _player(queued: int = 0) -> MagicMock:
     player.always_on = False
     player.connected = True
     player.refresh_panel = AsyncMock()
+    # The real queue edits, so the API is tested against what the player does.
+    player.move_queued = lambda src, dst: Player.move_queued(player, src, dst)
+    player.remove_queued = lambda i: Player.remove_queued(player, i)
     return player
 
 

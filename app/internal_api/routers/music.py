@@ -624,12 +624,9 @@ async def get_music_viewer(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
 
 
 def _flatten(result: Any) -> list[wavelink.Playable]:
-    """A search result (track, playlist, list or a SearchReturn marker) as a plain track list."""
-    if isinstance(result, wavelink.Playlist):
-        return list(result.tracks)
-    if isinstance(result, wavelink.Playable):
-        return [result]
-    return list(result) if isinstance(result, list) else []
+    from app.cogs.music.lookups import flatten
+
+    return flatten(result)
 
 
 # Lavalink search results carry metadata, not stream URLs (those resolve at play time), so they
@@ -709,14 +706,11 @@ def _releases(tracks: list[wavelink.Playable]) -> list[dict]:
 async def get_music_artist(
     guild: GuildDep, name: str = Query('', max_length=120), url: str | None = Query(None, max_length=500)
 ) -> dict:
-    """An artist page built from what Lavalink offers.
+    """An artist page built from what Lavalink offers (see ``app.cogs.music.lookups.artist_tracks``).
 
-    With ``url`` (LavaSrc artist links: Spotify, Deezer, Apple Music) the link resolves to a playlist of
-    the artist's top tracks. Otherwise (or when that yields nothing) the name is searched on Spotify,
-    then YouTube Music, keeping tracks whose author contains the name. Releases are the albums those
-    tracks belong to; there is no discography endpoint in Lavalink.
+    Releases are the albums those tracks belong to; there is no discography endpoint in Lavalink.
     """
-    from app.cogs.music.player import Player
+    from app.cogs.music.lookups import artist_tracks
 
     name, url = name.strip(), _http_url(url)
     if not name and not url:
@@ -725,19 +719,7 @@ async def get_music_artist(
     if (hit := _detail_get(key)) is not None:
         return hit
 
-    tracks: list[wavelink.Playable] = []
-    artwork: str | None = None
-    if url:
-        result = await Player.search(url)
-        if isinstance(result, wavelink.Playlist):
-            tracks, artwork = list(result.tracks), result.artwork
-    if not tracks and name:
-        wanted = name.casefold()
-        for source in ('spsearch', wavelink.TrackSource.YouTubeMusic):
-            found = _flatten(await Player.search(name, source=source))
-            tracks = [t for t in found if wanted in (t.author or '').casefold()]
-            if tracks:
-                break
+    tracks, artwork = await artist_tracks(name, url)
     if not tracks:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='No tracks found for that artist.')
 
@@ -758,14 +740,14 @@ async def get_music_artist(
 @router.get("/music/album")
 async def get_music_album(guild: GuildDep, url: str = Query(..., max_length=500)) -> dict:
     """An album/single/playlist link loaded as a track list (LavaSrc or any source Lavalink resolves)."""
-    from app.cogs.music.player import Player
+    from app.cogs.music.lookups import album
 
     url = _http_url(url) or ''
     key = ('album', '', url)
     if (hit := _detail_get(key)) is not None:
         return hit
-    result = await Player.search(url)
-    if not isinstance(result, wavelink.Playlist) or not result.tracks:
+    result = await album(url)
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Could not load that album.')
     tracks = list(result.tracks)
     artists = list(dict.fromkeys(a for a in (_first_artist(t.author) for t in tracks) if a))[:6]
@@ -1017,20 +999,20 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
             to_idx = int(body.to)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'from' and 'to' indices are required")
-        items = player.queue._items  # wavelink stores the upcoming queue here
-        if not (0 <= from_idx < len(items)) or not (0 <= to_idx < len(items)):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='index out of range')
-        items.insert(to_idx, items.pop(from_idx))
+        try:
+            player.move_queued(from_idx, to_idx)  # type: ignore[attr-defined]
+        except IndexError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='index out of range') from None
         refresh_panel = True
     elif action == 'remove':
         try:
             index = int(body.index)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'index' is required")
-        items = player.queue._items
-        if not 0 <= index < len(items):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid queue index')
-        del items[index]
+        try:
+            player.remove_queued(index)  # type: ignore[attr-defined]
+        except IndexError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid queue index') from None
         refresh_panel = True
 
     if refresh_panel and player.connected:

@@ -49,10 +49,11 @@ from app.utils import (
 )
 from config import Emojis, genius_key
 
-from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
+from .lookups import album, artist_tracks
+from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode, is_dj
 from .player import MAX_CONSECUTIVE_ERRORS, Player
 from .playlist import PlaylistNameOrID
-from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator, QueueView
+from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator, QueueView, TrackItem, TrackListView
 
 if TYPE_CHECKING:
     from app.utils.progress import ProgressTracker
@@ -1358,7 +1359,41 @@ class Music(Cog):
         await player.skip(force=True)
         await ctx.send_success("An admin or DJ has to the next track.", delete_after=10)
 
-    @command("jump-to", description="Jump to a track in the Queue.", hybrid=True, guild_only=True)
+    @command(description="Plays the previous Track.", hybrid=True, guild_only=True)
+    @checks.is_author_connected()
+    @checks.is_player_playing()
+    @checks.is_listen_together()
+    async def back(self, ctx: Context) -> None:
+        """Plays the previous Track."""
+        player: Player = cast("Player", ctx.voice_client)
+        if not player:
+            return
+
+        assert player.queue.history is not None
+        if player.queue.history.is_empty:
+            await ctx.send_error("There are no tracks in the history.")
+            return
+
+        await player.back()
+        await ctx.send_success("An admin or DJ has skipped to the previous song.", delete_after=10)
+
+    # A group so queue editing costs no extra global slash commands (Discord allows 100).
+    @group(name="queue", description="Display the active queue.", hybrid=True, guild_only=True, fallback="show")
+    async def queue(self, ctx: Context) -> None:
+        """Display the active queue, plus recently played history on a separate page."""
+        assert ctx.guild is not None
+        player: Player = cast("Player", ctx.voice_client)
+        if not player:
+            return
+
+        if player.current is None and not QueueView.collect(player):
+            await ctx.send_error("No items currently in the queue.", ephemeral=True)
+            return
+
+        await ctx.defer()
+        await QueueView.for_player(ctx, player)
+
+    @queue.command(name="jump", aliases=["jump-to"], description="Jump to a track in the queue.")
     @describe(position="The index of the track you want to jump to.")
     @checks.is_author_connected()
     @checks.is_player_playing()
@@ -1391,38 +1426,46 @@ class Music(Cog):
         else:
             await ctx.send_success("Playing the next track in queue.", delete_after=10)
 
-    @command(description="Plays the previous Track.", hybrid=True, guild_only=True)
+    @queue.command(name="move", aliases=["move-track"], description="Move a track to another spot in the queue.")
+    @describe(position="The track's number in the queue (1 = next up).", to="Where it should go (1 = next up).")
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
-    async def back(self, ctx: Context) -> None:
-        """Plays the previous Track."""
+    async def move_track(self, ctx: Context, position: int, to: int) -> None:
+        """Move a track to another spot in the queue. DJs and members with Manage Server only."""
         player: Player = cast("Player", ctx.voice_client)
-        if not player:
+        assert isinstance(ctx.author, discord.Member)
+        if not (is_dj(ctx.author) or ctx.author.guild_permissions.manage_guild):
+            await ctx.send_error("Only DJs (or members with Manage Server) can reorder the queue.")
             return
-
-        assert player.queue.history is not None
-        if player.queue.history.is_empty:
-            await ctx.send_error("There are no tracks in the history.")
+        try:
+            track = player.move_queued(position - 1, to - 1)
+        except IndexError:
+            await ctx.send_error(f"Use positions between 1 and {len(player.queue)}.")
             return
+        await player.refresh_panel()
+        await ctx.send_success(f"Moved **{display_title(track.title, track.author)}** to position {to}.", delete_after=10)
 
-        await player.back()
-        await ctx.send_success("An admin or DJ has skipped to the previous song.", delete_after=10)
-
-    @command(description="Display the active queue.", hybrid=True, guild_only=True)
-    async def queue(self, ctx: Context) -> None:
-        """Display the active queue, plus recently played history on a separate page."""
-        assert ctx.guild is not None
+    @queue.command(name="remove", aliases=["remove-track"], description="Remove a track from the queue.")
+    @describe(position="The track's number in the queue (1 = next up).")
+    @checks.is_author_connected()
+    @checks.is_player_playing()
+    @checks.is_listen_together()
+    async def remove_track(self, ctx: Context, position: int) -> None:
+        """Remove a track from the queue. DJs and members with Manage Server, or whoever queued it."""
         player: Player = cast("Player", ctx.voice_client)
-        if not player:
+        assert isinstance(ctx.author, discord.Member)
+        queued = list(player.queue)
+        if not 1 <= position <= len(queued):
+            await ctx.send_error(f"Use a position between 1 and {len(queued)}." if queued else "The queue is empty.")
             return
-
-        if player.current is None and not QueueView.collect(player):
-            await ctx.send_error("No items currently in the queue.", ephemeral=True)
+        mine = getattr(queued[position - 1].extras, "requester_id", None) == ctx.author.id
+        if not (mine or is_dj(ctx.author) or ctx.author.guild_permissions.manage_guild):
+            await ctx.send_error("You can remove tracks you queued; others need a DJ or Manage Server.")
             return
-
-        await ctx.defer()
-        await QueueView.for_player(ctx, player)
+        track = player.remove_queued(position - 1)
+        await player.refresh_panel()
+        await ctx.send_success(f"Removed **{display_title(track.title, track.author)}** from the queue.", delete_after=10)
 
     # Lyrics Stuff
 
@@ -2107,6 +2150,103 @@ class Music(Cog):
         ):
             await message.delete(delay=60)
 
+    # -- Discover: history, picks for you, artists and albums ---------------------
+    # The same pages the web player has, as cards with a queue button per track and "Play all".
+
+    REC_ARTISTS: ClassVar[int] = 3
+    REC_PER_ARTIST: ClassVar[int] = 6
+
+    @group(
+        name="discover",
+        description="Find music: recently played, picks for you, artists and albums.",
+        guild_only=True,
+        hybrid=True,
+    )
+    async def discover(self, ctx: Context) -> None:
+        """Find music: recently played, picks for you, artists and albums."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @discover.command(name="history", description="What this server played lately.")
+    async def discover_history(self, ctx: Context) -> None:
+        """What this server played lately, newest first, with who queued it."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.music_plays.guild_history(ctx.guild.id, limit=100)
+        items = []
+        for r in rows:
+            when = f"<t:{int(r['played_at'].replace(tzinfo=datetime.UTC).timestamp())}:R>"
+            who = f" by <@{r['user_id']}>" if r["user_id"] else " (autoplay)"
+            items.append(TrackItem(r["title"], r["author"], r["uri"], artwork=r["artwork"], meta=f"{when}{who}"))
+        await TrackListView.start(
+            ctx, entries=items, per_page=6, author_only=False, timeout=300, cog=self,
+            title="Recently played", subtitle=f"In **{ctx.guild.name}**",
+            empty="*Nothing has been played here yet.* Start with </play:1207828024037216283>.",
+        )
+
+    @discover.command(name="foryou", description="Songs by the artists you play most.")
+    async def discover_foryou(self, ctx: Context) -> None:
+        """Songs by the artists you play most (your last 30 days), skipping ones you already play."""
+        await ctx.defer()
+        top = await self.bot.db.music_plays.user_top_tracks(ctx.author.id, days=30, limit=25)
+        artists = list(dict.fromkeys(a for a in (track_artist(r["author"]) for r in top) if a))[: self.REC_ARTISTS]
+        if not artists:
+            await ctx.send_error("Play a few songs with Percy first, and picks for you show up here.")
+            return
+        known = {r["uri"] for r in top}
+        items: list[TrackItem] = []
+        for artist in artists:
+            tracks, _ = await artist_tracks(artist)
+            fresh = [t for t in tracks if t.uri not in known][: self.REC_PER_ARTIST]
+            items += [TrackItem.of(t, meta=f"Because you listen to {artist}") for t in fresh]
+            known.update(t.uri for t in fresh)
+        await TrackListView.start(
+            ctx, entries=items, per_page=6, timeout=300, cog=self,
+            title="For you", subtitle=f"Based on {', '.join(f'**{a}**' for a in artists)}",
+            cover=items[0].artwork if items else None,
+            empty="*Nothing new came back for your artists right now.* Try again later.",
+        )
+
+    @discover.command(name="artist", description="An artist's top tracks.")
+    @describe(name="The artist to look up.")
+    async def discover_artist(self, ctx: Context, *, name: str) -> None:
+        """An artist's top tracks, found on Spotify or YouTube Music."""
+        await ctx.defer()
+        tracks, artwork = await artist_tracks(name.strip())
+        if not tracks:
+            await ctx.send_error(f"No tracks were found for **{name}**.")
+            return
+        first = tracks[0]
+        artwork = artwork or getattr(getattr(first, "artist", None), "artwork", None) or first.artwork
+        links = [("Open artist", url)] if (url := getattr(getattr(first, "artist", None), "url", None)) else []
+        await TrackListView.start(
+            ctx, entries=[TrackItem.of(t) for t in tracks[:25]], per_page=6, author_only=False, timeout=300, cog=self,
+            title=track_artist(first.author) or name, subtitle="Artist • top tracks", cover=artwork, links=links,
+        )
+
+    @discover.command(name="album", description="The tracks of an album, single or playlist link.")
+    @describe(link="A Spotify, Apple Music, Deezer, YouTube or SoundCloud album/playlist link.")
+    async def discover_album(self, ctx: Context, link: str) -> None:
+        """The tracks of an album, single or playlist link, ready to queue."""
+        link = link.strip()
+        if not link.lower().startswith(("https://", "http://")):
+            await ctx.send_error("Paste an album or playlist link (https://...).")
+            return
+        await ctx.defer()
+        result = await album(link)
+        if result is None:
+            await ctx.send_error("That link could not be loaded as an album or playlist.")
+            return
+        tracks = list(result.tracks)
+        artists = list(dict.fromkeys(a for a in (track_artist(t.author) for t in tracks) if a))[:4]
+        kind = "Single" if len(tracks) == 1 else "Album"
+        await TrackListView.start(
+            ctx, entries=[TrackItem.of(t) for t in tracks], per_page=6, author_only=False, timeout=300, cog=self,
+            title=result.name or kind, subtitle=f"{kind} • {', '.join(artists) or result.author or 'Various artists'} • "
+            f"{pluralize(len(tracks)):track}",
+            cover=result.artwork or next((t.artwork for t in tracks if t.artwork), None),
+            links=[("Open", result.url or link)],
+        )
+
     # -- Playlist management --------------------------------------------------
 
     async def initizalize_user(self, user: discord.abc.User | discord.Member) -> int | None:
@@ -2146,6 +2286,9 @@ class Music(Cog):
         """Gets a playlist by name or ID."""
         if isinstance(name_or_id, int):
             record = await self.bot.db.playlists.get_playlist_by_id(name_or_id)
+            # An id names anyone's playlist; only its owner may see or change it.
+            if record is not None and record["user_id"] != ctx.user.id:
+                record = None
         else:
             record = await self.bot.db.playlists.get_playlist_by_name(ctx.user.id, name_or_id)
 
@@ -2383,6 +2526,72 @@ class Music(Cog):
                 await ctx.send(embed=embed, ephemeral=True)
 
         self.get_playlists.invalidate(ctx.author.id)
+
+    @playlist.command(name="rename", description="Rename one of your playlists.")
+    @app_commands.rename(name_or_id="name-or-id", new_name="new-name")
+    @app_commands.describe(name_or_id="The playlist to rename.", new_name="Its new name (100 characters at most).")
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
+    async def playlist_rename(
+        self,
+        ctx: Context,
+        name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
+        *,
+        new_name: str,
+    ) -> None:
+        """Rename one of your playlists (Liked Songs keeps its name)."""
+        playlist = await self.get_playlist(ctx, name_or_id, pass_tracks=True)
+        if playlist is None:
+            await ctx.send_error("No playlist was found matching your query.")
+            return
+        if playlist.is_liked_songs:
+            await ctx.send_error("Liked Songs cannot be renamed.")
+            return
+        new_name = " ".join(new_name.split())
+        if not new_name or len(new_name) > 100:
+            await ctx.send_error("The name must be between 1 and 100 characters.")
+            return
+        if new_name.casefold() == "liked songs":
+            await ctx.send_error("That name is reserved for your Liked Songs.")
+            return
+        other = await self.bot.db.playlists.get_playlist_by_name(ctx.author.id, new_name)
+        if other is not None and other["id"] != playlist.id:
+            await ctx.send_error("You already have a playlist with that name.")
+            return
+        await self.bot.db.playlists.rename_playlist(playlist.id, new_name)
+        self.get_playlists.invalidate(ctx.author.id)
+        await ctx.send_success(f"Renamed **{playlist.name}** to **{new_name}**.", ephemeral=True)
+
+    @playlist.command(name="cover", description="Set or reset a playlist's cover image.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.describe(
+        name_or_id="The playlist to change.",
+        link="A link to an image. Leave it out to go back to the first song's cover.",
+    )
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
+    async def playlist_cover(
+        self,
+        ctx: Context,
+        name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
+        link: str | None = None,
+    ) -> None:
+        """Set a playlist's cover from an image link, or reset it. Upload images in the web player."""
+        playlist = await self.get_playlist(ctx, name_or_id, pass_tracks=True)
+        if playlist is None:
+            await ctx.send_error("No playlist was found matching your query.")
+            return
+        link = (link or "").strip() or None
+        if link and (len(link) > 2000 or not link.lower().startswith(("https://", "http://"))):
+            await ctx.send_error("The cover must be an http(s) link to an image.")
+            return
+        await self.bot.db.playlists.set_playlist_thumbnail(playlist.id, link)
+        self.get_playlists.invalidate(ctx.author.id)
+        if link:
+            embed = discord.Embed(title=f"New cover for {playlist.name}", colour=helpers.Colour.white())
+            embed.set_image(url=link)
+            embed.set_footer(text="To upload an image instead, use the web player's playlist page.")
+            await ctx.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send_success(f"**{playlist.name}** uses its first song's cover again.", ephemeral=True)
 
     @playlist.command(name="delete", alias="del", description="Delete a playlist.")
     @app_commands.rename(name_or_id="name-or-id")

@@ -112,6 +112,26 @@ class Player(wavelink.Player):
             items += list(self.auto_queue)
         return items
 
+    def move_queued(self, source: int, target: int) -> wavelink.Playable:
+        """Move the manual queue's track at 0-based ``source`` to ``target``; returns it.
+
+        Only the manual queue moves: autoplay picks are regenerated, not ordered. Raises
+        :class:`IndexError` for a position outside the queue.
+        """
+        items = self.queue._items  # wavelink keeps the upcoming manual queue here
+        if not (0 <= source < len(items) and 0 <= target < len(items)):
+            raise IndexError("queue position out of range")
+        track = items.pop(source)
+        items.insert(target, track)
+        return track
+
+    def remove_queued(self, index: int) -> wavelink.Playable:
+        """Remove and return the manual queue's track at 0-based ``index`` (:class:`IndexError` if none)."""
+        items = self.queue._items
+        if not 0 <= index < len(items):
+            raise IndexError("queue position out of range")
+        return items.pop(index)
+
     async def refresh_panel(self) -> None:
         """Re-render the control panel if one exists.
 

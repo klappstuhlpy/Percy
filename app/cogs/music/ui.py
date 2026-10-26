@@ -840,6 +840,28 @@ class QueueView(BasePaginatorV2[QueueEntry]):
         items: list[discord.ui.Item[Any]] = []
         if buttons:
             items.append(discord.ui.ActionRow(*buttons))
+
+        # Editing the manual queue (autoplay picks are regenerated, so they are not offered).
+        queued = list(player.queue)
+        if queued:
+            remove = discord.ui.Select(
+                placeholder="Remove a track from Up Next",
+                options=[
+                    discord.SelectOption(
+                        label=truncate(f"{i}. {display_title(t.title, t.author)}", 100),
+                        description=truncate(t.author or "Unknown", 100),
+                        value=str(i - 1),
+                    )
+                    for i, t in enumerate(queued[:25], 1)
+                ],
+            )
+            remove.callback = lambda i: self.remove(i, int(remove.values[0]) + 1)  # type: ignore[assignment]
+            items.append(discord.ui.ActionRow(remove))
+            if len(queued) > 1:
+                move = discord.ui.Button(label="Move a track", style=discord.ButtonStyle.grey)
+                move.callback = self._open_move  # type: ignore[assignment]
+                items.append(discord.ui.ActionRow(move))
+
         djs = ", ".join(m.mention for m in player.djs) or "none"
         items.append(discord.ui.TextDisplay(f"-# DJ(s): {djs}"))
         return items
@@ -849,6 +871,54 @@ class QueueView(BasePaginatorV2[QueueEntry]):
             await self._add_tracks(interaction, tracks)
 
         return callback
+
+    async def _can_edit(self, interaction: discord.Interaction) -> bool:
+        """Reordering and removing need the DJ role or Manage Server, as on the dashboard."""
+        assert isinstance(interaction.user, discord.Member)
+        if is_dj(interaction.user) or interaction.user.guild_permissions.manage_guild:
+            return True
+        await interaction.response.send_message(
+            f"{Emojis.error} Only DJs (or members with Manage Server) can edit the queue.", ephemeral=True
+        )
+        return False
+
+    async def _open_move(self, interaction: discord.Interaction) -> None:
+        if await self._can_edit(interaction):
+            await interaction.response.send_modal(MoveTrackModal(self))
+
+    async def move(self, interaction: discord.Interaction, source: int, target: int) -> None:
+        """Move the Up Next track at 1-based ``source`` to ``target`` and redraw."""
+        if not await self._can_edit(interaction):
+            return
+        try:
+            track = self.player.move_queued(source - 1, target - 1)
+        except IndexError:
+            await interaction.response.send_message(
+                f"{Emojis.error} Use numbers between 1 and {len(self.player.queue)}.", ephemeral=True
+            )
+            return
+        self.set_entries(self.collect(self.player))
+        await self.refresh(interaction)
+        await self.player.refresh_panel()
+        await interaction.followup.send(
+            f"{Emojis.success} Moved **{display_title(track.title, track.author)}** to position {target}.", ephemeral=True
+        )
+
+    async def remove(self, interaction: discord.Interaction, position: int) -> None:
+        """Remove the Up Next track at 1-based ``position`` and redraw."""
+        if not await self._can_edit(interaction):
+            return
+        try:
+            track = self.player.remove_queued(position - 1)
+        except IndexError:
+            await interaction.response.send_message(f"{Emojis.error} That track is no longer queued.", ephemeral=True)
+            return
+        self.set_entries(self.collect(self.player))
+        await self.refresh(interaction)
+        await self.player.refresh_panel()
+        await interaction.followup.send(
+            f"{Emojis.success} Removed **{display_title(track.title, track.author)}** from the queue.", ephemeral=True
+        )
 
     async def _add_tracks(self, interaction: discord.Interaction, tracks: list[wavelink.Playable]) -> None:
         """Append tracks to the queue. Same gate as ``play``: listener in the bot's channel, or a DJ."""
@@ -1381,3 +1451,167 @@ class LiveLyricsView(LayoutView):
         self._closed = True
         await self._safe_edit(footer="-# Live lyrics ended.")
         super().stop()
+
+
+# -- Track lists: history, "for you", artist and album pages -----------------------------------
+
+
+class TrackItem:
+    """One row of a :class:`TrackListView`: a loaded track, or a saved link to resolve on demand."""
+
+    __slots__ = ("artwork", "author", "meta", "playable", "title", "uri")
+
+    def __init__(
+        self,
+        title: str,
+        author: str | None,
+        uri: str | None,
+        *,
+        artwork: str | None = None,
+        meta: str | None = None,
+        playable: wavelink.Playable | None = None,
+    ) -> None:
+        self.title = title
+        self.author = author
+        self.uri = uri
+        self.artwork = artwork
+        self.meta = meta
+        self.playable = playable
+
+    @classmethod
+    def of(cls, track: wavelink.Playable, *, meta: str | None = None) -> TrackItem:
+        return cls(track.title, track.author, track.uri, artwork=track.artwork, meta=meta, playable=track)
+
+
+async def _resolve(item: TrackItem) -> wavelink.Playable | None:
+    """The playable behind ``item``: kept from the lookup, or searched again from its link/title."""
+    from .lookups import flatten
+    from .player import Player
+
+    if item.playable is not None:
+        return item.playable
+    query = item.uri or " ".join(p for p in (item.title, item.author) if p)
+    found = flatten(await Player.search(query, return_first=True)) if query else []
+    return found[0] if found else None
+
+
+async def queue_for(interaction: discord.Interaction, cog: Music, items: list[TrackItem]) -> None:
+    """Queue ``items`` for the member who clicked. Same gate as ``play``: be in Percy's voice channel
+    (or be a DJ / have Manage Server); when Percy is idle it joins the member's channel."""
+    assert isinstance(interaction.user, discord.Member) and interaction.guild is not None
+    member = interaction.user
+    player: Player | None = interaction.guild.voice_client  # type: ignore[assignment]
+
+    async def say(text: str) -> None:
+        send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        await send(text, ephemeral=True)
+
+    if player is None or not player.connected:
+        if member.voice is None or member.voice.channel is None:
+            await say(f"{Emojis.error} Join a voice channel first, then try again.")
+            return
+    else:
+        if player.queue.listen_together is not MISSING:
+            await say(f"{Emojis.error} Stop the listen-together activity before queueing tracks.")
+            return
+        in_channel = member.voice is not None and member.voice.channel == player.channel
+        if not in_channel and not (is_dj(member) or member.guild_permissions.manage_guild):
+            await say(f"{Emojis.error} You must be in {player.channel.mention} to queue tracks.")
+            return
+
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+    tracks = [t for t in [await _resolve(i) for i in items] if t is not None]
+    if not tracks:
+        await say(f"{Emojis.error} None of these tracks could be loaded right now.")
+        return
+    for track in tracks:
+        track.extras = {"requester_id": member.id}
+
+    if player is None or not player.connected:
+        assert member.voice is not None and member.voice.channel is not None
+        text_channel = interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
+        try:
+            player = await cog.connect_to(member.voice.channel, text_channel)
+        except commands.BadArgument as exc:
+            await say(f"{Emojis.error} {exc}")
+            return
+
+    await player.queue.put_wait(tracks)
+    if not player.playing:
+        await player.play(player.queue.get())
+    await player.refresh_panel()
+
+    what = f"**{display_title(tracks[0].title, tracks[0].author)}**" if len(tracks) == 1 else f"**{len(tracks)}** tracks"
+    await say(f"{Emojis.success} Added {what} to the queue.")
+
+
+class TrackListView(BasePaginatorV2[TrackItem]):
+    """A CV2 card of tracks with a header (title, subtitle, cover), a queue button per row and
+    "Play all". Used by ``discover history|foryou|artist|album``."""
+
+    @property
+    def cog(self) -> Music:
+        return self.extras["cog"]
+
+    async def format_page(self, entries: list[TrackItem], /) -> list[discord.ui.Item[Any]]:
+        title, subtitle, cover = self.extras["title"], self.extras.get("subtitle"), self.extras.get("cover")
+        head = f"## {title}" + (f"\n{subtitle}" if subtitle else "") + (
+            f"\n-# Page {self.current_page}/{self.total_pages}" if self.total_pages > 1 else ""
+        )
+        items: list[discord.ui.Item[Any]] = [
+            discord.ui.Section(head, accessory=discord.ui.Thumbnail(cover)) if cover else discord.ui.TextDisplay(head),
+            discord.ui.Separator(),
+        ]
+        if not entries:
+            items.append(discord.ui.TextDisplay(self.extras.get("empty", "*Nothing here yet.*")))
+        for n, item in enumerate(entries, self.numerate_start):
+            name = truncate(display_title(item.title, item.author), 70)
+            line = f"**{n}.** [{name}]({item.uri})" if item.uri else f"**{n}.** {name}"
+            line += f" - {item.author or 'Unknown'}"
+            if item.meta:
+                line += f"\n-# {item.meta}"
+            button = discord.ui.Button(emoji=Emojis.Music.queue_add, style=discord.ButtonStyle.grey)
+            button.callback = self._queue_callback([item])  # type: ignore[assignment]
+            items.append(discord.ui.Section(line, accessory=button))
+        return items
+
+    def footer_items(self) -> list[discord.ui.Item[Any]]:
+        buttons: list[discord.ui.Button[Any]] = []
+        playable = [i for i in self.entries if i.uri or i.playable]
+        if len(playable) > 1:
+            play_all = discord.ui.Button(label=f"Play all ({min(len(playable), 50)})", style=discord.ButtonStyle.green)
+            play_all.callback = self._queue_callback(playable[:50])  # type: ignore[assignment]
+            buttons.append(play_all)
+        for label, url in self.extras.get("links", []):
+            buttons.append(discord.ui.Button(label=label, url=url))
+        return [discord.ui.ActionRow(*buttons)] if buttons else []
+
+    def _queue_callback(self, items: list[TrackItem]) -> Any:
+        async def callback(interaction: discord.Interaction) -> None:
+            await queue_for(interaction, self.cog, items)
+
+        return callback
+
+
+# -- Queue editing ------------------------------------------------------------------------------
+
+
+class MoveTrackModal(discord.ui.Modal, title="Move a track"):
+    """Two positions in Up Next: where the track is, and where it should go."""
+
+    source = discord.ui.TextInput(label="Track number", placeholder="e.g. 5", max_length=4)
+    target = discord.ui.TextInput(label="Move to position", placeholder="e.g. 1", max_length=4)
+
+    def __init__(self, view: QueueView) -> None:
+        super().__init__()
+        self.view = view
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            src, dst = int(self.source.value), int(self.target.value)
+        except ValueError:
+            await interaction.response.send_message(f"{Emojis.error} Use track numbers, like 5 and 1.", ephemeral=True)
+            return
+        await self.view.move(interaction, src, dst)

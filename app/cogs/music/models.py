@@ -10,6 +10,7 @@ from wavelink import Playable
 
 from app.core.pagination import TextSource
 from app.database import BaseRecord
+from app.services.lyrics import display_title
 from app.utils import merge, pluralize
 
 if TYPE_CHECKING:
@@ -227,9 +228,16 @@ class Playlist(BaseRecord, table="playlist", pk="id"):
                 title=f"{self.name} ({pluralize(len(self.tracks)):Track})", timestamp=self.created, description=page
             )
             embed.set_footer(text=f"[{self.id}] • Created at")
+            if self.cover:
+                embed.set_thumbnail(url=self.cover)
             embeds.append(embed)
 
         return embeds
+
+    @property
+    def cover(self) -> str | None:
+        """The custom cover set on the dashboard or with ``playlist cover``, else the first song's."""
+        return self.thumbnail or next((t.artwork for t in self.tracks if t.artwork), None)
 
     def to_select_option(self, value: Any) -> discord.SelectOption:
         """Converts the Playlist to a SelectOption."""
@@ -259,4 +267,5 @@ class PlaylistTrack(BaseRecord, table="playlist_lookup", pk="id"):
 
     @property
     def text(self) -> str:
-        return f'[{self.name}]({self.url}) (ID: {self.id})'
+        artist = f' - {self.author}' if self.author else ''
+        return f'[{display_title(self.name, self.author)}]({self.url}){artist} (ID: {self.id})'
