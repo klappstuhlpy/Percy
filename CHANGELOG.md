@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-26
+
+### Added
+- Music: create, rename, delete and set a custom cover for playlists, and add any song to a playlist from its menu (or remove it from the one you are viewing).
+- Music: liked songs and playlist songs show their artist and cover; playlist cards show their cover.
+- Tag preview: links straight to images or videos are shown under the message, like in Discord.
+
+### Changed
+- Music: "Jump back in" shows each song once, with its most recent play.
+- Music: search results and recommendations are kept much longer, so the app loads faster.
+- Tag preview: the modal is wider and can be resized, and the message preview follows the dashboard theme.
+- Requires kls-core v0.14.0 (percy-client 0.14.0) and Percy 2.16.0.
+
 ## [0.15.1] - 2026-10-26
 
 ### Fixed
