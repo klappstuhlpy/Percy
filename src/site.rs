@@ -160,7 +160,7 @@ fn cached_md_file(path: &str) -> Result<Arc<String>, std::io::Error> {
 }
 
 /// Screenshots the landing page can show; each is rendered only if `static/img/home/<name>.webp` exists.
-const HOME_SHOTS: [&str; 12] = [
+const HOME_SHOTS: [&str; 13] = [
     "1-inventory",
     "2-item",
     "3-shop",
@@ -173,6 +173,7 @@ const HOME_SHOTS: [&str; 12] = [
     "10-ai",
     "11-dashboard-overview",
     "12-dashboard-leveling",
+    "13-dashboard-music",
 ];
 
 /// Stats and module tiles are cached this long; a Percy outage is cached briefly so a down bot
