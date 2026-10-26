@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import time
 import zoneinfo
 from typing import TYPE_CHECKING, Any
@@ -293,11 +294,98 @@ async def delete_user_reminder(discord_id: int, reminder_id: int, bot: BotDep) -
 # ---------------------------------------------------------------------------
 
 LIKED = "Liked Songs"
+PLAYLIST_NAME_MAX = 100
+PLAYLIST_MAX_TRACKS = 500
 
 
-class LikeBody(BaseModel):
+class TrackBody(BaseModel):
     name: str
     url: str
+    author: str | None = None
+    artwork: str | None = None
+
+
+class PlaylistCreateBody(BaseModel):
+    name: str
+
+
+class PlaylistPatchBody(BaseModel):
+    name: str | None = None
+    # "" clears the custom cover; omitted leaves it alone.
+    thumbnail: str | None = None
+
+
+_YOUTUBE_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/)|youtu\.be/)([\w-]{11})")
+
+
+def _artwork(url: str, played: dict[str, str]) -> str | None:
+    """A cover for a saved track that has none stored: its last play's, else YouTube's thumbnail.
+
+    Rows saved before V61 carry only name + url, so their cover is recovered rather than kept.
+    """
+    # ponytail: music_plays is pruned after 90 days, so an old non-YouTube row can stay coverless.
+    if url in played:
+        return played[url]
+    m = _YOUTUBE_ID.search(url)
+    return f"https://i.ytimg.com/vi/{m.group(1)}/mqdefault.jpg" if m else None
+
+
+def _http_or_none(value: str | None, field: str) -> str | None:
+    """Only http(s) links reach the browser as ``<img src>``; anything else is a 400."""
+    if not value or not value.strip():
+        return None
+    value = value.strip()
+    if len(value) > 2000 or not value.lower().startswith(("https://", "http://")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} must be an http(s) link")
+    return value
+
+
+def _clean_track(body: TrackBody) -> tuple[str, str, str | None, str | None]:
+    url = _http_or_none(body.url, "url")
+    if url is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="url is required")
+    name = body.name.strip()[:200] or url
+    author = (body.author or "").strip()[:200] or None
+    return name, url, author, _http_or_none(body.artwork, "artwork")
+
+
+async def _tracks_payload(bot: Any, rows: list[Any]) -> list[dict]:
+    """Saved tracks with artist and cover, recovering covers for rows saved before V61."""
+    missing = [t["url"] for t in rows if t["url"] and not t["artwork"]]
+    played = await bot.db.music_plays.artwork_for(missing) if missing else {}
+    return [
+        {
+            "name": t["name"],
+            "url": t["url"],
+            "author": t["author"],
+            "artwork": t["artwork"] or _artwork(t["url"] or "", played),
+        }
+        for t in rows
+    ]
+
+
+async def _own_playlist(bot: Any, discord_id: int, playlist_id: int) -> Any:
+    row = await bot.db.playlists.get_playlist_by_id(playlist_id)
+    if row is None or row["user_id"] != discord_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playlist not found")
+    return row
+
+
+def _clean_name(name: str) -> str:
+    name = " ".join(name.split())
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="name is required")
+    if len(name) > PLAYLIST_NAME_MAX:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"name is longer than {PLAYLIST_NAME_MAX}")
+    if name.casefold() == LIKED.casefold():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'"{LIKED}" is reserved')
+    return name
+
+
+async def _check_name_free(bot: Any, discord_id: int, name: str, *, keep: int | None = None) -> None:
+    row = await bot.db.playlists.get_playlist_by_name(discord_id, name)
+    if row is not None and row["id"] != keep:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f'you already have a playlist called "{name}"')
 
 
 def _invalidate_playlists(bot: Any, user_id: int) -> None:
@@ -317,9 +405,17 @@ async def get_user_music(discord_id: int, bot: BotDep) -> dict:
     for p in await bot.db.playlists.get_user_playlists(discord_id):
         tracks = await bot.db.playlists.get_playlist_tracks(p["id"])
         if p["name"] == LIKED:
-            liked = [{"name": t["name"], "url": t["url"]} for t in tracks]
+            liked = await _tracks_payload(bot, tracks)
         else:
-            playlists.append({"id": str(p["id"]), "name": p["name"], "track_count": len(tracks)})
+            # A playlist without a custom cover shows its first saved song's.
+            first = await _tracks_payload(bot, tracks[:1])
+            playlists.append({
+                "id": str(p["id"]),
+                "name": p["name"],
+                "track_count": len(tracks),
+                "thumbnail": p["thumbnail"],
+                "cover": p["thumbnail"] or (first[0]["artwork"] if first else None),
+            })
     return {
         "top_tracks": [
             {k: r[k] for k in ("title", "author", "uri", "artwork", "length_ms", "plays")} for r in top
@@ -331,15 +427,16 @@ async def get_user_music(discord_id: int, bot: BotDep) -> dict:
 
 
 @router.post("/music/liked")
-async def like_track(discord_id: int, body: LikeBody, bot: BotDep) -> dict:
+async def like_track(discord_id: int, body: TrackBody, bot: BotDep) -> dict:
+    name, url, author, artwork = _clean_track(body)
     repo = bot.db.playlists
     row = await repo.get_liked_songs(discord_id)
     if row is None:
         pid = await repo.create_playlist(discord_id, LIKED, discord.utils.utcnow())
     else:
         pid = row["id"]
-    if not any(t["url"] == body.url for t in await repo.get_playlist_tracks(pid)):
-        await repo.add_track(pid, body.name, body.url)
+    if not any(t["url"] == url for t in await repo.get_playlist_tracks(pid)):
+        await repo.add_track(pid, name, url, author=author, artwork=artwork)
     _invalidate_playlists(bot, discord_id)
     return {"liked": True}
 
@@ -353,10 +450,74 @@ async def unlike_track(discord_id: int, bot: BotDep, url: str = Query(...)) -> d
     return {"liked": False}
 
 
+@router.post("/music/playlists", status_code=status.HTTP_201_CREATED)
+async def create_user_playlist(discord_id: int, body: PlaylistCreateBody, bot: BotDep) -> dict:
+    name = _clean_name(body.name)
+    await _check_name_free(bot, discord_id, name)
+    pid = await bot.db.playlists.create_playlist(discord_id, name, discord.utils.utcnow())
+    _invalidate_playlists(bot, discord_id)
+    return {"id": str(pid), "name": name, "track_count": 0, "thumbnail": None, "cover": None}
+
+
 @router.get("/music/playlists/{playlist_id}")
 async def get_user_playlist(discord_id: int, playlist_id: int, bot: BotDep) -> dict:
-    row = await bot.db.playlists.get_playlist_by_id(playlist_id)
-    if row is None or row["user_id"] != discord_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="playlist not found")
-    tracks = await bot.db.playlists.get_playlist_tracks(playlist_id)
-    return {"id": str(row["id"]), "name": row["name"], "tracks": [{"name": t["name"], "url": t["url"]} for t in tracks]}
+    row = await _own_playlist(bot, discord_id, playlist_id)
+    tracks = await _tracks_payload(bot, await bot.db.playlists.get_playlist_tracks(playlist_id))
+    return {
+        "id": str(row["id"]),
+        "name": row["name"],
+        "thumbnail": row["thumbnail"],
+        "cover": row["thumbnail"] or (tracks[0]["artwork"] if tracks else None),
+        "tracks": tracks,
+    }
+
+
+@router.patch("/music/playlists/{playlist_id}")
+async def patch_user_playlist(discord_id: int, playlist_id: int, body: PlaylistPatchBody, bot: BotDep) -> dict:
+    row = await _own_playlist(bot, discord_id, playlist_id)
+    repo = bot.db.playlists
+    if body.name is not None:
+        if row["name"] == LIKED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'"{LIKED}" cannot be renamed')
+        name = _clean_name(body.name)
+        await _check_name_free(bot, discord_id, name, keep=playlist_id)
+        await repo.rename_playlist(playlist_id, name)
+    if body.thumbnail is not None:
+        await repo.set_playlist_thumbnail(playlist_id, _http_or_none(body.thumbnail, "thumbnail"))
+    _invalidate_playlists(bot, discord_id)
+    return await get_user_playlist(discord_id, playlist_id, bot)
+
+
+@router.delete("/music/playlists/{playlist_id}")
+async def delete_user_playlist(discord_id: int, playlist_id: int, bot: BotDep) -> dict:
+    row = await _own_playlist(bot, discord_id, playlist_id)
+    if row["name"] == LIKED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'"{LIKED}" cannot be deleted')
+    await bot.db.playlists.delete_playlist(playlist_id)
+    _invalidate_playlists(bot, discord_id)
+    return {"deleted": True}
+
+
+@router.post("/music/playlists/{playlist_id}/tracks")
+async def add_user_playlist_track(discord_id: int, playlist_id: int, body: TrackBody, bot: BotDep) -> dict:
+    await _own_playlist(bot, discord_id, playlist_id)
+    name, url, author, artwork = _clean_track(body)
+    repo = bot.db.playlists
+    tracks = await repo.get_playlist_tracks(playlist_id)
+    if any(t["url"] == url for t in tracks):
+        return {"added": False, "track_count": len(tracks)}
+    if len(tracks) >= PLAYLIST_MAX_TRACKS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"a playlist holds at most {PLAYLIST_MAX_TRACKS} songs"
+        )
+    await repo.add_track(playlist_id, name, url, author=author, artwork=artwork)
+    _invalidate_playlists(bot, discord_id)
+    return {"added": True, "track_count": len(tracks) + 1}
+
+
+@router.delete("/music/playlists/{playlist_id}/tracks")
+async def remove_user_playlist_track(discord_id: int, playlist_id: int, bot: BotDep, url: str = Query(...)) -> dict:
+    await _own_playlist(bot, discord_id, playlist_id)
+    await bot.db.playlists.remove_track_by_url(playlist_id, url)
+    _invalidate_playlists(bot, discord_id)
+    return {"removed": True}

@@ -120,7 +120,7 @@ from app.services.log_channel import (
     rewrite_gateway_line,
     startup_fields,
 )
-from app.services.lyrics import LyricLine, LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
+from app.services.lyrics import LyricLine, LyricsResult, SyncedLyrics, clean_track_title, parse_lrc, pick_genius_hit
 from app.services.music_access import MusicViewer, resolve_viewer
 from app.services.news import (
     COMMON_WORDS,
@@ -404,6 +404,7 @@ __all__ = (
     'parse_feed',
     'parse_lavalink_metrics',
     'parse_lrc',
+    'pick_genius_hit',
     'pick_search_options',
     'prestige_multiplier',
     'prestige_requirement',

@@ -138,8 +138,9 @@ class Playlist(BaseRecord, table="playlist", pk="id"):
     name: str
     owner_id: int
     created: datetime.datetime
+    thumbnail: str | None
 
-    __slots__ = ("cog", "created", "id", "name", "owner_id", "tracks")
+    __slots__ = ("cog", "created", "id", "name", "owner_id", "thumbnail", "tracks")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -192,7 +193,9 @@ class Playlist(BaseRecord, table="playlist", pk="id"):
         PlaylistTrack
             The track that was added to the playlist.
         """
-        record = await self.cog.bot.db.playlists.add_track(self.id, track.title, track.uri)
+        record = await self.cog.bot.db.playlists.add_track(
+            self.id, track.title, track.uri, author=track.author, artwork=track.artwork
+        )
 
         playlist_track = PlaylistTrack(record=record)
         self.tracks.append(playlist_track)
@@ -249,8 +252,10 @@ class PlaylistTrack(BaseRecord, table="playlist_lookup", pk="id"):
     id: int
     name: str
     url: str
+    author: str | None
+    artwork: str | None
 
-    __slots__ = ('id', 'name', 'url')
+    __slots__ = ('artwork', 'author', 'id', 'name', 'url')
 
     @property
     def text(self) -> str:

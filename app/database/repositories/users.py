@@ -327,14 +327,25 @@ class PlaylistsRepository(BaseRepository):
         """Fetches every track belonging to a playlist."""
         return await self.fetch("SELECT * FROM playlist_lookup WHERE playlist_id = $1;", playlist_id)
 
-    async def add_track(self, playlist_id: int, name: str, url: str | None) -> asyncpg.Record:
+    async def add_track(
+        self, playlist_id: int, name: str, url: str | None, *, author: str | None = None, artwork: str | None = None
+    ) -> asyncpg.Record:
         """Adds a track to a playlist and returns the inserted row."""
         return cast(
             'asyncpg.Record',
             await self.fetchrow(
-                "INSERT INTO playlist_lookup (playlist_id, name, url) VALUES ($1, $2, $3) RETURNING *;",
-                playlist_id, name, url),
+                "INSERT INTO playlist_lookup (playlist_id, name, url, author, artwork) "
+                "VALUES ($1, $2, $3, $4, $5) RETURNING *;",
+                playlist_id, name, url, author, artwork),
         )
+
+    async def rename_playlist(self, playlist_id: int, name: str) -> None:
+        """Renames a playlist."""
+        await self.execute("UPDATE playlist SET name = $2 WHERE id = $1;", playlist_id, name)
+
+    async def set_playlist_thumbnail(self, playlist_id: int, thumbnail: str | None) -> None:
+        """Sets (or with ``None`` clears) a playlist's custom cover."""
+        await self.execute("UPDATE playlist SET thumbnail = $2 WHERE id = $1;", playlist_id, thumbnail)
 
     async def remove_track_by_url(self, playlist_id: int, url: str) -> None:
         """Removes every track with ``url`` from a playlist."""

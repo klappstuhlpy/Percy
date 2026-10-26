@@ -5,6 +5,7 @@ import datetime
 import logging
 import random
 import re
+import time
 from contextlib import suppress
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 from urllib.parse import urljoin, urlparse
@@ -23,7 +24,7 @@ import config
 from app.clients import LRCLibClient
 from app.core import Bot, Cog, Context, Flags, PermissionTemplate, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
-from app.services import LyricsResult, MusicIntentParser, SyncedLyrics, clean_track_title, parse_lrc
+from app.services import LyricsResult, MusicIntentParser, SyncedLyrics, clean_track_title, parse_lrc, pick_genius_hit
 from app.services.music_audio import EQ_PRESETS
 from app.utils import (
     ProgressBar,
@@ -483,7 +484,10 @@ class Music(Cog):
             await player.send_track_add(track)
             return
 
-        if player.autoplay != wavelink.AutoPlayMode.enabled and player.queue.is_empty:
+        # Loop modes continue from an empty queue: wavelink's autoplay replays the loaded track
+        # (loop) or refills the queue from history (loop_all). Disconnecting here cut both off.
+        looping = player.queue.mode is not wavelink.QueueMode.normal and payload.reason == "finished"
+        if player.autoplay != wavelink.AutoPlayMode.enabled and player.queue.is_empty and not looping:
             # A 24/7 player must never leave — refill from its configured source instead.
             if player.always_on:
                 await player.refill_always_on()
@@ -1460,7 +1464,40 @@ class Music(Cog):
             progress=progress,
         )
 
+    # Lyrics never change once published, so a found song is kept for a day and a miss for an
+    # hour (a miss can be fixed upstream). Every lyrics view and live-lyrics poll otherwise
+    # repeats up to four HTTP calls (LRCLIB get + search, Genius search + page).
+    _LYRICS_HIT_TTL: ClassVar[float] = 86400.0
+    _LYRICS_MISS_TTL: ClassVar[float] = 3600.0
+    _LYRICS_MAX: ClassVar[int] = 512
+    _lyrics_cache: ClassVar[dict[tuple[str, str, int | None], tuple[float, LyricsResult | None]]] = {}
+
     async def _fetch_lyrics(
+        self,
+        *,
+        title: str,
+        artist: str | None = None,
+        duration: int | None = None,
+        thumbnail: str | None = None,
+        progress: ProgressTracker | None = None,
+    ) -> LyricsResult | None:
+        """``_resolve_lyrics`` behind a per-song TTL cache."""
+        key = (title.casefold(), (artist or "").casefold(), round(duration / 1000) if duration else None)
+        now = time.monotonic()
+        hit = self._lyrics_cache.get(key)
+        if hit and hit[0] > now:
+            return hit[1]
+        result = await self._resolve_lyrics(
+            title=title, artist=artist, duration=duration, thumbnail=thumbnail, progress=progress
+        )
+        cache = self._lyrics_cache
+        if len(cache) >= self._LYRICS_MAX:
+            for k in [k for k, (exp, _) in cache.items() if exp <= now] or [next(iter(cache))]:
+                del cache[k]
+        cache[key] = (now + (self._LYRICS_HIT_TTL if result else self._LYRICS_MISS_TTL), result)
+        return result
+
+    async def _resolve_lyrics(
         self,
         *,
         title: str,
@@ -1503,8 +1540,7 @@ class Music(Cog):
                 )
 
         # Genius fallback (plain text only).
-        query = f"{title} {artist}" if artist else title
-        return await self._genius_lyrics(query, thumbnail=thumbnail, progress=progress)
+        return await self._genius_lyrics(title, artist, thumbnail=thumbnail, progress=progress)
 
     @staticmethod
     def _lyrics_display_title(record: dict[str, Any], *, fallback: str) -> str:
@@ -1530,11 +1566,18 @@ class Music(Cog):
         return best
 
     async def _genius_lyrics(
-        self, query: str, *, thumbnail: str | None = None, progress: ProgressTracker | None = None
+        self,
+        title: str,
+        artist: str | None = None,
+        *,
+        thumbnail: str | None = None,
+        progress: ProgressTracker | None = None,
     ) -> LyricsResult | None:
         """Scrape Genius for plain lyrics as a last resort. Returns ``None`` on any miss."""
         if not genius_key:
             return None
+        cleaned = clean_track_title(title)
+        query = f"{cleaned} {artist}" if artist else cleaned
 
         headers = {"Accept": "application/json", "Authorization": f"Bearer {genius_key}"}
         try:
@@ -1543,14 +1586,13 @@ class Music(Cog):
             async with self.bot.session.get(
                 "https://api.genius.com/search",
                 headers=headers,
-                params={"q": query.replace("by", "").replace("from", "").strip()},
+                params={"q": query},
             ) as resp:
                 if resp.status != 200:
                     return None
-                hits = (await resp.json())["response"]["hits"]
-                if not hits:
+                data = pick_genius_hit((await resp.json())["response"]["hits"], title=title, artist=artist)
+                if data is None:
                     return None
-                data = hits[0]["result"]
                 song_url = urljoin("https://genius.com", data["path"])
 
             if progress:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import bisect
 import re
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 __all__ = (
     "LyricLine",
@@ -20,6 +20,7 @@ __all__ = (
     "SyncedLyrics",
     "clean_track_title",
     "parse_lrc",
+    "pick_genius_hit",
 )
 
 import discord
@@ -88,6 +89,44 @@ def clean_track_title(title: str) -> str:
     cleaned = _TITLE_NOISE.sub("", title)
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
     return cleaned.strip(" -–—·|")
+
+
+def _match_key(text: str) -> str:
+    """Casefolded words only (unicode-aware, so non-Latin titles survive)."""
+    return re.sub(r"[\W_]+", " ", text.casefold()).strip()
+
+
+# YouTube auto-channels name the artist "MGMT - Topic" / "MGMTVEVO".
+_CHANNEL_NOISE = re.compile(r"(?:\s*-\s*topic|vevo)$", re.IGNORECASE)
+
+
+def pick_genius_hit(hits: list[dict[str, Any]], *, title: str, artist: str | None = None) -> dict[str, Any] | None:
+    """The first Genius search hit that is really this song, else ``None``.
+
+    Genius search is full-text: its top hit can be a user's album-ranking list that merely
+    mentions the artist, and scraping that shows a page of junk as "lyrics". A hit counts
+    only when it is a song whose title matches the track and whose artist matches the track
+    artist (or appears in the title, as in "MGMT - Electric Feel" uploads). No lyrics beat
+    wrong lyrics.
+    """
+    want_title = _match_key(clean_track_title(title))
+    want_artist = _match_key(_CHANNEL_NOISE.sub("", artist or ""))
+    if not want_title:
+        return None
+    for hit in hits:
+        if hit.get("type") != "song":
+            continue
+        result = hit.get("result") or {}
+        got_title = _match_key(result.get("title") or "")
+        got_artist = _match_key(result.get("artist_names") or (result.get("primary_artist") or {}).get("name") or "")
+        if not got_title or not (got_title in want_title or want_title in got_title):
+            continue
+        if want_artist and not (
+            got_artist and (got_artist in want_artist or want_artist in got_artist or got_artist in want_title)
+        ):
+            continue
+        return result
+    return None
 
 
 @dataclass(slots=True)

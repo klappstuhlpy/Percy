@@ -73,6 +73,21 @@ class MusicPlaysRepository(BaseRepository):
             user_id, days, limit,
         )
 
+    async def artwork_for(self, uris: list[str]) -> dict[str, str]:
+        """The most recent artwork seen for each of ``uris`` (uris never played are absent)."""
+        if not uris:
+            return {}
+        rows = await self.fetch(
+            """
+            SELECT DISTINCT ON (uri) uri, artwork
+            FROM music_plays
+            WHERE uri = ANY($1::text[]) AND artwork IS NOT NULL
+            ORDER BY uri, played_at DESC;
+            """,
+            uris,
+        )
+        return {r['uri']: r['artwork'] for r in rows}
+
     async def prune(self, *, older_than_days: int = 90) -> int:
         """Deletes plays older than ``older_than_days``; returns the number removed."""
         status = await self.execute(

@@ -93,3 +93,25 @@ def test_lyrics_result_helpers() -> None:
     plain_only = LyricsResult(title="x", source="Genius", plain="hello\nworld")
     assert plain_only.has_synced is False
     assert plain_only.best_text() == "hello\nworld"
+
+
+def _hit(title: str, artist: str, kind: str = "song") -> dict:
+    return {"type": kind, "result": {"title": title, "artist_names": artist, "path": "/x"}}
+
+
+def test_pick_genius_hit_skips_list_pages_that_mention_the_artist() -> None:
+    from app.services.lyrics import pick_genius_hit
+
+    ranking = _hit("2010 Albums Ranked", "Some User")
+    song = _hit("Electric Feel", "MGMT")
+    assert pick_genius_hit([ranking, song], title="Electric Feel", artist="MGMT") is song["result"]
+    assert pick_genius_hit([ranking], title="Electric Feel", artist="MGMT") is None
+
+
+def test_pick_genius_hit_matches_youtube_style_uploads() -> None:
+    from app.services.lyrics import pick_genius_hit
+
+    song = _hit("Electric Feel", "MGMT")
+    assert pick_genius_hit([song], title="MGMT - Electric Feel (Official Video)", artist="Random Uploader") is song["result"]
+    assert pick_genius_hit([song], title="Electric Feel", artist="MGMTVEVO") is song["result"]
+    assert pick_genius_hit([_hit("Electric Feel", "MGMT", kind="album")], title="Electric Feel", artist="MGMT") is None

@@ -626,13 +626,16 @@ def _flatten(result: Any) -> list[wavelink.Playable]:
     return list(result) if isinstance(result, list) else []
 
 
-_SEARCH_TTL = 300.0
-_SEARCH_MAX = 256
+# Lavalink search results carry metadata, not stream URLs (those resolve at play time), so they
+# age slowly; artist/album pages change even less.
+_SEARCH_TTL = 3600.0
+_DETAIL_TTL = 6 * 3600.0
+_SEARCH_MAX = 512
 _search_cache: dict[tuple[str, int], tuple[float, list[wavelink.Playable]]] = {}
 
 
 async def _cached_search(q: str, limit: int) -> list[wavelink.Playable]:
-    """Search results per (query, limit) for 5 min; empty/failed searches are never cached."""
+    """Search results per (query, limit) for an hour; empty/failed searches are never cached."""
     from app.cogs.music.player import Player
 
     key = (q.casefold().strip(), limit)
@@ -649,7 +652,7 @@ async def _cached_search(q: str, limit: int) -> list[wavelink.Playable]:
     return tracks
 
 
-_DETAIL_MAX = 128
+_DETAIL_MAX = 256
 _detail_cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
 
 
@@ -669,7 +672,7 @@ def _detail_put(key: tuple[str, str, str], value: dict) -> None:
     if len(_detail_cache) >= _DETAIL_MAX:
         for k in [k for k, (exp, _) in _detail_cache.items() if exp <= now] or [next(iter(_detail_cache))]:
             del _detail_cache[k]
-    _detail_cache[key] = (now + _SEARCH_TTL, value)
+    _detail_cache[key] = (now + _DETAIL_TTL, value)
 
 
 def _first_artist(author: str | None) -> str:
