@@ -54,31 +54,15 @@ h1 { font-weight: 800; }
     stroke: currentColor;
 }
 
-/* -- Cards --------------------------------------------------------------- */
-.card,
-.guild-card {
-    --accent: var(--box-border);
-    background: var(--surface-raised);
-    border: 1px solid var(--box-border);
-    border-radius: var(--radius-card);
-    box-shadow: var(--shadow-card);
-    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
-.card { padding: 1.1rem 1.25rem; }
-.card:hover,
-.guild-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-card-hover);
-}
-.card--accent-violet { --accent: var(--accent-violet); }
-.card--accent-cyan   { --accent: var(--accent-cyan); }
-.card--accent-green  { --accent: var(--accent-green); }
-.card--accent-pink   { --accent: var(--accent-pink); }
-.card--accent-brand  { --accent: var(--branding); }
-[class*="card--accent-"] {
-    border-top: 4px solid var(--accent);
-}
-[class*="card--accent-"] .icon-tile { --tile: var(--accent); }
+/* -- Cards ---------------------------------------------------------------
+   The surface itself is components.css's .card; this layer only adds the optional accent
+   (a tinted icon tile) so a card never re-points the global --accent for its children. */
+.card--accent-violet { --card-accent: var(--accent-violet); }
+.card--accent-cyan   { --card-accent: var(--accent-cyan); }
+.card--accent-green  { --card-accent: var(--accent-green); }
+.card--accent-pink   { --card-accent: var(--accent-pink); }
+.card--accent-brand  { --card-accent: var(--brand, var(--branding)); }
+[class*="card--accent-"] .icon-tile { --tile: var(--card-accent); }
 
 /* -- Buttons & chips ----------------------------------------------------- */
 .btn-pill,
@@ -100,16 +84,3 @@ h1 { font-weight: 800; }
 }
 .btn-pill:hover { transform: translateY(-1px); border-color: var(--branding); }
 .btn-pill:disabled { opacity: 0.5; cursor: default; transform: none; }
-
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.7rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    border-radius: var(--radius-pill);
-    color: var(--text-muted);
-    background: var(--box-shade);
-    border: 1px solid var(--box-border);
-}

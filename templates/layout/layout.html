@@ -57,6 +57,15 @@
     <link rel="stylesheet" href="/kls/base.css" type="text/css"/>
     <link rel="stylesheet" href="/static/css/common/layout.css" type="text/css"/>
     {% block css %}{% endblock %}
+    {# The app skin (tokens, component library, page vocabulary, site chrome) for every page that
+       keeps this layout; the dashboard shell and the music app load their own and blank this. #}
+    {% block skin_css %}
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"/>
+    <link rel="stylesheet" href="/static/css/common/tokens.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/components.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/pages.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/site.css" type="text/css"/>
+    {% endblock %}
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap"/>
@@ -70,7 +79,7 @@
         }
     </script>
 </head>
-<body{% block body_attrs %}{% endblock %}>
+<body{% block body_attrs %} class="app-canvas site-page"{% endblock %}>
 {# Full-viewport apps (the music player) replace the whole site chrome by overriding `shell`;
    theme, fonts and the shared scripts below stay. #}
 {% block shell %}

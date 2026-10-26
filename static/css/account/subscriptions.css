@@ -338,3 +338,29 @@
         flex: 1 1 100%;
     }
 }
+
+/* ── App skin: rows are .row-like cards, the segment is the .tabs pill, delivery/remove are small pills ── */
+.sb-row {
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); border-color: var(--line);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent); transition: background var(--dur-base);
+}
+.sb-row:hover { border-color: var(--line); background: var(--surface-2); transform: none; }
+.sb-row__label { font-size: 15px; font-weight: 700; }
+.sb-seg { gap: 2px; padding: 3px; overflow: visible; border-color: var(--line); border-radius: var(--radius-pill); background: var(--surface-1); }
+.sb-seg__opt {
+    min-height: 28px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-pill);
+    background: none; font-size: 13px; font-weight: 700;
+}
+.sb-seg__opt[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); }
+.sb-seg__opt:focus-visible, .sb-delivery:focus-visible, .sb-remove:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.sb-delivery, .sb-remove {
+    min-height: 34px; padding: 0 var(--space-3); border-radius: var(--radius-pill);
+    border-color: var(--line); background: var(--surface-2); font-size: 13px; font-weight: 700;
+}
+.sb-delivery--on { border-color: color-mix(in srgb, var(--success-text) 35%, transparent); background: color-mix(in srgb, var(--success-text) 14%, transparent); }
+.sb-remove:hover { border-color: color-mix(in srgb, var(--error-text) 35%, transparent); background: color-mix(in srgb, var(--error-text) 12%, transparent); }
+.sb-add { padding: var(--space-5); border-radius: var(--radius-lg); border-color: var(--line); background: color-mix(in srgb, var(--surface-1) 78%, transparent); }
+.sb-add__title, .sb-group__title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-faint); }
+.sb-group__count { border-color: var(--line); background: var(--surface-2); }
+.sb-suggestion { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border-color: var(--line); background: var(--surface-2); }
+.sb-notice { border-radius: var(--radius-md); }

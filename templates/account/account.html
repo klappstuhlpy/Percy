@@ -61,7 +61,7 @@
                     <label for="setting-presence">Track Presence</label>
                     <span class="setting-hint">Record your online/idle/dnd/offline status over time.</span>
                 </div>
-                <label class="toggle-switch">
+                <label class="toggle">
                     <input type="checkbox" id="setting-presence" name="track_presence"{% if settings.track_presence %} checked{% endif %}>
                     <span class="toggle-track"></span>
                 </label>
@@ -71,7 +71,7 @@
                     <label for="setting-history">Track Name &amp; Avatar History</label>
                     <span class="setting-hint">Keep a log of your username, nickname, and avatar changes.</span>
                 </div>
-                <label class="toggle-switch">
+                <label class="toggle">
                     <input type="checkbox" id="setting-history" name="track_history"{% if settings.track_history %} checked{% endif %}>
                     <span class="toggle-track"></span>
                 </label>
