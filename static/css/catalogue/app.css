@@ -1,0 +1,202 @@
+/* Catalogue pages on the component library: /releases, /news, /watchlist*, /comics*, the ticker.
+   Loaded after each page's own sheet. The structure, class names and behaviour of those sheets are
+   untouched (JS-off forms, stretched links, the rail, the trailer link); this only gives their
+   shapes the app skin: pill segments, artwork cards, neutral chips, token focus rings.
+   Scoped under .site-page so each rule outranks the page sheet's (0,2,0) selectors. */
+
+/* ── Page head ────────────────────────────────────────────────────────── */
+.site-page .cx-page, .site-page .wl-page, .site-page .sb-page { padding-top: var(--space-6); }
+.site-page .cx-head__eyebrow, .site-page .wl-head__eyebrow, .site-page .sb-head__eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+}
+.site-page .cx-head__title, .site-page .wl-head__title, .site-page .sb-head__title {
+    font-size: clamp(28px, 4.2vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;
+}
+.site-page .cx-head__lede, .site-page .wl-head__lede, .site-page .sb-head__lede { font-size: 15px; line-height: 1.55; }
+.site-page .cx-section__title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; text-transform: none; }
+
+/* ── Segmented controls and tabs: the .tabs component ─────────────────── */
+.site-page .rx-window { margin: var(--space-5) 0 var(--space-2); gap: var(--space-3); }
+.site-page .rx-window__label, .site-page .wl-switch__label, .site-page .nx-field__label {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: none; color: var(--text-faint);
+}
+.site-page .rx-seg {
+    gap: 2px; padding: 3px; overflow: visible;
+    border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-1);
+}
+.site-page .rx-seg__opt {
+    min-height: 32px; padding: 0 var(--space-4); border-radius: var(--radius-pill);
+    font-size: 14px; font-weight: 700; background: none;
+}
+.site-page .rx-seg__opt + .rx-seg__opt { border-left: 0; }
+.site-page .rx-seg__opt:hover { color: var(--text); }
+.site-page .rx-seg__opt[aria-pressed='true'] { background: var(--surface-3); color: var(--text); }
+.site-page .rx-seg__opt { white-space: nowrap; }
+.site-page .rx-seg__opt:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+
+.site-page .cx-tabs, .site-page .wl-switch { gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-1); align-items: center; }
+.site-page .wl-switch { padding-left: var(--space-3); gap: var(--space-2); }
+.site-page .cx .cx-tab, .site-page .wl .wl-switch__option {
+    display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--space-4);
+    border: 0; border-radius: var(--radius-pill); font-size: 14px; font-weight: 700; color: var(--text-muted);
+}
+.site-page .cx .cx-tab:hover, .site-page .wl .wl-switch__option:hover { color: var(--text); }
+.site-page .cx .cx-tab[aria-selected='true'], .site-page .wl .wl-switch__option[aria-current='true'] {
+    background: var(--surface-3); color: var(--text); border: 0; font-weight: 700;
+}
+.site-page .cx .cx-tab:focus-visible, .site-page .wl .wl-switch__option:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+
+/* ── Fields and buttons ───────────────────────────────────────────────── */
+.site-page .cx-search input[type='search'], .site-page .nx-field input[type='search'], .site-page .sb-search input[type='search'] {
+    min-height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-pill);
+    background: var(--surface-1); border: 1px solid var(--line); color: var(--text); font-size: 14px;
+}
+.site-page .cx-search input[type='search']:focus, .site-page .nx-field input[type='search']:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.site-page .cx-search__submit, .site-page .nx-filters__submit, .site-page .wl-region__submit {
+    min-height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-pill);
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text); font-weight: 700; font-size: 14px;
+    transition: background var(--dur-base), border-color var(--dur-base);
+}
+.site-page .cx-search__submit:hover, .site-page .nx-filters__submit:hover, .site-page .wl-region__submit:hover { background: var(--surface-3); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.site-page .cx-search__submit:focus-visible, .site-page .nx-filters__submit:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.site-page .cx-filter-chip { border-radius: var(--radius-pill); background: var(--surface-2); border-color: var(--line); font-size: 13px; font-weight: 600; }
+
+/* ── Chips: neutral, like .chip, not the old info-blue ────────────────── */
+.site-page .rx-chip, .site-page .nx-chip, .site-page .sb-chip {
+    padding: 2px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 700; letter-spacing: 0;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text-muted);
+}
+.site-page .rx .rx-chip--link:hover, .site-page .nx .nx-chip--link:hover { opacity: 1; text-decoration: none; color: var(--text); background: var(--surface-3); }
+.site-page .rx-card__media { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-faint); }
+
+/* ── Artwork cards: the cover grid (comics browse/series, releases, more-from-series) ── */
+.site-page .cx-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--space-4); }
+.site-page .cx-grid--compact { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.site-page .rx-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); max-width: none; }
+.site-page .cx .cx-card {
+    border-radius: var(--radius-lg); border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+    transition: background var(--dur-base), border-color var(--dur-base);
+}
+.site-page .cx .cx-card:hover, .site-page .cx .cx-card:focus-visible, .site-page .cx .cx-card--stretch:focus-within {
+    transform: none; background: var(--surface-2); border-color: color-mix(in srgb, var(--text) 20%, var(--line));
+}
+.site-page .cx .cx-card__link:focus-visible { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-lg); }
+.site-page .cx-card__cover { height: auto; aspect-ratio: 2 / 3; background: var(--surface-3); }
+.site-page .cx-card__body { padding: var(--space-3) var(--space-3) var(--space-2); }
+.site-page .cx-card__title { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+.site-page .cx-card__series { font-size: 13px; font-weight: 600; }
+.site-page .cx-card__meta { font-size: 12px; font-variant-numeric: tabular-nums; }
+.site-page .rx-month__label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-faint); }
+.site-page .rx-section__head { border-bottom-color: var(--line); padding-bottom: var(--space-3); gap: var(--space-3); }
+.site-page .rx-section__note { font-size: 13px; }
+.site-page #following .rx-section__head { border-bottom-color: color-mix(in srgb, var(--success-text) 40%, var(--line)); }
+.site-page #following .cx-section__title { color: var(--success-text); }
+.site-page .cx-figure__value { font-size: 20px; font-variant-numeric: tabular-nums; }
+.site-page .cx-figure__label, .site-page .wl-figure__label { font-size: 11px; letter-spacing: 0.08em; }
+.site-page .cx-figures { border-top-color: var(--line); }
+
+/* ── Read / watched toggle: a small pill; success colour once marked ──── */
+.site-page .pg__button {
+    min-height: 28px; padding: 0 var(--space-3); gap: var(--space-2); border-radius: var(--radius-pill);
+    background: var(--surface-2); border-color: var(--line); color: var(--text-muted);
+    font-size: 12px; font-weight: 700; letter-spacing: 0;
+}
+.site-page .pg__button:hover { background: var(--surface-3); color: var(--text); transform: none; }
+.site-page .pg__button:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.site-page .pg__tick { width: 14px; height: 14px; border-radius: 50%; opacity: 0.6; }
+.site-page .pg--on .pg__button {
+    background: color-mix(in srgb, var(--success-text) 14%, transparent);
+    border-color: color-mix(in srgb, var(--success-text) 35%, transparent); color: var(--success-text);
+}
+.site-page .pg-signin { font-size: 12px; font-weight: 600; }
+.site-page .pg-summary { font-size: 13px; }
+.site-page .pg-summary__bar { height: 6px; background: var(--surface-3); }
+.site-page .pg-summary__fill { background: var(--success-text); }
+.site-page .pg-keys kbd { border-radius: 6px; border-color: var(--line); background: var(--surface-2); }
+
+/* ── News ticker and stream ───────────────────────────────────────────── */
+.site-page .nx-ticker {
+    margin-top: var(--space-5); padding: 6px var(--space-3); border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent); border-color: var(--line);
+}
+.site-page .nx-ticker__chip {
+    padding: 2px 10px; background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border-color: transparent; color: var(--accent-hover); font-size: 11px; letter-spacing: 0.08em;
+}
+[data-theme="light"] .site-page .nx-ticker__chip { color: var(--accent); }
+.site-page .nx-ticker .nx-ticker__link { font-size: 13px; font-weight: 600; }
+.site-page .nx-ticker .nx-ticker__link:hover, .site-page .nx-ticker .nx-ticker__link:focus-visible { color: var(--text); }
+.site-page .nx-ticker .nx-ticker__link:focus-visible, .site-page .nx-ticker .nx-ticker__all:focus-visible { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+.site-page .nx-ticker__source { font-size: 12px; }
+.site-page .nx-ticker .nx-ticker__all { font-size: 13px; font-weight: 700; }
+
+.site-page .nx-list { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+.site-page .nx-row {
+    padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent); transition: background var(--dur-base), border-color var(--dur-base);
+}
+.site-page .nx-row:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--text) 18%, var(--line)); }
+.site-page .nx-row--followed { border-left: 1px solid var(--line); padding-left: var(--space-4); box-shadow: inset 3px 0 0 var(--success-text); }
+.site-page .nx-row__image { border-radius: var(--radius-md); border-color: var(--line); background: var(--surface-3); }
+.site-page .nx-row__headline { font-size: 16px; font-weight: 700; letter-spacing: -0.015em; }
+.site-page .nx .nx-row__headline a:hover, .site-page .nx .nx-row__headline a:focus-visible { color: var(--accent-hover); text-decoration: none; }
+.site-page .nx .nx-row__headline a:focus-visible { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+.site-page .nx-row__meta { font-size: 12px; }
+.site-page .nx-row__source { font-weight: 700; color: var(--text); }
+.site-page .nx-row__followed {
+    padding: 1px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    background: color-mix(in srgb, var(--success-text) 14%, transparent); border-color: transparent; color: var(--success-text);
+}
+.site-page .nx-row__excerpt { font-size: 14px; }
+.site-page .nx-list--compact .nx-row { padding: var(--space-3) var(--space-4); }
+.site-page .nx-list--compact .nx-row:last-child { border-bottom: 1px solid var(--line); }
+
+/* ── Empty / attribution ──────────────────────────────────────────────── */
+.site-page .cx-empty, .site-page .wl-empty, .site-page .sb-empty {
+    padding: var(--space-7) var(--space-5); border: 1px solid var(--line); border-style: solid; border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent); text-align: center;
+}
+.site-page .cx-attribution, .site-page .wl-attribution { border-top-color: var(--line); font-size: 12px; color: var(--text-faint); }
+
+/* ── Watchlist: universe cards, head art, timeline entries ────────────── */
+.site-page .wl-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
+.site-page .wl .wl-card {
+    padding: var(--space-5); border-radius: var(--radius-lg); border: 1px solid var(--line);
+    background:
+        radial-gradient(110% 80% at 0% 0%, color-mix(in srgb, var(--wl-accent) 26%, transparent), transparent 62%),
+        color-mix(in srgb, var(--surface-1) 78%, transparent);
+    transition: background var(--dur-base), border-color var(--dur-base);
+}
+.site-page .wl .wl-card:hover, .site-page .wl .wl-card:focus-visible { border-color: color-mix(in srgb, var(--wl-accent) 55%, var(--line)); }
+.site-page .wl .wl-card:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.site-page .wl-card__name { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.site-page .wl-card__tagline { font-size: 14px; }
+.site-page .wl-card__figures { border-top-color: var(--line); }
+.site-page .wl-figure__value { font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -0.02em; }
+.site-page .wl-head--art { border-radius: var(--radius-lg); }
+.site-page .wl-era__title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; text-transform: none; }
+.site-page .wl-entry + .wl-entry { border-top-color: var(--line); }
+.site-page .wl-tag { font-size: 11px; letter-spacing: 0.06em; font-weight: 700; }
+.site-page .wl-tag--milestone, .site-page .wl-tag--kind { border-radius: var(--radius-pill); padding: 1px 8px; }
+.site-page .wl-entry__instruction { font-size: 13px; }
+.site-page .wl-neighbour, .site-page .wl-season, .site-page .wl-castcard, .site-page .wl-offer__item, .site-page .wl-facts {
+    border-radius: var(--radius-md);
+}
+.site-page .wl .wl-action { border-radius: var(--radius-pill); font-weight: 700; }
+.site-page .wl .wl-action:focus-visible, .site-page .wl .wl-neighbour:focus-visible, .site-page .wl .wl-trailer__play:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.site-page .wl .wl-trailer__play { border-radius: var(--radius-pill); }
+.site-page .wl-section__title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; }
+
+/* ── Keyboard focus ring on stretched card links ──────────────────────── */
+.site-page [data-entry]:focus-visible { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+
+@media (max-width: 640px) {
+    .site-page .rx-seg__opt { padding: 0 var(--space-3); }
+    .site-page .rx-window { flex-wrap: wrap; }
+    .site-page .cx-grid, .site-page .rx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+    .site-page .wl-grid { grid-template-columns: minmax(0, 1fr); }
+    .site-page .nx-ticker { border-radius: var(--radius-lg); }
+}
