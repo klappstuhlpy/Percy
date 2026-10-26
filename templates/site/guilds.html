@@ -52,7 +52,7 @@
                 <span class="pick-art">
                     {% match guild.icon_url %}
                     {% when Some with (url) %}
-                    <img src="{{ url }}?size=256" alt="" loading="lazy">
+                    <img src="{{ crate::templates::cdn_sized(url, 256) }}" alt="" loading="lazy">
                     {% when None %}
                     <span class="pick-initial" aria-hidden="true">{{ guild.name.chars().next().unwrap_or('?') }}</span>
                     {% endmatch %}
@@ -85,7 +85,7 @@
                 <span class="pick-art">
                     {% match guild.icon_url %}
                     {% when Some with (url) %}
-                    <img src="{{ url }}?size=256" alt="" loading="lazy">
+                    <img src="{{ crate::templates::cdn_sized(url, 256) }}" alt="" loading="lazy">
                     {% when None %}
                     <span class="pick-initial" aria-hidden="true">{{ guild.name.chars().next().unwrap_or('?') }}</span>
                     {% endmatch %}
@@ -120,7 +120,7 @@
                 <span class="pick-art">
                     {% match guild.icon_url %}
                     {% when Some with (url) %}
-                    <img src="{{ url }}?size=256" alt="" loading="lazy">
+                    <img src="{{ crate::templates::cdn_sized(url, 256) }}" alt="" loading="lazy">
                     {% when None %}
                     <span class="pick-initial" aria-hidden="true">{{ guild.name.chars().next().unwrap_or('?') }}</span>
                     {% endmatch %}

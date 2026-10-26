@@ -447,7 +447,7 @@
                             <div class="member-cell">
                                 {% match entry.avatar_url %}
                                 {% when Some with (url) %}
-                                <img class="member-avatar" src="{{ url }}?size=32" alt="" width="32" height="32">
+                                <img class="member-avatar" src="{{ crate::templates::cdn_sized(url, 32) }}" alt="" width="32" height="32">
                                 {% when None %}
                                 {% endmatch %}
                                 <span class="member-name">{{ entry.username }}</span>

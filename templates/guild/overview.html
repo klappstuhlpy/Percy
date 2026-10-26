@@ -17,7 +17,7 @@
     <div class="overview-hero dash-rise">
         {% match guild_icon %}
         {% when Some with (url) %}
-        <img class="overview-hero-icon" src="{{ url }}?size=160" alt="" width="80" height="80">
+        <img class="overview-hero-icon" src="{{ crate::templates::cdn_sized(url, 160) }}" alt="" width="80" height="80">
         {% when None %}
         <div class="overview-hero-icon overview-hero-icon-ph">{{ guild_name.chars().next().unwrap_or('?') }}</div>
         {% endmatch %}

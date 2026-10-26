@@ -12,7 +12,7 @@
 <div class="guild-header dash-rise">
     {% match guild.icon_url %}
     {% when Some with (url) %}
-    <img class="guild-header-icon" src="{{ url }}?size=128" alt="" width="64" height="64">
+    <img class="guild-header-icon" src="{{ crate::templates::cdn_sized(url, 128) }}" alt="" width="64" height="64">
     {% when None %}
     <div class="guild-header-icon guild-icon-placeholder large">{{ guild.name.chars().next().unwrap_or('?') }}</div>
     {% endmatch %}
@@ -611,7 +611,7 @@
             react, or use threads. The original permissions are restored on unlock.</p>
 
         <div class="mod-lockdown-add">
-            <select id="lockdown-select" class="config-select" multiple size="6">
+            <select id="lockdown-select" class="config-select" multiple size="6" aria-label="Channels to lock" data-placeholder="Pick channels to lock…">
                 {% for ch in channels %}
                 {% if ch.channel_type == "text" || ch.channel_type == "voice" || ch.channel_type == "news" %}
                 <option value="{{ ch.id }}">#{{ ch.name }}</option>

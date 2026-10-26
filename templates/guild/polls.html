@@ -86,7 +86,8 @@
     </section>
 
     {# ─── Polls Table ─────────────────────────────────────────────── #}
-    <div class="section-header polls-toolbar">
+    <section class="config-section">
+    <div class="section-header">
         <h2>Polls</h2>
         <button type="button" class="button primary small" onclick="openCreatePoll()">+ New Poll</button>
     </div>
@@ -139,6 +140,7 @@
         </table>
     </div>
     {% endif %}
+    </section>
 
     {# ─── Edit Poll Modal ─────────────────────────────────────────── #}
     <div class="modal-overlay" id="poll-edit-modal" hidden>

@@ -9,7 +9,7 @@
 
 {# ─── Profile Header ─────────────────────────────────────────── #}
 <div class="user-profile-header">
-    <img class="user-profile-avatar" src="{{ member.avatar_url }}?size=128" alt="" width="80" height="80">
+    <img class="user-profile-avatar" src="{{ crate::templates::cdn_sized(member.avatar_url, 128) }}" alt="" width="80" height="80">
     <div class="user-profile-info">
         <h2>{{ member.display_name }}</h2>
         <div class="user-username">{{ member.name }}</div>

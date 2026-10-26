@@ -120,7 +120,7 @@
                         <td><input type="checkbox" class="bulk-check" data-user-id="${m.id}" ${m.bot ? 'disabled' : ''}></td>
                         <td>
                             <a class="member-cell" href="/dashboard/guild/${GUILD_ID}/members/${m.id}">
-                                <img class="member-avatar" src="${m.avatar_url}?size=64" alt="" width="36" height="36">
+                                <img class="member-avatar" src="${m.avatar_url.split('?')[0]}?size=64" alt="" width="36" height="36">
                                 <div class="member-info">
                                     <span class="member-name">${esc(m.display_name)}</span>
                                     <span class="member-username">${esc(m.name)}${m.bot ? ' <span class="badge">BOT</span>' : ''}</span>

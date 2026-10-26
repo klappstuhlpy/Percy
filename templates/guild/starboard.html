@@ -57,7 +57,7 @@
             </div>
             <div class="config-field grid-col-full">
                 <label class="config-label" for="sb-ignored">Ignored channels</label>
-                <span class="config-description">Stars in these channels never count. Hold Ctrl / ⌘ to pick several.</span>
+                <span class="config-description">Stars in these channels never count.</span>
                 <select id="sb-ignored" name="ignored_channel_ids" class="config-select" multiple size="6">
                     {% for ch in channels %}<option value="{{ ch.id }}" {% if ignored.contains(ch.id) %}selected{% endif %}>#{{ ch.name }}</option>{% endfor %}
                 </select>

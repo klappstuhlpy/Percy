@@ -64,6 +64,9 @@
         radial-gradient(ellipse 70% 50% at 50% -8%, var(--app-glow), transparent 70%),
         radial-gradient(ellipse 40% 30% at 85% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
         var(--app-bg);
+    /* The glow belongs to the top of the page only; repeated, it restarts with a hard edge
+       every screen-height on long pages. */
+    background-repeat: no-repeat;
     color: var(--text);
     font-family: var(--app-font);
     font-size: 14px;

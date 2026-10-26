@@ -15,7 +15,7 @@
 
     {# ─── Profile Header ─────────────────────────────────────────── #}
     <div class="user-dash-header dash-rise">
-        <img class="user-dash-avatar" src="{{ profile.avatar_url }}?size=128" alt="" width="80" height="80">
+        <img class="user-dash-avatar" src="{{ crate::templates::cdn_sized(profile.avatar_url, 128) }}" alt="" width="80" height="80">
         <div class="user-dash-info">
             <h1 style="color: {% if profile.top_role_color != 0 %}{{ profile.top_role_color_hex() }}{% else %}inherit{% endif %};">{{ profile.display_name }}</h1>
             <div class="user-dash-username">{{ profile.name }}</div>
@@ -169,7 +169,7 @@
                     </div>
                 </form>
                 <figure class="rank-card-preview">
-                    <img id="rank-card-live" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Preview of your rank card" width="1154" height="360">
+                    <img id="rank-card-live" loading="lazy" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Preview of your rank card" width="1154" height="360">
                     <figcaption id="rank-card-status">Your saved card.</figcaption>
                 </figure>
             </div>

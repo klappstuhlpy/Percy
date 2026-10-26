@@ -66,6 +66,8 @@
     color: var(--text); margin-bottom: var(--space-4);
 }
 .app-canvas .config-section h2::before { content: none; }
+.app-canvas .section-header { flex-wrap: wrap; gap: var(--space-3); }
+.app-canvas .section-header h2 { margin-bottom: 0; }
 .app-canvas .config-section-description { font-size: 13px; margin-top: calc(-1 * var(--space-3)); }
 .app-canvas .subsection-title { font-size: 11px; letter-spacing: 0.08em; color: var(--text-faint); }
 .app-canvas .config-label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
@@ -148,7 +150,8 @@
 .app-canvas .dash-pageinfo-tips li::before { color: var(--accent); }
 
 .app-canvas .config-tabs {
-    display: inline-flex; max-width: 100%; gap: 2px; padding: 3px; margin-bottom: var(--space-5);
+    display: flex; width: fit-content; max-width: 100%; margin-inline: auto; overflow-x: auto;
+    gap: 2px; padding: 3px; margin-bottom: var(--space-5);
     border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-1);
 }
 .app-canvas .config-tabs button[role="tab"] {
@@ -177,7 +180,8 @@
 .app-canvas .data-table { font-variant-numeric: tabular-nums; font-size: 14px; }
 .app-canvas .data-table th {
     position: sticky; top: 0; padding: 10px var(--space-3); font-size: 11px; font-weight: 700;
-    letter-spacing: 0.08em; color: var(--text-faint); background: var(--surface-1); border-bottom: 1px solid var(--line);
+    letter-spacing: 0.08em; color: var(--text-muted); background: var(--surface-3);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 18%, var(--line));
 }
 .app-canvas .data-table td { padding: 10px var(--space-3); border-bottom: 1px solid var(--line); }
 .app-canvas .data-table tr:last-child td { border-bottom: 0; }
@@ -191,10 +195,20 @@
     padding: var(--space-4) var(--space-5); border-radius: var(--radius-lg); border: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface-1) 78%, transparent);
 }
+/* Values shrink with the tile (container units) and only wrap as a last resort — never
+   truncated, since a cut-off number is a wrong number. */
+.app-canvas .metric-tiles { grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+.app-canvas .metric-tile { min-width: 0; container-type: inline-size; }
 .app-canvas .metric-tile::before { background: var(--accent); }
 .app-canvas .metric-tile:hover { transform: none; box-shadow: none; border-color: color-mix(in srgb, var(--text) 18%, var(--line)); }
 .app-canvas .tile-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-faint); }
-.app-canvas .tile-value { color: var(--text); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.app-canvas .tile-value {
+    color: var(--text); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    font-size: clamp(1.05rem, 15cqi, 1.75rem); line-height: 1.15;
+    white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+}
+.app-canvas .tile-label { overflow-wrap: anywhere; }
+.app-canvas .tile-value-small { font-size: 0.75rem; }
 .app-canvas .tile-sub { color: var(--text-muted); }
 
 /* ── Modals ───────────────────────────────────────────────────────────── */

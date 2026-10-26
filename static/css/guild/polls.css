@@ -1,12 +1,6 @@
 /* Polls page — list toolbar and create/edit modal layout.
    Generic spacing/width helpers (mb-sm, modal-card.w-xl, …) live in dashboard.css. */
 
-/* List toolbar: extends .section-header with a gap and custom vertical rhythm. */
-.polls-toolbar {
-    gap: 1rem;
-    margin: 1.5rem 0 0.75rem;
-}
-
 .poll-desc { font-size: 0.75rem; }
 
 /* Modal intro paragraph. */

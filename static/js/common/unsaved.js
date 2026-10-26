@@ -256,7 +256,10 @@
     function readForm(form) {
         const state = {};
         for (const el of fields(form)) {
-            state[el.name] = el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value;
+            state[el.name] = el.type === 'checkbox' || el.type === 'radio' ? el.checked
+                // el.value of a multi-select is only its first choice.
+                : el.multiple ? Array.from(el.selectedOptions, o => o.value)
+                : el.value;
         }
         return state;
     }
@@ -266,6 +269,11 @@
             const value = state[el.name];
             if (el.type === 'checkbox' || el.type === 'radio') {
                 el.checked = !!value;
+            } else if (el.multiple) {
+                const chosen = new Set(value || []);
+                Array.from(el.options).forEach(o => { o.selected = chosen.has(o.value); });
+                // The pill picker (pickers.js) redraws off the select's own change event.
+                el.dispatchEvent(new Event('change', { bubbles: true }));
             } else {
                 const next = value !== undefined ? value : '';
                 if (el.value === next) continue;

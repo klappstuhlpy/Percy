@@ -2804,6 +2804,52 @@ ol.dc-list { list-style: decimal; }
 .picker-warning { margin: 0.35rem 0 0; font-size: 0.8rem; color: var(--warning-text, #fbbf24); }
 .picker-filter { margin-bottom: 0.35rem; }
 
+/* Pill picker: what pickers.js turns every select[multiple] into. */
+.multi-picker { position: relative; min-width: 0; }
+.mod-lockdown-add .multi-picker { flex: 1 1 260px; }
+.multi-picker-box {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    min-height: 40px; padding: 5px 8px; cursor: text;
+    border: 1px solid var(--line); border-radius: var(--radius-md, 10px); background: var(--surface-1);
+    transition: border-color var(--dur-base, .15s), box-shadow var(--dur-base, .15s);
+}
+.multi-picker-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.multi-pill {
+    display: inline-flex; align-items: center; gap: 2px; max-width: 100%;
+    padding: 2px 2px 2px 10px; border-radius: var(--radius-pill, 999px);
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); color: var(--text);
+    font-size: 13px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere;
+}
+.multi-pill-remove {
+    display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; padding: 0;
+    border: 0; border-radius: 50%; background: transparent; color: var(--text-muted);
+    font-size: 16px; line-height: 1; cursor: pointer;
+}
+.multi-pill-remove:hover { background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); }
+.multi-pill-remove:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.multi-picker-input {
+    flex: 1 1 120px; min-width: 80px; height: 28px; padding: 0 4px;
+    border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px;
+}
+.multi-picker-list {
+    position: absolute; z-index: 30; inset: calc(100% + 4px) 0 auto 0;
+    max-height: 260px; overflow-y: auto; overscroll-behavior: contain;
+    margin: 0; padding: 4px; list-style: none;
+    border: 1px solid var(--line); border-radius: var(--radius-md, 10px);
+    background: var(--surface-1); box-shadow: var(--shadow-pop);
+}
+.multi-picker-option { padding: 8px 10px; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
+.multi-picker-option:hover, .multi-picker-option.active { background: var(--surface-3); }
+.multi-picker-empty { padding: 8px 10px; color: var(--text-faint); }
+@media (max-width: 640px) {
+    /* 16px stops iOS zooming into the field; bigger targets for thumbs. */
+    .multi-picker-input { font-size: 16px; height: 34px; }
+    .multi-pill { font-size: 14px; padding-block: 3px; }
+    .multi-pill-remove { width: 28px; height: 28px; }
+    .multi-picker-option { padding: 12px; }
+    .multi-picker-list { max-height: min(50vh, 320px); }
+}
+
 /* ─── Quick setup panels ─────────────────────────────────────────── */
 .quick-setup { border-color: var(--branding-dim, rgba(255,123,114,0.3)); }
 div.quick-setup { border: 1px solid var(--branding-dim, rgba(255,123,114,0.3)); border-radius: 8px; padding: 1rem; margin: 1rem 0 1.5rem; }

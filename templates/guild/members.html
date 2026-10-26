@@ -52,7 +52,7 @@
                     <td><input type="checkbox" class="bulk-check" data-user-id="{{ member.id }}" {% if member.bot %}disabled{% endif %}></td>
                     <td>
                         <a class="member-cell" href="/dashboard/guild/{{ guild_id }}/members/{{ member.id }}">
-                            <img class="member-avatar" src="{{ member.avatar_url }}?size=64" alt="" width="36" height="36">
+                            <img class="member-avatar" src="{{ crate::templates::cdn_sized(member.avatar_url, 64) }}" alt="" width="36" height="36">
                             <div class="member-info">
                                 <span class="member-name">{{ member.display_name }}</span>
                                 <span class="member-username">{{ member.name }}{% if member.bot %} <span class="badge">BOT</span>{% endif %}</span>
