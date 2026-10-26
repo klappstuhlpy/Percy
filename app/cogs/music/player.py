@@ -14,6 +14,7 @@ from discord.utils import MISSING
 from wavelink import ChannelTimeoutException, Playable, Playlist
 
 from app.core import Context
+from app.services.lyrics import display_title
 from app.utils import convert_duration, helpers
 from config import Emojis
 
@@ -688,7 +689,7 @@ class Player(wavelink.Player):
         position = self.queue.all.index(added.tracks[0] if is_playlist else added) + 1
         length = sum(track.length for track in added.tracks) if is_playlist else added.length
 
-        title = added.name if is_playlist else added.title
+        title = added.name if is_playlist else display_title(added.title, added.author)
         url = added.url if is_playlist else added.uri
 
         mess = (

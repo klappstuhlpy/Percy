@@ -19,8 +19,10 @@ __all__ = (
     "LyricsResult",
     "SyncedLyrics",
     "clean_track_title",
+    "display_title",
     "parse_lrc",
     "pick_genius_hit",
+    "track_artist",
 )
 
 import discord
@@ -89,6 +91,42 @@ def clean_track_title(title: str) -> str:
     cleaned = _TITLE_NOISE.sub("", title)
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
     return cleaned.strip(" -–—·|")
+
+
+# Credits and sources that make a title long without naming the song: "(feat. X)", "[ft. X]",
+# "(with X)", "[from GTA VI]", "(prod. X)". Square or round brackets, anywhere in the title.
+_TITLE_CREDITS = re.compile(
+    r"\s*[(\[]\s*(?:feat\.?|ft\.?|featuring|with|from|prod\.?|produced by)\s[^)\]]*[)\]]",
+    re.IGNORECASE,
+)
+# The same credit without brackets, running to the end: "Song feat. X", "Song ft. X".
+_TRAILING_FEAT = re.compile(r"\s+(?:feat\.?|ft\.?|featuring)\s.+$", re.IGNORECASE)
+
+
+def track_artist(author: str | None) -> str:
+    """The first credited artist, without YouTube channel noise ("MGMT - Topic", "MGMTVEVO")."""
+    first = (author or "").split(",")[0].strip()
+    return _CHANNEL_NOISE.sub("", first).strip()
+
+
+def display_title(title: str, author: str | None = None) -> str:
+    """A track title for people to read: the song's name without upload noise and credits.
+
+    ``Flower In A Hurricane [from GTAVI] (feat. King Gizzard & the Lizard Wizard)`` becomes
+    ``Flower In A Hurricane``; ``MGMT - Electric Feel (Official Video)`` by ``MGMTVEVO`` becomes
+    ``Electric Feel`` (the "Artist - " prefix only goes when it names the track's own artist).
+    Version markers that change the song (Live, Remix, Acoustic) are kept. Never returns an
+    empty string: a title that is nothing but noise comes back unchanged.
+    """
+    cleaned = _TITLE_CREDITS.sub("", clean_track_title(title))
+    cleaned = _TRAILING_FEAT.sub("", cleaned)
+    artist = _match_key(track_artist(author))
+    if artist and " - " in cleaned:
+        head, tail = cleaned.split(" - ", 1)
+        if _match_key(head) == artist and tail.strip():
+            cleaned = tail
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" -–—·|")
+    return cleaned or title.strip()
 
 
 def _match_key(text: str) -> str:

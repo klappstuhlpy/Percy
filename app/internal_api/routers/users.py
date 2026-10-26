@@ -10,10 +10,12 @@ import zoneinfo
 from typing import TYPE_CHECKING, Any
 
 import discord
+import wavelink
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 
 from app.rendering.card_style import clean_style, resolve_style, style_options
+from app.services.lyrics import display_title
 
 from ..dependencies import BotDep, verify_token
 from .music import serialize_play
@@ -68,6 +70,8 @@ async def get_user_guilds(discord_id: int, bot: BotDep) -> list[dict]:
             "member_count": guild.member_count,
             "owner": guild.owner_id == discord_id,
             "manageable": perms.administrator or perms.manage_guild,
+            # The music app's server picker marks where Percy has a track loaded (paused counts).
+            "music_playing": isinstance(guild.voice_client, wavelink.Player) and guild.voice_client.current is not None,
         })
 
     return guilds
@@ -355,7 +359,7 @@ async def _tracks_payload(bot: Any, rows: list[Any]) -> list[dict]:
     played = await bot.db.music_plays.artwork_for(missing) if missing else {}
     return [
         {
-            "name": t["name"],
+            "name": display_title(t["name"], t["author"]),
             "url": t["url"],
             "author": t["author"],
             "artwork": t["artwork"] or _artwork(t["url"] or "", played),
@@ -418,7 +422,9 @@ async def get_user_music(discord_id: int, bot: BotDep) -> dict:
             })
     return {
         "top_tracks": [
-            {k: r[k] for k in ("title", "author", "uri", "artwork", "length_ms", "plays")} for r in top
+            {**{k: r[k] for k in ("author", "uri", "artwork", "length_ms", "plays")},
+             "title": display_title(r["title"], r["author"])}
+            for r in top
         ],
         "recent": [serialize_play(r) for r in recent],
         "liked": liked,

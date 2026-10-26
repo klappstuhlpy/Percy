@@ -120,7 +120,16 @@ from app.services.log_channel import (
     rewrite_gateway_line,
     startup_fields,
 )
-from app.services.lyrics import LyricLine, LyricsResult, SyncedLyrics, clean_track_title, parse_lrc, pick_genius_hit
+from app.services.lyrics import (
+    LyricLine,
+    LyricsResult,
+    SyncedLyrics,
+    clean_track_title,
+    display_title,
+    parse_lrc,
+    pick_genius_hit,
+    track_artist,
+)
 from app.services.music_access import MusicViewer, resolve_viewer
 from app.services.news import (
     COMMON_WORDS,
@@ -375,6 +384,7 @@ __all__ = (
     'describe_health_change',
     'describe_interval',
     'discovered_titles',
+    'display_title',
     'due_sources',
     'evaluate_achievements',
     'feed_is_healthy',
@@ -438,6 +448,7 @@ __all__ = (
     'tags_as_rows',
     'title_entry',
     'title_releasable',
+    'track_artist',
     'truncate',
     'tv_row',
     'universe_payload',

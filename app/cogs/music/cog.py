@@ -24,7 +24,16 @@ import config
 from app.clients import LRCLibClient
 from app.core import Bot, Cog, Context, Flags, PermissionTemplate, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
-from app.services import LyricsResult, MusicIntentParser, SyncedLyrics, clean_track_title, parse_lrc, pick_genius_hit
+from app.services import (
+    LyricsResult,
+    MusicIntentParser,
+    SyncedLyrics,
+    clean_track_title,
+    display_title,
+    parse_lrc,
+    pick_genius_hit,
+    track_artist,
+)
 from app.services.music_audio import EQ_PRESETS
 from app.utils import (
     ProgressBar,
@@ -961,7 +970,8 @@ class Music(Cog):
         await player.pause(not player.paused)
         assert player.current is not None
         await ctx.send_success(
-            f"{'Paused' if player.paused else 'Resumed'} Track [{player.current.title}]({player.current.uri})",
+            f"{'Paused' if player.paused else 'Resumed'} Track "
+            f"[{display_title(player.current.title, player.current.author)}]({player.current.uri})",
             delete_after=10,
             suppress_embeds=True,
         )
@@ -1511,20 +1521,37 @@ class Music(Cog):
         ``progress`` (when given) is advanced through the lookup stages so the
         command shows live feedback instead of one static loading line.
         """
-        cleaned = clean_track_title(title)
         duration_s = round(duration / 1000) if duration else None
+        # Upload titles rarely match a lyrics database as-is: "(feat. X)", "[from Y]", "Artist - "
+        # prefixes and channel names like "MGMTVEVO" all miss. Try the cleaned song/artist first,
+        # then an "Artist - Song" title read the other way round, then free text.
+        song = display_title(title, artist)
+        main_artist = track_artist(artist)
+        candidates: list[tuple[str, str]] = [(song, main_artist)]
+        if " - " in song:
+            head, tail = (part.strip() for part in song.split(" - ", 1))
+            if head and tail:
+                candidates.append((tail, head))
 
         record: dict[str, Any] | None = None
         try:
             if progress:
                 await progress.update("Searching LRCLIB for synced lyrics...")
-            if artist:
-                record = await self.lyrics_client.get_lyrics(track=cleaned, artist=artist, duration=duration_s)
-            if record is None:
-                hits = await self.lyrics_client.search_lyrics(track=cleaned, artist=artist)
-                record = self._best_lyrics_hit(hits, duration_s)
+            for track_name, artist_name in candidates:
+                if artist_name:
+                    record = self._with_lyrics(
+                        await self.lyrics_client.get_lyrics(track=track_name, artist=artist_name, duration=duration_s)
+                    )
+                if record is None:
+                    hits = await self.lyrics_client.search_lyrics(track=track_name, artist=artist_name or None)
+                    record = self._best_lyrics_hit(hits, duration_s)
+                if record is None and artist_name:
+                    hits = await self.lyrics_client.search_lyrics(q=f"{artist_name} {track_name}")
+                    record = self._best_lyrics_hit(hits, duration_s)
+                if record is not None:
+                    break
         except Exception as exc:
-            log.debug("LRCLIB lookup failed for %r: %s", cleaned, exc)
+            log.debug("LRCLIB lookup failed for %r: %s", song, exc)
 
         if record is not None:
             synced_raw: str | None = record.get("syncedLyrics")
@@ -1540,7 +1567,14 @@ class Music(Cog):
                 )
 
         # Genius fallback (plain text only).
-        return await self._genius_lyrics(title, artist, thumbnail=thumbnail, progress=progress)
+        return await self._genius_lyrics(song, main_artist or artist, thumbnail=thumbnail, progress=progress)
+
+    @staticmethod
+    def _with_lyrics(record: dict[str, Any] | None) -> dict[str, Any] | None:
+        """``record`` if it carries lyrics; instrumental or empty entries count as a miss."""
+        if record and (record.get("syncedLyrics") or record.get("plainLyrics")):
+            return record
+        return None
 
     @staticmethod
     def _lyrics_display_title(record: dict[str, Any], *, fallback: str) -> str:
@@ -1551,6 +1585,7 @@ class Music(Cog):
     @staticmethod
     def _best_lyrics_hit(hits: list[dict[str, Any]], duration_s: int | None) -> dict[str, Any] | None:
         """Pick the closest-duration search hit, preferring ones that have synced lyrics."""
+        hits = [h for h in hits if h.get("syncedLyrics") or h.get("plainLyrics")]
         if not hits:
             return None
 
@@ -2297,7 +2332,7 @@ class Music(Cog):
 
             await playlist.add_track(player.current)
             embed = discord.Embed(
-                description=f"Added Track **[{player.current.title}]({player.current.uri})** to your playlist "
+                description=f"Added Track **[{display_title(player.current.title, player.current.author)}]({player.current.uri})** to your playlist "
                 f"at Position **#{len(playlist.tracks)}**",
                 color=helpers.Colour.teal(),
             )

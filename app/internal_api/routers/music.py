@@ -12,6 +12,7 @@ from discord.ui.view import LayoutView
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.services.lyrics import display_title
 from app.services.music_access import MusicViewer, resolve_viewer
 from app.services.music_audio import EFFECTS, EQ_PRESETS, audio_state
 
@@ -182,7 +183,7 @@ def _serialize_track(guild: discord.Guild, track: wavelink.Playable, *, full: bo
     """Serialise a wavelink track into the JSON the dashboard player consumes."""
     is_stream = _effectively_stream(track)
     data: dict[str, Any] = {
-        'title': track.title,
+        'title': display_title(track.title, track.author),
         'author': track.author,
         'uri': track.uri,
         'artwork': track.artwork,
@@ -544,13 +545,18 @@ async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> di
         await cog.disable_always_on(guild)  # type: ignore[attr-defined]
         return {'ok': True, 'always_on': {'enabled': False, 'mode': None, 'source': None}}
 
-    if body.mode not in ('radio', 'playlist', 'autoplay') or not body.source:
+    source = (body.source or '').strip()
+    # Autoplay needs only a seed, and the song already playing is the obvious one.
+    current = guild.voice_client.current if isinstance(guild.voice_client, wavelink.Player) else None
+    if body.mode == 'autoplay' and not source and current is not None and current.uri:
+        source = current.uri
+
+    if body.mode not in ('radio', 'playlist', 'autoplay') or not source:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="'mode' (radio|playlist|autoplay) and 'source' are required",
+            detail="'mode' (radio|playlist|autoplay) and 'source' are required"
+            + (" (autoplay can start from the current song once something is playing)" if body.mode == 'autoplay' else ""),
         )
-
-    source = body.source
 
     # Radio mode accepts a friendly preset name (e.g. "lofi") as a shortcut.
     if body.mode == 'radio':
@@ -846,7 +852,8 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
 def serialize_play(r: Any) -> dict:
     """One ``music_plays`` row as the history item the dashboard renders (shared with the user library)."""
     return {
-        'title': r['title'], 'author': r['author'], 'uri': r['uri'], 'artwork': r['artwork'],
+        'title': display_title(r['title'], r['author']), 'author': r['author'], 'uri': r['uri'],
+        'artwork': r['artwork'],
         'length_ms': r['length_ms'],
         'user_id': str(r['user_id']) if r['user_id'] else None,
         'played_at': r['played_at'].isoformat(),
@@ -868,6 +875,35 @@ async def get_music_history(
             cursor = cursor.astimezone(datetime.UTC).replace(tzinfo=None)  # the column is naive UTC
     rows = await bot.db.music_plays.guild_history(guild.id, limit=limit, before=cursor)
     return {'items': [serialize_play(r) for r in rows]}
+
+
+# Charts change slowly and are the same for every viewer; they are cheap to keep a while.
+_TRENDING_TTL = 900.0
+_trending_cache: dict[int | None, tuple[float, list[dict]]] = {}
+
+
+async def _trending(bot: Any, guild_id: int | None) -> list[dict]:
+    now = time.monotonic()
+    hit = _trending_cache.get(guild_id)
+    if hit and hit[0] > now:
+        return hit[1]
+    rows = await bot.db.music_plays.trending(guild_id=guild_id)
+    items = [
+        {
+            'title': display_title(r['title'], r['author']), 'author': r['author'], 'uri': r['uri'],
+            'artwork': r['artwork'], 'length_ms': r['length_ms'],
+            'listeners': r['listeners'], 'plays': r['plays'],
+        }
+        for r in rows
+    ]
+    _trending_cache[guild_id] = (now + _TRENDING_TTL, items)
+    return items
+
+
+@router.get("/music/trending")
+async def get_music_trending(guild: GuildDep, bot: BotDep) -> dict:
+    """The week's most-picked tracks in this guild (``server``) and across every guild (``global``)."""
+    return {'server': await _trending(bot, guild.id), 'global': await _trending(bot, None)}
 
 
 @router.post("/music/control")

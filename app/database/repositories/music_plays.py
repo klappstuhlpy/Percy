@@ -73,6 +73,33 @@ class MusicPlaysRepository(BaseRepository):
             user_id, days, limit,
         )
 
+    async def trending(self, *, guild_id: int | None = None, days: int = 7, limit: int = 12) -> list[asyncpg.Record]:
+        """Most-picked tracks of the last ``days``, in one guild or across every guild.
+
+        Ranked by how many different people queued a track, then by plays, so one member on
+        repeat cannot top the chart. Autoplay picks (``user_id`` NULL) are not anyone's choice
+        and are left out.
+        """
+        return await self.fetch(
+            """
+            SELECT (array_agg(title ORDER BY played_at DESC))[1]     AS title,
+                   (array_agg(author ORDER BY played_at DESC))[1]    AS author,
+                   uri,
+                   (array_agg(artwork ORDER BY played_at DESC))[1]   AS artwork,
+                   (array_agg(length_ms ORDER BY played_at DESC))[1] AS length_ms,
+                   count(DISTINCT user_id) AS listeners,
+                   count(*) AS plays
+            FROM music_plays
+            WHERE uri IS NOT NULL AND user_id IS NOT NULL
+              AND ($1::bigint IS NULL OR guild_id = $1)
+              AND played_at > (now() AT TIME ZONE 'utc') - make_interval(days => $2)
+            GROUP BY uri
+            ORDER BY listeners DESC, plays DESC, max(played_at) DESC
+            LIMIT $3;
+            """,
+            guild_id, days, limit,
+        )
+
     async def artwork_for(self, uris: list[str]) -> dict[str, str]:
         """The most recent artwork seen for each of ``uris`` (uris never played are absent)."""
         if not uris:

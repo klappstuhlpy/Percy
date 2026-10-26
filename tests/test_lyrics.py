@@ -115,3 +115,23 @@ def test_pick_genius_hit_matches_youtube_style_uploads() -> None:
     assert pick_genius_hit([song], title="MGMT - Electric Feel (Official Video)", artist="Random Uploader") is song["result"]
     assert pick_genius_hit([song], title="Electric Feel", artist="MGMTVEVO") is song["result"]
     assert pick_genius_hit([_hit("Electric Feel", "MGMT", kind="album")], title="Electric Feel", artist="MGMT") is None
+
+
+def test_display_title_drops_credits_and_noise_but_keeps_versions() -> None:
+    from app.services.lyrics import display_title
+
+    assert display_title("Flower In A Hurricane [from GTAVI] (feat. King Gizzard & the Lizard Wizard)") == "Flower In A Hurricane"
+    assert display_title("MGMT - Electric Feel (Official Video)", "MGMTVEVO") == "Electric Feel"
+    assert display_title("Someone Else - Electric Feel", "MGMT") == "Someone Else - Electric Feel"
+    assert display_title("Song ft. Somebody", None) == "Song"
+    assert display_title("Song (Live)", None) == "Song (Live)"
+    assert display_title("Song (Remix) [with Friend]", None) == "Song (Remix)"
+    assert display_title("(Official Video)", None) == "(Official Video)"
+
+
+def test_track_artist_takes_first_artist_without_channel_noise() -> None:
+    from app.services.lyrics import track_artist
+
+    assert track_artist("MGMT - Topic") == "MGMT"
+    assert track_artist("Daft Punk, Pharrell Williams") == "Daft Punk"
+    assert track_artist(None) == ""

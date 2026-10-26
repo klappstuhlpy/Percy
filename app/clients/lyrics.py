@@ -56,10 +56,13 @@ class LRCLibClient(BaseHTTPClient):
             params["duration"] = int(duration)
         return await self._get_optional("api/get", params)
 
-    async def search_lyrics(self, *, track: str, artist: str | None = None) -> list[dict[str, Any]]:
-        """Fuzzy-search records via ``/api/search``. Returns ``[]`` when nothing matches."""
-        params: dict[str, Any] = {"track_name": track}
-        if artist:
+    async def search_lyrics(
+        self, *, track: str | None = None, artist: str | None = None, q: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Fuzzy-search records via ``/api/search`` by fields, or by free text ``q`` (matched
+        against title, artist and album at once). Returns ``[]`` when nothing matches."""
+        params: dict[str, Any] = {"q": q} if q else {"track_name": track}
+        if artist and not q:
             params["artist_name"] = artist
         result = await self._get_optional("api/search", params)
         return result if isinstance(result, list) else []

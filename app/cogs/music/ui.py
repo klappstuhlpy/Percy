@@ -14,7 +14,7 @@ from wavelink import QueueMode
 from app.core import Bot, Context, LayoutView
 from app.core.pagination import BasePaginator, BasePaginatorV2
 from app.core.views import ConfirmationView
-from app.services import LyricsResult
+from app.services import LyricsResult, display_title
 from app.utils import (
     convert_duration,
     helpers,
@@ -162,7 +162,7 @@ class PlayerPanel(LayoutView):
 
             now_playing = (
                 f"## Now Playing\n"
-                f"[{track.title}]({track.uri}) - {artist}\n\n"
+                f"[{display_title(track.title, track.author)}]({track.uri}) - {artist}\n\n"
                 f"**Bound:** {self.player.channel.mention}\n"
                 f"**Queue:** {queue_pos}/{queue_total}"
             )
@@ -441,7 +441,7 @@ class PlayerPanel(LayoutView):
             self.msg = await self.channel.send(view=self)
 
         if self.player.current:
-            current = self.player.current.title
+            current = display_title(self.player.current.title, self.player.current.author)
             artist = self.player.current.author
             status = f"{current} - {artist}" if self.player.current else "Idle"
             with suppress(discord.HTTPException):
@@ -528,12 +528,14 @@ class PlayerPanel(LayoutView):
         if self.player.current.uri not in track_urls:
             await liked_songs.add_track(self.player.current)
             await interaction.response.send_message(
-                f"{Emojis.success} Added `{self.player.current.title}` to your liked songs.", ephemeral=True
+                f"{Emojis.success} Added `{display_title(self.player.current.title, self.player.current.author)}` to your liked songs.",
+                ephemeral=True,
             )
         else:
             await liked_songs.remove_track(discord.utils.get(liked_songs.tracks, url=self.player.current.uri))
             await interaction.response.send_message(
-                f"{Emojis.success} Removed `{self.player.current.title}` from your liked songs.", ephemeral=True
+                f"{Emojis.success} Removed `{display_title(self.player.current.title, self.player.current.author)}` from your liked songs.",
+                ephemeral=True,
             )
 
         music_cog.get_playlists.invalidate(interaction.user.id)
@@ -625,7 +627,7 @@ class TrackDisambiguatorView[T](LayoutView):
 
         options = [
             discord.SelectOption(
-                label=truncate(x.title, 100),
+                label=truncate(display_title(x.title, x.author), 100),
                 description="by " + truncate(discord.utils.remove_markdown(x.author), 100),
                 emoji=letter_emoji(i),
                 value=str(i),
@@ -641,7 +643,7 @@ class TrackDisambiguatorView[T](LayoutView):
         cancel_btn.callback = self._on_cancel  # type: ignore[assignment]
 
         description = "\n".join(
-            f"{letter_emoji(i)} [{track.title}]({track.uri}) by **{track.author}** | `{convert_duration(track.length)}`"
+            f"{letter_emoji(i)} [{display_title(track.title, track.author)}]({track.uri}) by **{track.author}** | `{convert_duration(track.length)}`"
             for i, track in enumerate(tracks)
         )
 
@@ -787,7 +789,7 @@ class QueueView(BasePaginatorV2[QueueEntry]):
         items: list[discord.ui.Item[Any]] = [discord.ui.TextDisplay(header)]
 
         if (current := player.current) is not None:
-            now = f"**Now Playing**\n[{truncate(current.title, 80)}]({current.uri}) - {current.author or 'Unknown'}\n-# `{self._duration(current)}`"
+            now = f"**Now Playing**\n[{truncate(display_title(current.title, current.author), 80)}]({current.uri}) - {current.author or 'Unknown'}\n-# `{self._duration(current)}`"
             items.append(
                 discord.ui.Section(now, accessory=discord.ui.Thumbnail(current.artwork))
                 if current.artwork
@@ -807,7 +809,7 @@ class QueueView(BasePaginatorV2[QueueEntry]):
                 section_shown = section
 
             tag = " • *autoplay*" if track.recommended else ""
-            text = f"**{index}.** [{truncate(track.title, 60)}]({track.uri}) - {track.author or 'Unknown'}\n-# `{self._duration(track)}`{tag}"
+            text = f"**{index}.** [{truncate(display_title(track.title, track.author), 60)}]({track.uri}) - {track.author or 'Unknown'}\n-# `{self._duration(track)}`{tag}"
             if section == "Up Next":
                 # already queued, so nothing to add: plain row
                 items.append(discord.ui.TextDisplay(text))
@@ -878,7 +880,7 @@ class QueueView(BasePaginatorV2[QueueEntry]):
         await self.refresh(interaction)
         await player.refresh_panel()
 
-        what = f"**{tracks[0].title}**" if len(tracks) == 1 else f"**{len(tracks)}** tracks"
+        what = f"**{display_title(tracks[0].title, tracks[0].author)}**" if len(tracks) == 1 else f"**{len(tracks)}** tracks"
         await interaction.followup.send(f"{Emojis.success} Added {what} to the queue.", ephemeral=True)
 
 
@@ -1228,7 +1230,7 @@ class LiveLyricsView(LayoutView):
         container = discord.ui.Container(accent_colour=helpers.Colour.brand())
 
         track = self.player.current or self._track
-        title = self.result.title or (track.title if track else "Unknown")
+        title = self.result.title or (display_title(track.title, track.author) if track else "Unknown")
         header = f"## {Emojis.Music.lyrics} Live Lyrics\n**{title}**"
         if track is not None and track.artwork:
             container.add_item(discord.ui.Section(header, accessory=discord.ui.Thumbnail(track.artwork)))
