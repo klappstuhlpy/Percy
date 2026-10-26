@@ -96,7 +96,7 @@ a.card, a.card:hover, a.row, a.row:hover { color: var(--text); }
 .row:hover .row-acts, .row:focus-within .row-acts { opacity: 1; }
 @media (hover: none) { .row-acts { opacity: 1; } }
 
-.tabs { display: inline-flex; width: fit-content; max-width: 100%; gap: 2px; padding: 3px; border-radius: var(--radius-pill); background: var(--surface-1); border: 1px solid var(--line); }
+.tabs { display: flex; width: fit-content; max-width: 100%; gap: 2px; padding: 3px; border-radius: var(--radius-pill); background: var(--surface-1); border: 1px solid var(--line); }
 .tabs [role="tab"], .tabs .tab {
     min-height: 32px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-pill);
     background: none; color: var(--text-muted); font: inherit; font-weight: 700; cursor: pointer; text-decoration: none;
