@@ -2770,34 +2770,40 @@ a.user-tag-chip:hover { border-color: var(--branding); }
     border-radius: 4px; border: 1px solid var(--box-border); background: var(--box-shade); color: var(--foreground); cursor: pointer; white-space: nowrap; }
 .template-var:hover, .template-var:focus-visible { border-color: var(--branding); }
 /* Discord-style message preview (.dc-*), matching Discord's dark theme */
-.dc-message { display: grid; grid-template-columns: 40px 1fr; column-gap: 16px; margin-top: 0.6rem; padding: 0.75rem 1rem; border-radius: 8px; background: #313338; color: #dbdee1;
+.dc-message { display: grid; grid-template-columns: 40px 1fr; column-gap: 16px; margin-top: 0.6rem; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-1); color: var(--text);
     font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.375; }
 .dc-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; align-self: start; }
 .dc-body { min-width: 0; }
 .dc-header { display: flex; align-items: baseline; gap: 4px; }
-.dc-name { color: #f2f3f5; font-size: 16px; font-weight: 500; }
+.dc-name { color: var(--text); font-size: 16px; font-weight: 500; }
 .dc-bot-tag { background: #5865f2; color: #fff; font-size: 10px; font-weight: 600; padding: 0 4px; border-radius: 3px; align-self: center; line-height: 15px; }
-.dc-time { color: #949ba4; font-size: 12px; margin-left: 4px; }
+.dc-time { color: var(--text-faint); font-size: 12px; margin-left: 4px; }
 .dc-content { overflow-wrap: anywhere; max-height: 50vh; overflow-y: auto; }
-.dc-content code { background: #2b2d31; border-radius: 3px; padding: 0.2em; font-family: Consolas, "Andale Mono", monospace; font-size: 85%; }
-.dc-pre { background: #2b2d31; border: 1px solid #1e1f22; border-radius: 4px; padding: 8px; margin: 4px 0 0; white-space: pre-wrap; }
+.dc-content code { background: var(--surface-3); border-radius: 3px; padding: 0.2em; font-family: Consolas, "Andale Mono", monospace; font-size: 85%; }
+.dc-pre { background: var(--surface-3); border: 1px solid var(--line); border-radius: 4px; padding: 8px; margin: 4px 0 0; white-space: pre-wrap; }
 .dc-pre code { padding: 0; font-size: 0.875rem; }
 .dc-h { font-weight: 700; margin: 8px 0 0; }
 
 
 
-.dc-sub { font-size: 13px; color: #949ba4; }
+.dc-sub { font-size: 13px; color: var(--text-faint); }
 .dc-list { margin: 0 0 0 16px; padding: 0; list-style: disc; }
 ol.dc-list { list-style: decimal; }
 .dc-list .dc-list { margin-left: 16px; list-style: circle; }
 .dc-quote { margin: 0; padding: 0 8px 0 12px; position: relative; }
-.dc-quote::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 4px; background: #4e5058; }
+.dc-quote::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 4px; background: var(--line); }
 .dc-content a.dc-link { color: #00a8fc; text-decoration: none; }
 .dc-content a.dc-link:hover { color: #00a8fc; text-decoration: underline; }
-.dc-mention { background: rgba(88, 101, 242, 0.3); color: #c9cdfb; border-radius: 3px; padding: 0 2px; font-weight: 500; }
-.dc-timestamp { background: rgba(255, 255, 255, 0.06); border-radius: 3px; padding: 0 2px; }
+.dc-mention { background: rgba(88, 101, 242, 0.25); color: color-mix(in srgb, #5865f2 70%, var(--text)); border-radius: 3px; padding: 0 2px; font-weight: 500; }
+.dc-timestamp { background: var(--surface-3); border-radius: 3px; padding: 0 2px; }
 .dc-emoji { width: 1.375em; height: 1.375em; vertical-align: bottom; }
-.dc-spoiler { background: #1e1f22; color: transparent; border-radius: 3px; cursor: pointer; }
+.dc-spoiler { background: var(--surface-3); color: transparent; border-radius: 3px; cursor: pointer; }
+.dc-embeds { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
+.dc-embeds a { display: block; max-width: 100%; }
+.dc-media { display: block; max-width: min(100%, 520px); max-height: 360px; border-radius: 8px; background: var(--surface-3); }
+/* Tag preview: wide by default, drag the corner to resize on desktop. */
+#tag-modal .modal-card { width: min(860px, 94vw); max-width: 94vw; min-width: min(360px, 94vw); resize: horizontal; }
+#tag-modal .dc-content { max-height: 65vh; }
 .dc-spoiler--open { background: rgba(255, 255, 255, 0.1); color: inherit; }
 .template-actions { margin-top: 0.6rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 

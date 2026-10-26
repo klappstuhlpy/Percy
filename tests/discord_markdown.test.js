@@ -45,3 +45,10 @@ test('timestamps', () => {
 });
 test('NUL bytes are stripped and cannot forge stash tokens', () => assert.equal(render('a\u0000b\u00000\u0000'), 'ab0'));
 test('script text stays escaped', () => assert.equal(render('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;'));
+test('lone image link renders only the embed', () => assert.match(render('https://e.com/a.png'), /^<div class="dc-embeds"><a [^>]+><img class="dc-media" src="https:\/\/e\.com\/a\.png"/));
+test('video link keeps text and adds a player', () => {
+  const html = render('see https://e.com/v.mp4?x=1');
+  assert.match(html, /^see <a class="dc-link"/);
+  assert.match(html, /<video class="dc-media" src="https:\/\/e\.com\/v\.mp4\?x=1" controls/);
+});
+test('plain links get no embed', () => assert.ok(!render('https://e.com/page').includes('dc-embeds')));

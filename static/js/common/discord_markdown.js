@@ -21,8 +21,13 @@ const PercyDiscordMarkdown = (function () {
         return d.toLocaleString(undefined, o);
     }
 
+    // Bare links straight to a file get Discord's embed under the message.
+    const MEDIA = [['img', /\.(?:png|jpe?g|gif|webp|avif|apng)(?:[?#]|$)/i], ['video', /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i]];
+    const mediaKind = (url) => (MEDIA.find(([, re]) => re.test(url.replace(/&amp;/g, '&'))) || [null])[0];
+
     function render(text, ctx) {
         const stash = [];
+        const media = [];
         // Generated HTML is parked behind a token so later formatting passes cannot touch it.
         const park = (html) => '\u0000' + (stash.push(html) - 1) + '\u0000';
         let s = esc(String(text).replace(/\u0000/g, '').replace(/\r\n?/g, '\n'));
@@ -48,6 +53,8 @@ const PercyDiscordMarkdown = (function () {
             t = t.replace(/https?:\/\/(?:(?!&quot;|&lt;|&gt;)[^\s\u0000])+/g, (url) => {
                 const tail = (url.match(/[.,!?;:)]+$/) || [''])[0];
                 const u = url.slice(0, url.length - tail.length);
+                const kind = mediaKind(u);
+                if (kind && media.length < 10 && !media.some((m) => m.u === u)) media.push({ kind, u });
                 return park('<a class="dc-link" href="' + u + '" ' + LINK_REL + '>' + u + '</a>') + tail;
             });
             return t.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
@@ -97,6 +104,13 @@ const PercyDiscordMarkdown = (function () {
             }
         }
         s = out.map((o, k) => (k && !o.block && !out[k - 1].block ? '<br>' : '') + o.html).join('');
+        if (media.length) {
+            // Like Discord: a message that is nothing but one media link shows only the embed.
+            if (media.length === 1 && esc(String(text).trim()) === media[0].u) s = '';
+            s += '<div class="dc-embeds">' + media.map(({ kind, u }) => kind === 'img'
+                ? '<a href="' + u + '" ' + LINK_REL + '><img class="dc-media" src="' + u + '" alt="" loading="lazy" referrerpolicy="no-referrer"></a>'
+                : '<video class="dc-media" src="' + u + '" controls preload="metadata" referrerpolicy="no-referrer"></video>').join('') + '</div>';
+        }
 
         for (let n = 0; n < 5 && s.includes('\u0000'); n++) s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => stash[+i]);
         return s;
