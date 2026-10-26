@@ -287,3 +287,74 @@ async def test_legacy_filters_are_gated_too() -> None:
     with patch.object(api, '_get_guild_player', return_value=(guild, player)), pytest.raises(HTTPException) as exc:
         await api.post_music_filters(guild, _bot(0), api.FiltersBody(action='reset', user_id=5))
     assert exc.value.status_code == 403
+
+
+def _t(title: str, author: str, album: str | None, *, art: str | None = 'a.png', ms: int = 1000) -> SimpleNamespace:
+    """A playable-shaped stand-in with invented metadata."""
+    return SimpleNamespace(
+        title=title, author=author, uri=f'https://x.test/{title}', artwork=art, length=ms, is_stream=False,
+        source='spotify', extras=SimpleNamespace(), isrc=None, recommended=False, playlist=None,
+        artist=SimpleNamespace(url='https://x.test/artist/1', artwork='face.png'),
+        album=SimpleNamespace(name=album, url=f'https://x.test/album/{album}') if album else None,
+    )
+
+
+def _playlist(tracks: list, name: str = 'Glass Tides') -> wavelink.Playlist:
+    pl = MagicMock(spec=wavelink.Playlist)
+    pl.tracks, pl.name, pl.artwork, pl.url, pl.author = tracks, name, 'cover.png', 'https://x.test/album/1', None
+    return pl
+
+
+async def test_artist_groups_releases_and_caches() -> None:
+    api._detail_cache.clear()
+    tracks = [_t('One', 'Nova Quill', 'Glass Tides'), _t('Two', 'Nova Quill', 'Glass Tides'), _t('Solo', 'Nova Quill', 'Solo'),
+              _t('Else', 'Someone Else', 'Other'), _t('Bare', 'Nova Quill', None)]
+    node = AsyncMock(return_value=tracks)
+    with patch('app.cogs.music.player.Player.search', node):
+        out = await api.get_music_artist(MagicMock(), 'Nova Quill', None)
+        again = await api.get_music_artist(MagicMock(), 'Nova Quill', None)
+    assert node.await_count == 1 and again is out
+    assert [t['title'] for t in out['top_tracks']] == ['One', 'Two', 'Solo', 'Bare']
+    assert out['top_tracks'][3]['album'] is None  # missing album: no link, still listed
+    assert [(r['title'], r['kind']) for r in out['releases']] == [('Glass Tides', 'album'), ('Solo', 'single')]
+    assert out['artist'] == {'name': 'Nova Quill', 'artwork': 'face.png', 'url': 'https://x.test/artist/1'}
+
+
+async def test_artist_url_uses_top_track_playlist() -> None:
+    api._detail_cache.clear()
+    pl = _playlist([_t('One', 'Nova Quill', 'Glass Tides')], name="Nova Quill's Top Tracks")
+    with patch('app.cogs.music.player.Player.search', AsyncMock(return_value=pl)) as node:
+        out = await api.get_music_artist(MagicMock(), 'Nova Quill', 'https://x.test/artist/1')
+    node.assert_awaited_once_with('https://x.test/artist/1')
+    assert out['artist']['artwork'] == 'cover.png'
+
+
+async def test_artist_rejects_bad_input_and_empty() -> None:
+    api._detail_cache.clear()
+    for args in (('', None), ('x', 'javascript:alert(1)')):
+        with pytest.raises(HTTPException) as exc:
+            await api.get_music_artist(MagicMock(), *args)
+        assert exc.value.status_code == 400
+    with patch('app.cogs.music.player.Player.search', AsyncMock(return_value=[])), pytest.raises(HTTPException) as exc:
+        await api.get_music_artist(MagicMock(), 'Nobody', None)
+    assert exc.value.status_code == 404
+
+
+async def test_album_loads_playlist_and_caches() -> None:
+    api._detail_cache.clear()
+    pl = _playlist([_t('One', 'Nova Quill, Guest', 'Glass Tides', ms=60_000), _t('Two', 'Nova Quill', 'Glass Tides', ms=30_000)])
+    node = AsyncMock(return_value=pl)
+    with patch('app.cogs.music.player.Player.search', node):
+        out = await api.get_music_album(MagicMock(), 'https://x.test/album/1')
+        await api.get_music_album(MagicMock(), 'https://x.test/album/1')
+    assert node.await_count == 1
+    assert out['album'] == {'title': 'Glass Tides', 'kind': 'album', 'year': None, 'artists': ['Nova Quill'],
+                            'artwork': 'cover.png', 'url': 'https://x.test/album/1', 'total_ms': 90_000}
+    assert len(out['tracks']) == 2 and out['tracks'][0]['album']['name'] == 'Glass Tides'
+
+
+async def test_album_not_a_playlist_is_404() -> None:
+    api._detail_cache.clear()
+    with patch('app.cogs.music.player.Player.search', AsyncMock(return_value=[_t('x', 'y', None)])), pytest.raises(HTTPException) as exc:
+        await api.get_music_album(MagicMock(), 'https://x.test/a')
+    assert exc.value.status_code == 404

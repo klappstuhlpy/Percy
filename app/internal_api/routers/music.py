@@ -167,6 +167,17 @@ def _resolve_requester(guild: discord.Guild, track: wavelink.Playable) -> dict |
     }
 
 
+def _artist_url(track: wavelink.Playable) -> str | None:
+    return getattr(getattr(track, 'artist', None), 'url', None) or None
+
+
+def _album_ref(track: wavelink.Playable) -> dict | None:
+    """``{name, url}`` of the track's album, or None when the source (e.g. YouTube) has none."""
+    album = getattr(track, 'album', None)
+    name = getattr(album, 'name', None)
+    return {'name': name, 'url': getattr(album, 'url', None) or None} if name else None
+
+
 def _serialize_track(guild: discord.Guild, track: wavelink.Playable, *, full: bool = False) -> dict:
     """Serialise a wavelink track into the JSON the dashboard player consumes."""
     is_stream = _effectively_stream(track)
@@ -180,17 +191,14 @@ def _serialize_track(guild: discord.Guild, track: wavelink.Playable, *, full: bo
         'source': track.source,
         'requester': _resolve_requester(guild, track),
         'autoplay': False,
+        'artist_url': _artist_url(track),
+        'album': _album_ref(track),
     }
     if full:
-        album = None
-        if track.album and track.album.name:
-            album = {'name': track.album.name, 'url': track.album.url}
         playlist = None
         if track.playlist:
             playlist = {'name': track.playlist.name, 'url': track.playlist.url}
         data.update({
-            'artist_url': track.artist.url if track.artist else None,
-            'album': album,
             'playlist': playlist,
             'recommended': bool(track.recommended),
             'isrc': track.isrc,
@@ -639,6 +647,133 @@ async def _cached_search(q: str, limit: int) -> list[wavelink.Playable]:
                 del _search_cache[k]
         _search_cache[key] = (now + _SEARCH_TTL, tracks)
     return tracks
+
+
+_DETAIL_MAX = 128
+_detail_cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
+
+
+def _http_url(url: str | None) -> str | None:
+    if url and not url.lower().startswith(('http://', 'https://')):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='url must be http(s)')
+    return url or None
+
+
+def _detail_get(key: tuple[str, str, str]) -> dict | None:
+    hit = _detail_cache.get(key)
+    return hit[1] if hit and hit[0] > time.monotonic() else None
+
+
+def _detail_put(key: tuple[str, str, str], value: dict) -> None:
+    now = time.monotonic()
+    if len(_detail_cache) >= _DETAIL_MAX:
+        for k in [k for k, (exp, _) in _detail_cache.items() if exp <= now] or [next(iter(_detail_cache))]:
+            del _detail_cache[k]
+    _detail_cache[key] = (now + _SEARCH_TTL, value)
+
+
+def _first_artist(author: str | None) -> str:
+    return (author or '').split(',')[0].strip()
+
+
+def _releases(tracks: list[wavelink.Playable]) -> list[dict]:
+    """Albums/singles seen in ``tracks``, grouped by album link (or name). Lavalink gives no release
+    date or full album size, so ``year`` and ``track_count`` stay None; a lone track named like its
+    album is a single."""
+    groups: dict[str, list[wavelink.Playable]] = {}
+    for t in tracks:
+        ref = _album_ref(t)
+        if ref:
+            groups.setdefault(ref['url'] or ref['name'].casefold(), []).append(t)
+    out = []
+    for group in groups.values():
+        ref = _album_ref(group[0]) or {}
+        single = len(group) == 1 and (ref['name'] or '').casefold() == (group[0].title or '').casefold()
+        out.append({
+            'title': ref['name'], 'kind': 'single' if single else 'album', 'year': None,
+            'artwork': next((t.artwork for t in group if t.artwork), None), 'url': ref['url'], 'track_count': None,
+        })
+    return out
+
+
+@router.get("/music/artist")
+async def get_music_artist(
+    guild: GuildDep, name: str = Query('', max_length=120), url: str | None = Query(None, max_length=500)
+) -> dict:
+    """An artist page built from what Lavalink offers.
+
+    With ``url`` (LavaSrc artist links: Spotify, Deezer, Apple Music) the link resolves to a playlist of
+    the artist's top tracks. Otherwise (or when that yields nothing) the name is searched on Spotify,
+    then YouTube Music, keeping tracks whose author contains the name. Releases are the albums those
+    tracks belong to; there is no discography endpoint in Lavalink.
+    """
+    from app.cogs.music.player import Player
+
+    name, url = name.strip(), _http_url(url)
+    if not name and not url:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='name or url required')
+    key = ('artist', name.casefold(), url or '')
+    if (hit := _detail_get(key)) is not None:
+        return hit
+
+    tracks: list[wavelink.Playable] = []
+    artwork: str | None = None
+    if url:
+        result = await Player.search(url)
+        if isinstance(result, wavelink.Playlist):
+            tracks, artwork = list(result.tracks), result.artwork
+    if not tracks and name:
+        wanted = name.casefold()
+        for source in ('spsearch', wavelink.TrackSource.YouTubeMusic):
+            found = _flatten(await Player.search(name, source=source))
+            tracks = [t for t in found if wanted in (t.author or '').casefold()]
+            if tracks:
+                break
+    if not tracks:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='No tracks found for that artist.')
+
+    first = tracks[0]
+    out = {
+        'artist': {
+            'name': name or _first_artist(first.author),
+            'artwork': artwork or getattr(getattr(first, 'artist', None), 'artwork', None) or first.artwork,
+            'url': url or _artist_url(first),
+        },
+        'top_tracks': [_serialize_track(guild, t, full=True) for t in tracks[:25]],
+        'releases': _releases(tracks),
+    }
+    _detail_put(key, out)
+    return out
+
+
+@router.get("/music/album")
+async def get_music_album(guild: GuildDep, url: str = Query(..., max_length=500)) -> dict:
+    """An album/single/playlist link loaded as a track list (LavaSrc or any source Lavalink resolves)."""
+    from app.cogs.music.player import Player
+
+    url = _http_url(url) or ''
+    key = ('album', '', url)
+    if (hit := _detail_get(key)) is not None:
+        return hit
+    result = await Player.search(url)
+    if not isinstance(result, wavelink.Playlist) or not result.tracks:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Could not load that album.')
+    tracks = list(result.tracks)
+    artists = list(dict.fromkeys(a for a in (_first_artist(t.author) for t in tracks) if a))[:6]
+    out = {
+        'album': {
+            'title': result.name,
+            'kind': 'single' if len(tracks) == 1 else 'album',
+            'year': None,
+            'artists': artists or ([result.author] if result.author else []),
+            'artwork': result.artwork or next((t.artwork for t in tracks if t.artwork), None),
+            'url': result.url or url,
+            'total_ms': sum(t.length for t in tracks if not _effectively_stream(t)),
+        },
+        'tracks': [_serialize_track(guild, t, full=True) for t in tracks],
+    }
+    _detail_put(key, out)
+    return out
 
 
 @router.get("/music/search")
