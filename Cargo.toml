@@ -27,7 +27,7 @@ serde_yaml = "0.9"
 pulldown-cmark = "0.10"
 kls-ui = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
 kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
-percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.12.0" }
+percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.13.0" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.
@@ -42,8 +42,3 @@ tokio = { version = "1.36.0", features = ["rt-multi-thread", "net", "macros", "s
 tower-http = { version = "0.5.2", features = ["fs"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-
-
-# TEMP: remove after kls-core v0.13.0 tag
-[patch."https://github.com/klappstuhlpy/kls-core"]
-percy-client = { path = "../kls-core/crates/percy-client" }
