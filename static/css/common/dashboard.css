@@ -26,7 +26,7 @@
     ::view-transition-new(root) { animation: none; }
 }
 
-.dash-h1-glyph { color: var(--branding); font-size: 0.8em; margin-right: 0.15rem; }
+.dash-h1-glyph { color: var(--brand, #d97757); font-size: 0.8em; margin-right: 0.15rem; }
 
 /* Page header. The app shell (shell.css, loaded after this file) restyles it; the standalone
    server picker (site/guilds.html) still relies on these. */

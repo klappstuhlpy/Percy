@@ -89,7 +89,7 @@ html:has(.shell-page), .dash-sidebar { scrollbar-width: thin; scrollbar-color: c
     display: inline-flex; align-items: center; gap: 8px; flex: none;
     color: var(--text); font-weight: 800; font-size: 17px; letter-spacing: -0.02em; text-decoration: none;
 }
-.shell-brand .spark { color: var(--brand, #ff7a45); }
+.shell-brand .spark { color: var(--brand); }
 
 .shell-picker { position: relative; flex: none; }
 .shell-picker-btn {

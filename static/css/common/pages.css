@@ -7,6 +7,7 @@
       token focus rings. The class names stay because page JS and PercyUnsaved hook onto them. */
 
 .app-canvas {
+    --font-display: var(--app-font);
     --foreground: var(--text);
     --background: var(--app-bg);
     --header: var(--surface-1);
@@ -30,6 +31,14 @@
     --error-text: #f87171;
     --warning-text: #fbbf24;
     --info-text: #8aa4ff;
+    --success-bg: color-mix(in srgb, var(--success-text) 12%, var(--surface-1));
+    --success-border: color-mix(in srgb, var(--success-text) 35%, transparent);
+    --error-bg: color-mix(in srgb, var(--error-text) 12%, var(--surface-1));
+    --error-border: color-mix(in srgb, var(--error-text) 35%, transparent);
+    --warning-bg: color-mix(in srgb, var(--warning-text) 12%, var(--surface-1));
+    --warning-border: color-mix(in srgb, var(--warning-text) 35%, transparent);
+    --info-bg: color-mix(in srgb, var(--info-text) 12%, var(--surface-1));
+    --info-border: color-mix(in srgb, var(--info-text) 35%, transparent);
 }
 [data-theme="light"] .app-canvas {
     --default-button-rgb: 230, 230, 227;

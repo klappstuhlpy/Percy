@@ -1,9 +1,9 @@
-/* PercyToast.show(kind, text): one shared toast stack. kind = success | info | error.
+/* PercyToast.show(kind, text): one shared toast stack. kind = success | info | warning | error.
    Repeats of the same text within 1.5 s collapse, at most four stay on screen. */
 (function () {
     'use strict';
     var SVG = 'http://www.w3.org/2000/svg';
-    var ICONS = { success: 'check', error: 'alert', info: 'info' };
+    var ICONS = { success: 'check', error: 'alert', info: 'info', warning: 'alert' };
     var box = null, last = { text: '', at: 0 };
 
     function icon(name) {

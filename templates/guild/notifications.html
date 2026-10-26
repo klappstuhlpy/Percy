@@ -10,11 +10,11 @@
 <p class="notif-notice {% if notice_ok %}notif-notice-ok{% else %}notif-notice-err{% endif %}" role="status">{{ notice }}</p>
 {% endif %}
 
-<nav class="notif-tabs" id="notif-tabs" aria-label="Notifications sections">
-    <a href="#feed" data-tab="feed">Feed</a>
-    <a href="#requests" data-tab="requests">Requests</a>
-    <a href="#changes" data-tab="changes">Change log</a>
-    <a href="#request-settings" data-tab="request-settings">Settings</a>
+<nav class="tabs notif-tabs" id="notif-tabs" aria-label="Notifications sections">
+    <a class="tab" href="#feed" data-tab="feed">Feed</a>
+    <a class="tab" href="#requests" data-tab="requests">Requests</a>
+    <a class="tab" href="#changes" data-tab="changes">Change log</a>
+    <a class="tab" href="#request-settings" data-tab="request-settings">Settings</a>
 </nav>
 
 <section class="config-section" id="feed" data-pane="feed" data-newest-id="{{ newest_id }}" data-unread="{{ unread }}">

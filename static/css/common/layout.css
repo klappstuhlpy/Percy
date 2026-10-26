@@ -58,7 +58,7 @@
 }
 
 .percy-nav-glyph {
-    color: var(--branding);
+    color: var(--brand, #d97757);
     font-size: 1.1rem;
 }
 

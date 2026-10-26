@@ -20,14 +20,14 @@
     width: 11px;
     height: 11px;
     border-radius: 2px;
-    background: var(--box-shade);
-    border: 1px solid var(--box-border);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
 }
 .heatmap-cell.is-empty { visibility: hidden; }
-.heatmap-cell.l1 { background: #0e4429; border-color: #0e4429; }
-.heatmap-cell.l2 { background: #006d32; border-color: #006d32; }
-.heatmap-cell.l3 { background: #26a641; border-color: #26a641; }
-.heatmap-cell.l4 { background: #39d353; border-color: #39d353; }
+.heatmap-cell.l1 { background: color-mix(in srgb, var(--accent) 28%, var(--surface-2)); border-color: transparent; }
+.heatmap-cell.l2 { background: color-mix(in srgb, var(--accent) 48%, var(--surface-2)); border-color: transparent; }
+.heatmap-cell.l3 { background: color-mix(in srgb, var(--accent) 72%, var(--surface-2)); border-color: transparent; }
+.heatmap-cell.l4 { background: color-mix(in srgb, var(--accent) 100%, var(--surface-2)); border-color: transparent; }
 .heatmap-legend {
     display: flex;
     align-items: center;
@@ -56,8 +56,8 @@
 .open-case-form {
     margin-bottom: 1.25rem;
     padding: 1rem;
-    background: var(--box-shade);
-    border: 1px solid var(--box-border);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
     border-radius: 0.5rem;
 }
 .open-case-fields {
@@ -113,8 +113,8 @@
 
 .member-message {
     padding: 0.7rem 0.9rem;
-    background: var(--box-shade);
-    border: 1px solid var(--box-border);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
     border-radius: 0.5rem;
 }
 
@@ -144,3 +144,7 @@
     font-size: 0.75rem;
 }
 .msg-extras:empty { display: none; }
+
+/* App skin: stat tiles sit flush in their card and are wide enough for a role name. */
+.config-section .user-stats-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); margin-bottom: 0; }
+.open-case-form { border-radius: var(--radius-md); }

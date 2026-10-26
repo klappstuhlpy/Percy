@@ -26,6 +26,13 @@
 .btn--danger { background: color-mix(in srgb, var(--error-text, #f87171) 14%, transparent); border-color: color-mix(in srgb, var(--error-text, #f87171) 35%, transparent); color: var(--error-text, #f87171); }
 .btn--danger:hover { background: color-mix(in srgb, var(--error-text, #f87171) 24%, transparent); }
 .btn--sm { min-height: 32px; padding: 0 var(--space-3); font-size: 13px; }
+/* base.css colours every <a> (a:not(.button)); keep link-shaped buttons and cards on their own text colour. */
+a.btn, a.btn:hover { color: var(--text); }
+a.btn--primary, a.btn--primary:hover { color: var(--accent-contrast); }
+a.btn--ghost, a.btn--icon { color: var(--text-muted); }
+a.btn--ghost:hover, a.btn--icon:hover { color: var(--text); }
+a.btn--danger, a.btn--danger:hover { color: var(--error-text, #f87171); }
+a.card, a.card:hover, a.row, a.row:hover { color: var(--text); }
 .btn--icon { width: 36px; min-height: 36px; padding: 0; border-color: transparent; background: none; color: var(--text-muted); }
 
 /* ── Form controls ────────────────────────────────────────────────────── */
@@ -97,7 +104,7 @@
     transition: background var(--dur-base), color var(--dur-base);
 }
 .tabs [role="tab"]:hover, .tabs .tab:hover { color: var(--text); }
-.tabs [aria-selected="true"], .tabs .tab.is-on { background: var(--surface-3); color: var(--text); }
+.tabs [aria-selected="true"], .tabs .tab.is-on, .tabs .tab.active { background: var(--surface-3); color: var(--text); }
 .tabs [role="tab"]:focus-visible, .tabs .tab:focus-visible { outline: none; box-shadow: var(--ring-focus); }
 
 .chip {
@@ -146,6 +153,7 @@
 .toast-card .btn--icon svg { width: 14px; height: 14px; }
 .toast-card.is-success { --tc: var(--success-text, #4ade80); }
 .toast-card.is-info { --tc: var(--info-text, var(--accent)); }
+.toast-card.is-warning { --tc: var(--warning-text, #fbbf24); border-color: color-mix(in srgb, var(--tc) 40%, var(--line)); }
 .toast-card.is-error { --tc: var(--error-text, #f87171); }
 .toast-card.is-leaving { animation: toast-out 180ms ease-in forwards; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }

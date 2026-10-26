@@ -12,7 +12,7 @@
             const action = options && options.action;
             // No action button: the shared PercyToast stack (toast.js) renders it.
             if (!action && window.PercyToast) {
-                window.PercyToast.show(level === 'warning' ? 'info' : level, message);
+                window.PercyToast.show(level, message);
                 return;
             }
             const toast = document.createElement('div');

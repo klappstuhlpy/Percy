@@ -3,6 +3,7 @@
    Percy orange stays available as --brand (from base.css) for logo moments only.
    Light theme = [data-theme="light"], set before first paint by layout.html. */
 :root {
+    --brand: #d97757; /* Percy orange: logo and brand marks only, never UI state */
     --app-font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --app-bg: #0a0a0b;
     --app-glow: rgba(235, 238, 245, 0.075);
