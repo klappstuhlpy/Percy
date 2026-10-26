@@ -10,6 +10,11 @@
         // onClick and dismisses the toast. A toast with an action stays 8 s.
         window.showToast = function(level, message, options) {
             const action = options && options.action;
+            // No action button: the shared PercyToast stack (toast.js) renders it.
+            if (!action && window.PercyToast) {
+                window.PercyToast.show(level === 'warning' ? 'info' : level, message);
+                return;
+            }
             const toast = document.createElement('div');
             toast.className = 'toast toast-' + level;
             toast.textContent = message;

@@ -290,7 +290,8 @@ document.getElementById('level-save-btn').addEventListener('click', async () => 
     const xs = points.map(p => Math.floor(Date.parse(p.day + 'T00:00:00Z') / 1000));
     const gains = points.map((p, i) => i === 0 ? null : Math.max(0, p.total_xp - points[i - 1].total_xp));
 
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--branding').trim() || '#d97757';
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8351ed';
+    const faint = getComputedStyle(document.documentElement).getPropertyValue('--text-faint').trim() || '#7a7a82';
     const size = () => ({ width: Math.max(220, el.clientWidth - 4), height: 240 });
 
     el.innerHTML = '';
@@ -310,8 +311,8 @@ document.getElementById('level-save-btn').addEventListener('click', async () => 
             },
         ],
         axes: [
-            { stroke: '#71717a' },
-            { stroke: '#71717a', grid: { stroke: 'rgba(127,127,127,0.15)' } },
+            { stroke: faint },
+            { stroke: faint, grid: { stroke: 'rgba(127,127,127,0.15)' } },
         ],
     }, [xs, gains], el);
 
