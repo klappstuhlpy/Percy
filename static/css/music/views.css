@@ -477,3 +477,38 @@
     /* Phones: the ••• menu already offers "Add to queue", so the row keeps two buttons. */
     .mapp-row-acts [data-act="add"]:has(~ [data-d="more"]) { display: none; }
 }
+/* Server picker: where Percy is playing right now. */
+.mapp-guild-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--m-live); }
+
+/* Playlist cover: the change button sits on the image (shown on hover/focus, always on touch),
+   and an image file dragged onto it uploads. */
+.mapp-dh-cover { position: relative; }
+.mapp-dh-cover-edit {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    border: 0; border-radius: inherit; background: rgba(0, 0, 0, 0.55); color: #fff; font: inherit; font-size: 13px; font-weight: 700;
+    opacity: 0; cursor: pointer; transition: opacity var(--m-ease);
+}
+.mapp-dh-cover-edit svg { width: 28px; height: 28px; }
+.mapp-dh-cover:hover .mapp-dh-cover-edit, .mapp-dh-cover-edit:focus-visible, .mapp-dh-cover-edit[aria-expanded="true"] { opacity: 1; }
+.mapp-dh-cover-edit:focus-visible { outline: 2px solid var(--m-accent); outline-offset: 2px; }
+.mapp-dh-cover.is-drop { outline: 3px dashed var(--m-accent); outline-offset: 4px; }
+.mapp-dh-cover.is-drop .mapp-dh-cover-edit { opacity: 1; }
+@media (hover: none) {
+    .mapp-dh-cover-edit { inset: auto 8px 8px auto; width: 40px; height: 40px; border-radius: 50%; opacity: 1; }
+    .mapp-dh-cover-edit span { display: none; }
+    .mapp-dh-cover-edit svg { width: 20px; height: 20px; }
+}
+
+/* Sidebar playlists, and drop targets while a track is being dragged. */
+.mapp-nav-pls { display: flex; flex-direction: column; gap: 1px; margin: 0 0 var(--m-s1) 34px; }
+.mapp-nav-sub {
+    display: block; padding: 5px 10px; border-radius: var(--m-r-sm); color: var(--m-muted); font-size: 13px; font-weight: 600;
+    text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mapp-nav-sub:hover { color: var(--m-text); background: var(--m-raised); }
+.mapp-dragging-track [data-drop="liked"], .mapp-dragging-track [data-drop-pl] { outline: 1px dashed color-mix(in srgb, var(--m-accent) 55%, transparent); outline-offset: -1px; }
+.is-drop-over[data-drop="liked"], .is-drop-over[data-drop-pl] { background: color-mix(in srgb, var(--m-accent) 22%, transparent) !important; color: var(--m-text); outline: 2px solid var(--m-accent) !important; }
+.mapp-row[draggable="true"], .mapp-card[draggable="true"] { -webkit-user-drag: element; }
+@media (max-width: 1023px) { .mapp-nav-pls { display: none; } }
+/* Trending: the chart position sits where "Jump back in" shows how long ago. */
+.mapp-card-rank { font-variant-numeric: tabular-nums; font-size: 12px; }

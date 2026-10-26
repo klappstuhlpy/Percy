@@ -48,6 +48,7 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/dashboard/music/:guild_id/recommendations",
             get(music_app::music_recommendations),
         )
+        .route("/dashboard/music/:guild_id/trending", get(music_app::music_trending))
         .route("/dashboard/music/:guild_id/play", post(music_app::music_play))
         .route("/dashboard/music/:guild_id/control", post(music_app::music_control))
         .route(
@@ -74,6 +75,11 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/account/music/playlists/:playlist_id/delete",
             post(music_app::account_music_playlist_delete),
         )
+        .route(
+            "/account/music/playlists/:playlist_id/cover",
+            post(music_app::account_music_playlist_cover),
+        )
+        .route("/account/music/covers/:cover_id", get(music_app::account_music_cover))
         .route(
             "/account/music/playlists/:playlist_id/tracks",
             post(music_app::account_music_playlist_add),

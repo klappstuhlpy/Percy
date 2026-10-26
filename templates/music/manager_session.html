@@ -31,7 +31,7 @@
             </div>
             <div class="config-field">
                 <label class="config-label" for="ao-source">Source</label>
-                <span class="config-description">A stream/radio URL, a playlist/album link or search, or an autoplay seed</span>
+                <span class="config-description">A stream/radio URL, a playlist/album link or search, or an autoplay seed. For autoplay, leave it empty to continue from the song that is playing.</span>
                 <input type="text" id="ao-source" class="config-input" placeholder="e.g. https://stream.example.com/lofi" value="{{ music.always_on.source.as_deref().unwrap_or("") }}">
             </div>
         </div>

@@ -272,6 +272,62 @@ pub async fn recent_changes(db: &Database, guild_id: &str, limit: u32) -> rusqli
     .await
 }
 
+// -- Music app playlist covers (`music_covers`, sql/3.sql) --------------------
+
+/// Stores a playlist's new cover and drops the ones it replaces.
+pub async fn save_music_cover(
+    db: &Database,
+    id: &str,
+    user_id: &str,
+    playlist_id: &str,
+    content_type: &str,
+    data: Vec<u8>,
+) -> rusqlite::Result<()> {
+    let (id, user_id, playlist_id, content_type) = (
+        id.to_owned(),
+        user_id.to_owned(),
+        playlist_id.to_owned(),
+        content_type.to_owned(),
+    );
+    db.call(move |conn| {
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM music_covers WHERE user_id = ? AND playlist_id = ?",
+            rusqlite::params![user_id, playlist_id],
+        )?;
+        tx.execute(
+            "INSERT INTO music_covers (id, user_id, playlist_id, content_type, data) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params![id, user_id, playlist_id, content_type, data],
+        )?;
+        tx.commit()
+    })
+    .await
+}
+
+/// A stored cover as `(owner id, content type, bytes)`.
+pub async fn music_cover(db: &Database, id: &str) -> rusqlite::Result<Option<(String, String, Vec<u8>)>> {
+    let id = id.to_owned();
+    db.call(move |conn| {
+        let mut stmt = conn.prepare_cached("SELECT user_id, content_type, data FROM music_covers WHERE id = ?")?;
+        let mut rows = stmt.query([&id])?;
+        match rows.next()? {
+            Some(row) => Ok(Some((row.get(0)?, row.get(1)?, row.get(2)?))),
+            None => Ok(None),
+        }
+    })
+    .await
+}
+
+/// Forgets a playlist's uploaded covers (cover reset, playlist deleted).
+pub async fn delete_music_covers(db: &Database, user_id: &str, playlist_id: &str) -> rusqlite::Result<()> {
+    db.execute(
+        "DELETE FROM music_covers WHERE user_id = ? AND playlist_id = ?",
+        boxed_params!(user_id.to_owned(), playlist_id.to_owned()),
+    )
+    .await
+    .map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -267,6 +267,7 @@ mod tests {
                 member_count: Some(42),
                 owner: true,
                 manageable: true,
+                music_playing: false,
             }],
             public: Vec::new(),
             add_percy: vec![AddPercyGuild {

@@ -81,8 +81,11 @@
         const cover = o.icon
             ? `<span class="mapp-art mapp-art--fill g${grad(o.title)}" aria-hidden="true">${ico(o.icon)}</span>`
             : art(o.artwork, o.title, 'mapp-art--fill');
+        const edit = o.coverEdit
+            ? `<button type="button" class="mapp-dh-cover-edit" data-d="pl-cover" aria-haspopup="menu" aria-label="Change cover" title="Change cover">${ico('image')}<span>Change cover</span></button>`
+            : '';
         return `<header class="mapp-dh g${grad(o.title)}">
-            <div class="mapp-dh-cover${o.round ? ' is-round' : ''}">${cover}</div>
+            <div class="mapp-dh-cover${o.round ? ' is-round' : ''}">${cover}${edit}</div>
             <div class="mapp-dh-text">
                 <p class="mapp-dh-kind">${esc(o.kind)}</p>
                 <h1 class="mapp-dh-title" title="${esc(o.title)}">${esc(o.title)}</h1>
@@ -110,7 +113,7 @@
         const cover = o.icon ? `<span class="mapp-art mapp-art--sm g${grad(t.title)}" aria-hidden="true">${ico(o.icon)}</span>` : art(t.artwork, t.title, 'mapp-art--sm');
         const sub = t.sub ? esc(t.sub) : M.subHtml(t, o.withAlbum);
         const meta = o.albumCol ? `<span class="mapp-row-meta">${album && M.albumHref(album, t.author) ? `<a class="mapp-ln" href="${esc(M.albumHref(album, t.author))}">${esc(album.name)}</a>` : ''}</span>` : '';
-        return `<li class="mapp-row mapp-row--d${o.albumCol ? ' has-meta' : ''}" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}"${t.artist_url ? ` data-artist-url="${esc(t.artist_url)}"` : ''}${album && album.url ? ` data-album-url="${esc(album.url)}" data-album-name="${esc(album.name)}"` : ''}>
+        return `<li class="mapp-row mapp-row--d${o.albumCol ? ' has-meta' : ''}" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}"${t.uri ? ' draggable="true"' : ''}${t.artist_url ? ` data-artist-url="${esc(t.artist_url)}"` : ''}${album && album.url ? ` data-album-url="${esc(album.url)}" data-album-name="${esc(album.name)}"` : ''}>
             <span class="mapp-row-idx"><span>${i + 1}</span><button type="button" data-act="playnow" aria-label="Play ${ttl} now" title="Play now">${ico('play')}</button></span>
             ${cover}
             <span class="mapp-row-text"><span class="mapp-row-title">${ttl}</span><span class="mapp-row-sub">${sub}</span></span>
@@ -251,7 +254,6 @@
     // ── Saved playlist and Liked Songs ───────────────────────────────────
     const editBtns = () => `
         <button type="button" class="mapp-ibtn mapp-ibtn--ring" data-d="pl-rename" aria-label="Rename playlist" title="Rename">${ico('pencil')}</button>
-        <button type="button" class="mapp-ibtn mapp-ibtn--ring" data-d="pl-cover" aria-label="Change cover" title="Change cover">${ico('image')}</button>
         <button type="button" class="mapp-ibtn mapp-ibtn--ring" data-d="pl-delete" aria-label="Delete playlist" title="Delete playlist">${ico('trash')}</button>`;
     let shownPlaylist = null; // the Percy payload behind the open playlist page
     function playlistPage(box, p) {
@@ -260,7 +262,7 @@
         const n = tracks.length;
         cur = { kind: 'playlist', title: p.name || 'Playlist', tracks, link: '', share: location.href, id: String(p.id) };
         box.innerHTML = `<div class="mapp-dtop"><a class="mapp-link" href="#playlists">${ico('arrow-left')}Playlists</a></div>`
-            + headerHtml({ kind: 'Playlist', title: cur.title, artwork: p.cover, icon: p.cover ? '' : 'playlist', meta: esc(plural(n, 'track')), acts: actsHtml({ noPlay: !n, extra: editBtns() }) })
+            + headerHtml({ kind: 'Playlist', title: cur.title, artwork: p.cover, icon: p.cover ? '' : 'playlist', coverEdit: true, meta: esc(plural(n, 'track')), acts: actsHtml({ noPlay: !n, extra: editBtns() }) })
             + `<div class="mapp-dbody">${n ? rows(tracks, {}) : empty('playlist', 'This playlist is empty', 'Open the ••• menu on any song and pick Add to playlist.', '', 'inline')}</div>`;
         tint($('.mapp-dh', box), p.cover);
         M.refresh();
@@ -329,7 +331,10 @@
         const id = cur.id;
         const r = await api(`/account/music/playlists/${encodeURIComponent(id)}/update`, { method: 'POST', body });
         if (!r.ok) { toast('error', r.error); return; }
-        const p = r.data.playlist;
+        applyPlaylist(r.data.playlist, done);
+    }
+    function applyPlaylist(p, done) {
+        const id = String(p.id);
         const s = M.playlists.find((x) => String(x.id) === id);
         if (s) { s.name = p.name; s.thumbnail = p.thumbnail; s.cover = p.cover; M.renderPlaylists(); }
         document.title = `${p.name} | Percy Music`;
@@ -340,13 +345,66 @@
         const name = await PercyConfirm.input({ title: 'Rename playlist', label: 'Name', value: cur.title, confirmLabel: 'Rename', maxLength: 100 });
         if (name && name !== cur.title) await updatePlaylist({ name }, `Renamed to ${q(name)}`);
     }
-    async function changeCover() {
+    function changeCover(btn) {
+        const custom = !!(shownPlaylist && shownPlaylist.thumbnail);
+        popMenu(btn, [
+            ['upload', 'image', 'Upload an image'],
+            ['link', 'link', 'Use an image link'],
+            custom ? ['reset', 'x', 'Use the first song’s cover'] : null,
+        ].filter(Boolean), (k) => {
+            if (k === 'upload') pickCover();
+            else if (k === 'link') coverLink();
+            else if (k === 'reset') M.once(`pl-cover:${cur.id}`, null, () => updatePlaylist({ thumbnail: '' }, 'Cover reset to the first song’s'));
+        });
+    }
+    const COVER_PX = 600;
+    /* Square-crop the centre and re-encode as JPEG, so any photo becomes a ~100 KB cover. */
+    async function coverBlob(file) {
+        const bmp = await createImageBitmap(file);
+        const side = Math.min(bmp.width, bmp.height), size = Math.min(COVER_PX, side);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        canvas.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, size, size);
+        bmp.close();
+        return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+    }
+    async function uploadCover(file) {
+        if (!cur || cur.kind !== 'playlist') return;
+        if (!/^image\//.test(file.type)) { toast('error', 'Pick an image file (JPEG, PNG, WebP or GIF).'); return; }
+        if (file.size > 25 * 1024 * 1024) { toast('error', 'That image is over 25 MB. Pick a smaller one.'); return; }
+        const id = cur.id;
+        let blob;
+        try { blob = await coverBlob(file); } catch (_) { blob = null; }
+        if (!blob) { toast('error', 'That image could not be read. Try another one.'); return; }
+        toast('info', 'Uploading cover…');
+        let r;
+        try {
+            const res = await fetch(`/account/music/playlists/${encodeURIComponent(id)}/cover`, {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg', Accept: 'application/json' }, body: blob,
+            });
+            const d = await res.json().catch(() => ({}));
+            r = res.ok && d.ok !== false ? { ok: true, data: d } : { ok: false, error: d.error || 'Could not upload the cover.' };
+        } catch (_) {
+            r = { ok: false, error: 'Could not reach the server. Check your connection.' };
+        }
+        if (!r.ok) { toast('error', r.error); return; }
+        applyPlaylist(r.data.playlist, 'Cover updated');
+    }
+    function pickCover() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.addEventListener('change', () => { if (input.files && input.files[0]) M.once(`pl-cover:${cur.id}`, null, () => uploadCover(input.files[0])); });
+        input.click();
+    }
+    async function coverLink() {
         const now = (shownPlaylist && shownPlaylist.thumbnail) || '';
+        const shown = now.includes('/account/music/covers/') ? '' : now; // an upload has no link worth editing
         const url = await PercyConfirm.input({
-            title: 'Playlist cover', label: 'Image link', value: now, type: 'url', placeholder: 'https://…/cover.jpg',
+            title: 'Playlist cover', label: 'Image link', value: shown, type: 'url', placeholder: 'https://…/cover.jpg',
             hint: 'Paste a link to an image. Leave it empty to use the first song’s cover.', confirmLabel: 'Save cover', required: false,
         });
-        if (url === null || url === now) return;
+        if (url === null || url === shown) return;
         if (url && !/^https?:\/\//i.test(url)) { toast('error', 'The cover must be an http(s) link to an image.'); return; }
         await updatePlaylist({ thumbnail: url }, url ? 'Cover updated' : 'Cover reset to the first song’s');
     }
@@ -362,6 +420,66 @@
         toast('success', `Deleted ${q(cur.title)}`);
         M.go('playlists');
     }
+
+    // ── Drag a track onto Liked Songs or a playlist in the sidebar ───────
+    const TRACK_TYPE = 'application/x-percy-track';
+    const dropTarget = (el) => el && el.closest && el.closest('[data-drop="liked"], [data-drop-pl]');
+    const carriesTrack = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes(TRACK_TYPE);
+    document.addEventListener('dragstart', (e) => {
+        const el = e.target.closest && e.target.closest('[draggable="true"][data-uri]');
+        if (!el || !el.dataset.uri || !e.dataTransfer) return;
+        const t = M.trackOf(el);
+        e.dataTransfer.setData(TRACK_TYPE, JSON.stringify(t));
+        e.dataTransfer.setData('text/uri-list', t.uri);
+        if (e.dataTransfer.effectAllowed !== 'copyMove') e.dataTransfer.effectAllowed = 'copy';
+        document.documentElement.classList.add('mapp-dragging-track');
+    });
+    document.addEventListener('dragend', () => {
+        document.documentElement.classList.remove('mapp-dragging-track');
+        $$('.is-drop-over').forEach((n) => n.classList.remove('is-drop-over'));
+    });
+    document.addEventListener('dragover', (e) => {
+        const target = dropTarget(e.target);
+        if (!target || !carriesTrack(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        target.classList.add('is-drop-over');
+    });
+    document.addEventListener('dragleave', (e) => {
+        const target = dropTarget(e.target);
+        if (target && !target.contains(e.relatedTarget)) target.classList.remove('is-drop-over');
+    });
+    document.addEventListener('drop', (e) => {
+        const target = dropTarget(e.target);
+        if (!target || !carriesTrack(e)) return;
+        e.preventDefault();
+        target.classList.remove('is-drop-over');
+        document.documentElement.classList.remove('mapp-dragging-track');
+        let t;
+        try { t = JSON.parse(e.dataTransfer.getData(TRACK_TYPE)); } catch (_) { return; }
+        if (!t || !t.uri) return;
+        if (target.dataset.drop === 'liked') M.likeTrack(t);
+        else addToPlaylist(t, target.dataset.dropPl);
+    });
+
+    document.addEventListener('dragover', (e) => {
+        const cover = e.target.closest && e.target.closest('#mapp-playlist .mapp-dh-cover');
+        if (!cover || !e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+        e.preventDefault();
+        cover.classList.add('is-drop');
+    });
+    document.addEventListener('dragleave', (e) => {
+        const cover = e.target.closest && e.target.closest('.mapp-dh-cover');
+        if (cover && !cover.contains(e.relatedTarget)) cover.classList.remove('is-drop');
+    });
+    document.addEventListener('drop', (e) => {
+        const cover = e.target.closest && e.target.closest('#mapp-playlist .mapp-dh-cover');
+        if (!cover || !e.dataTransfer || !e.dataTransfer.files.length) return;
+        e.preventDefault();
+        cover.classList.remove('is-drop');
+        const file = e.dataTransfer.files[0];
+        M.once(`pl-cover:${cur && cur.id}`, null, () => uploadCover(file));
+    });
 
     // ── Routing ──────────────────────────────────────────────────────────
     function onRoute(d) {
@@ -381,6 +499,33 @@
         if (menu) { menu.remove(); menu = null; }
         if (menuFor) { menuFor.setAttribute('aria-expanded', 'false'); menuFor = null; }
     }
+    function placeMenu(btn) {
+        document.body.appendChild(menu);
+        const r = btn.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+        menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+        menu.style.top = `${r.bottom + h + 12 > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4}px`;
+        menuFor = btn;
+    }
+    /* A small menu of [key, icon, label] items; onPick gets the key. Same look and keys as ••• . */
+    function popMenu(btn, items, onPick) {
+        const had = menuFor === btn;
+        closeMenu();
+        if (had) return;
+        menu = document.createElement('div');
+        menu.className = 'mapp-menu';
+        menu.setAttribute('role', 'menu');
+        menu.innerHTML = items.map(([k, i, l]) => `<button type="button" role="menuitem" data-m="${esc(k)}">${ico(i)}<span>${esc(l)}</span></button>`).join('');
+        placeMenu(btn);
+        btn.setAttribute('aria-expanded', 'true');
+        const f = $('button', menu); if (f) f.focus({ preventScroll: true });
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const b = e.target.closest('[data-m]');
+            if (!b) return;
+            closeMenu();
+            onPick(b.dataset.m);
+        });
+    }
     function openMenu(btn, sub) {
         const had = menuFor === btn;
         closeMenu();
@@ -389,10 +534,10 @@
         const first = (t.author || '').split(',')[0].trim().replace(/ - Topic$/, '');
         const inPlaylist = cur && cur.kind === 'playlist' && btn.closest('#mapp-playlist');
         const items = sub === 'playlists'
-            ? [...M.playlists.map((p) => [`pl:${p.id}`, 'playlist', p.name]), ['pl-new', 'plus', 'New playlist…']]
+            ? [...M.playlists.map((p) => [`pl:${p.id}`, 'playlist', p.name]), ['pl-new', 'plus', 'New playlist']]
             : [
                 ['playnow', 'play', 'Play now'], ['add', 'plus', 'Add to queue'],
-                t.uri ? ['addpl', 'playlist', 'Add to playlist…'] : null,
+                t.uri ? ['addpl', 'playlist', 'Add to playlist'] : null,
                 inPlaylist && t.uri ? ['rmpl', 'x', 'Remove from this playlist'] : null,
                 first ? ['artist', 'user', 'Go to artist'] : null,
                 t.albumUrl ? ['album', 'disc', 'Go to album'] : null,
@@ -402,14 +547,13 @@
         menu.className = 'mapp-menu';
         menu.setAttribute('role', 'menu');
         menu.innerHTML = items.map(([k, i, l]) => `<button type="button" role="menuitem" data-m="${esc(k)}">${ico(i)}<span>${esc(l)}</span></button>`).join('');
-        document.body.appendChild(menu);
-        const r = btn.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
-        menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-        menu.style.top = `${r.bottom + h + 12 > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4}px`;
-        menuFor = btn;
+        placeMenu(btn);
         btn.setAttribute('aria-expanded', 'true');
         const f = $('button', menu); if (f) f.focus({ preventScroll: true });
         menu.addEventListener('click', (e) => {
+            // The document click handler closes menus on outside clicks; this menu is about to be
+            // removed (and maybe replaced by the playlist menu), so the click must stop here.
+            e.stopPropagation();
             const b = e.target.closest('[data-m]');
             if (!b) return;
             const k = b.dataset.m;
@@ -461,8 +605,9 @@
             return;
         }
         if (!cur) return;
+        if (cur.kind === 'playlist' && act === 'pl-cover') { e.stopPropagation(); changeCover(b); return; }
         if (cur.kind === 'playlist' && act.startsWith('pl-')) {
-            const run = { 'pl-rename': renamePlaylist, 'pl-cover': changeCover, 'pl-delete': deletePlaylist }[act];
+            const run = { 'pl-rename': renamePlaylist, 'pl-delete': deletePlaylist }[act];
             if (run) M.once(`${act}:${cur.id}`, b, run);
             return;
         }

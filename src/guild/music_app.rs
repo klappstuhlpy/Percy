@@ -9,8 +9,9 @@
 #![allow(clippy::result_large_err)] // handlers return the early-exit Response, as gate_json does
 
 use axum::{
+    body::Bytes,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -82,6 +83,8 @@ impl TtlCache {
 
 /// Searches are shared across users (user 0), 30 minutes; Percy keeps its own hour-long copy.
 static SEARCH_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(1800, 1024));
+/// Trending charts are the same for every member of a guild, 15 minutes (Percy keeps its own copy too).
+static TRENDING_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(900, 256));
 /// Recommendations are per user and guild, an hour (a like already drops the user's entries).
 static RECS_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(3600, 512));
 
@@ -166,7 +169,7 @@ pub(crate) async fn render_app(
             id: g.id,
             name: g.name,
             icon: g.icon_url,
-            playing: false,
+            playing: g.music_playing,
         })
         .collect();
 
@@ -190,7 +193,7 @@ pub(crate) async fn render_app(
         music = m.ok();
         history = h.map(|h| h.items).unwrap_or_default();
         library = lib.unwrap_or_default();
-        // ponytail: only the picked server's dot is live; one get_music per server is too many calls.
+        // The picked server's dot follows the fresher player read.
         guilds[i].playing = music.as_ref().is_some_and(|m| m.active);
         is_admin = admin_ids.contains(&guilds[i].id);
         if is_admin {
@@ -688,9 +691,109 @@ pub async fn account_music_playlist_update(
     let Some(id) = playlist_id(&raw) else {
         return fail(StatusCode::NOT_FOUND, "Not found");
     };
+    let reset_cover = patch.thumbnail.as_deref() == Some("");
+    match percy.update_user_playlist(uid, &id, &patch).await {
+        Ok(p) => {
+            if reset_cover {
+                let _ = crate::db::delete_music_covers(&app.db, &uid.to_string(), &id).await;
+            }
+            Json(json!({"ok": true, "playlist": p})).into_response()
+        }
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// Largest cover accepted. The browser crops and re-encodes to a ~600 px JPEG first, which lands
+/// far below this; the cap only stops a hand-made request from filling the database.
+const COVER_MAX_BYTES: usize = 1024 * 1024;
+
+/// The image type from the bytes themselves (the Content-Type header is the client's claim).
+fn cover_type(data: &[u8]) -> Option<&'static str> {
+    if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if data.len() > 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
+/// `POST /account/music/playlists/:playlist_id/cover` — the raw image as the body. Stores it in
+/// the dashboard's own database and points the playlist's cover at it.
+pub async fn account_music_playlist_cover(
+    State(app): State<AppState>,
+    session: Session,
+    Path(raw): Path<String>,
+    body: Bytes,
+) -> Response {
+    let (percy, uid) = match account_gate(&app, &session).await {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+    let Some(id) = playlist_id(&raw) else {
+        return fail(StatusCode::NOT_FOUND, "Not found");
+    };
+    if body.len() > COVER_MAX_BYTES {
+        return fail(StatusCode::PAYLOAD_TOO_LARGE, "That image is too large (1 MB at most).");
+    }
+    let Some(content_type) = cover_type(&body) else {
+        return fail(StatusCode::BAD_REQUEST, "Use a JPEG, PNG or WebP image.");
+    };
+    // Ownership first: Percy 404s a playlist that is not this user's.
+    if let Err(e) = percy.get_user_playlist(uid, &id).await {
+        return percy_fail(&e);
+    }
+    let mut rand = [0u8; 16];
+    if getrandom::getrandom(&mut rand).is_err() {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "Could not store the cover.");
+    }
+    let cover_id: String = rand.iter().map(|b| format!("{b:02x}")).collect();
+    let user = uid.to_string();
+    if crate::db::save_music_cover(&app.db, &cover_id, &user, &id, content_type, body.to_vec())
+        .await
+        .is_err()
+    {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "Could not store the cover.");
+    }
+    let patch = PlaylistPatch {
+        name: None,
+        thumbnail: Some(format!(
+            "{}/account/music/covers/{cover_id}",
+            crate::config::public_base_url()
+        )),
+    };
     match percy.update_user_playlist(uid, &id, &patch).await {
         Ok(p) => Json(json!({"ok": true, "playlist": p})).into_response(),
         Err(e) => percy_fail(&e),
+    }
+}
+
+/// `GET /account/music/covers/:cover_id` — an uploaded cover, for its owner only (covers are not
+/// moderated, so they are never public). The id changes with every upload, so it caches forever.
+pub async fn account_music_cover(
+    State(app): State<AppState>,
+    session: Session,
+    Path(cover_id): Path<String>,
+) -> Response {
+    let not_found = || StatusCode::NOT_FOUND.into_response();
+    if cover_id.len() != 32 || !cover_id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return not_found();
+    }
+    match crate::db::music_cover(&app.db, &cover_id).await {
+        Ok(Some((owner, content_type, data))) if owner == session.discord_user_id => (
+            [
+                (header::CONTENT_TYPE, content_type),
+                (
+                    header::CACHE_CONTROL,
+                    "private, max-age=31536000, immutable".to_string(),
+                ),
+            ],
+            data,
+        )
+            .into_response(),
+        _ => not_found(),
     }
 }
 
@@ -708,7 +811,10 @@ pub async fn account_music_playlist_delete(
         return fail(StatusCode::NOT_FOUND, "Not found");
     };
     match percy.delete_user_playlist(uid, &id).await {
-        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Ok(()) => {
+            let _ = crate::db::delete_music_covers(&app.db, &uid.to_string(), &id).await;
+            Json(json!({"ok": true})).into_response()
+        }
         Err(e) => percy_fail(&e),
     }
 }
@@ -802,6 +908,26 @@ fn build_recommendations(
         })
         .collect();
     json!({"ok": true, "groups": groups})
+}
+
+/// `GET /dashboard/music/:guild_id/trending` — the week's most-picked tracks here and across Percy.
+pub async fn music_trending(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let key = (guild_id, 0, "trending".to_string());
+    if let Some(hit) = TRENDING_CACHE.get(&key) {
+        return Json(hit).into_response();
+    }
+    match percy.get_music_trending(guild_id).await {
+        Ok(t) => {
+            let out = json!({"ok": true, "server": t.server, "global": t.global});
+            TRENDING_CACHE.put(key, out.clone());
+            Json(out).into_response()
+        }
+        Err(e) => percy_fail(&e),
+    }
 }
 
 /// `GET /dashboard/music/:guild_id/recommendations` — tracks by the user's top artists, searched

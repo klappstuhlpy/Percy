@@ -32,7 +32,8 @@ function musicErr(m) { if (window.showToast) window.showToast('error', m); }
 
     enableBtn.addEventListener('click', async () => {
         const source = sourceInput.value.trim();
-        if (!source) { musicErr('Please provide a source (stream URL, playlist, or seed).'); return; }
+        // Autoplay may start from whatever is playing now; Percy says so if nothing is.
+        if (!source && modeSel.value !== 'autoplay') { musicErr('Please provide a source (stream URL or playlist).'); return; }
         if (!channelSel.value) { musicErr('Please pick a voice channel.'); return; }
         enableBtn.disabled = true;
         const data = await post({ enabled: true, mode: modeSel.value, source, voice_channel_id: channelSel.value });

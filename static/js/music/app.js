@@ -274,7 +274,7 @@
             if (!t.autoplay && !sawManual) { html += '<li class="mapp-qlabel">Next up</li>'; sawManual = true; }
             if (t.autoplay && !sawAuto) { html += '<li class="mapp-qlabel">Autoplay picks</li>'; sawAuto = true; }
             const edit = mgr && !t.autoplay;
-            html += `<li class="mapp-qrow${t.autoplay ? ' is-auto' : ''}" data-index="${i}" data-uri="${esc(t.uri || '')}" data-title="${esc(t.title)}" data-author="${esc(t.author)}"${edit ? ' draggable="true"' : ''}>
+            html += `<li class="mapp-qrow${t.autoplay ? ' is-auto' : ''}" data-index="${i}" data-uri="${esc(t.uri || '')}" data-title="${esc(t.title)}" data-author="${esc(t.author)}" data-artwork="${esc(t.artwork || '')}"${edit ? ' data-reorder' : ''} draggable="true">
                 ${edit ? `<span class="mapp-grip" title="Drag to reorder" aria-hidden="true">${ico('grip')}</span>` : ''}
                 ${art(t.artwork, t.title, 'mapp-art--xs')}
                 <span class="mapp-row-text"><span class="mapp-row-title">${esc(t.title)}</span><span class="mapp-row-sub">${authorHtml(t.author, t.artist_url)}</span></span>
@@ -567,6 +567,20 @@
         });
     }
 
+    /* Save to Liked Songs (a drop onto it): never unlikes, unlike the heart. */
+    async function likeTrack(t) {
+        if (!t.uri) { toast('info', 'This track cannot be saved: it has no link.'); return; }
+        if (liked.has(t.uri)) { toast('info', `${q(t.title)} is already in Liked Songs`); return; }
+        await once(`like:${t.uri}`, null, async () => {
+            liked.set(t.uri, t.title); likedMeta.set(t.uri, { artwork: t.artwork || '', author: t.author || '' });
+            syncHearts();
+            const r = await api('/account/music/liked', { method: 'POST', body: { name: t.title, url: t.uri, author: t.author || null, artwork: t.artwork || null } });
+            if (!r.ok) { liked.delete(t.uri); syncHearts(); toast('error', r.error); return; }
+            toast('success', `Saved ${q(t.title)} to Liked Songs`);
+            renderLiked();
+        });
+    }
+
     // ── Lists: history, recents, liked, playlist, search ────────────────
     function empty(icon, title, text, actions, size, isError) {
         return `<div class="mapp-empty${size ? ' mapp-empty--' + size : ''}${isError ? ' is-error' : ''}">
@@ -578,7 +592,7 @@
     /* t: {uri, title, author, artwork, ms, meta, stream, likedIcon} */
     function rowHtml(t, i) {
         const ttl = esc(t.title);
-        return `<li class="mapp-row" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}"${t.artistUrl ? ` data-artist-url="${esc(t.artistUrl)}"` : ''}${t.album && t.album.url ? ` data-album-url="${esc(t.album.url)}" data-album-name="${esc(t.album.name)}"` : ''}>
+        return `<li class="mapp-row"${t.uri ? ' draggable="true"' : ''} data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}"${t.artistUrl ? ` data-artist-url="${esc(t.artistUrl)}"` : ''}${t.album && t.album.url ? ` data-album-url="${esc(t.album.url)}" data-album-name="${esc(t.album.name)}"` : ''}>
             <span class="mapp-row-idx"><span>${i + 1}</span><button type="button" data-act="playnow" aria-label="Play ${ttl} now" title="Play now">${ico('play')}</button></span>
             ${t.likedIcon ? `<span class="mapp-art mapp-art--sm g${grad(t.title)}" aria-hidden="true">${ico('heart-fill')}</span>` : art(t.artwork, t.title, 'mapp-art--sm')}
             <span class="mapp-row-text"><span class="mapp-row-title">${ttl}</span><span class="mapp-row-sub">${t.author ? subHtml(t, t.withAlbum) : esc(t.sub || 'Unknown artist')}</span></span>
@@ -593,9 +607,10 @@
     }
     function cardHtml(t) {
         const ttl = esc(t.title);
-        return `<div class="mapp-card" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}">
+        return `<div class="mapp-card"${t.uri ? ' draggable="true"' : ''} data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}">
             <div class="mapp-card-art">${art(t.artwork, t.title, 'mapp-art--fill')}
                 ${t.when ? `<span class="mapp-card-badge">${ico('history')}<time datetime="${esc(t.when)}">${esc(ago(t.when))}</time></span>` : ''}
+                ${t.rank ? `<span class="mapp-card-badge mapp-card-rank" title="${esc(t.rankNote || '')}">#${t.rank}</span>` : ''}
                 <div class="mapp-card-hover">
                     <button type="button" class="mapp-card-play" data-act="playnow" aria-label="Play ${ttl} now" title="Play now">${ico('play')}</button>
                     <button type="button" class="mapp-card-add" data-act="add" aria-label="Add ${ttl} to queue" title="Add to queue">${ico('plus')}</button>
@@ -673,6 +688,11 @@
 
     function renderPlaylists() {
         const c = $('#mapp-playlists-count'); if (c) c.textContent = String(playlists.length);
+        const nav = $('#mapp-nav-playlists');
+        if (nav) {
+            nav.innerHTML = playlists.map((p) => `<a href="#playlist/${esc(p.id)}" class="mapp-nav-sub" data-drop-pl="${esc(p.id)}" title="${esc(p.name)}">${esc(p.name)}</a>`).join('');
+            nav.hidden = !playlists.length;
+        }
         const box = $('#mapp-playlists');
         if (!box) return;
         box.innerHTML = playlists.length
@@ -841,6 +861,24 @@
         once(`vibe:${query}`, null, () => playTrack({ query, label }, false));
     }
 
+    // Trending: this server's and Percy's most-picked tracks of the week, fetched after first paint.
+    // Hidden when both charts are empty (a new server, or nobody has queued anything yet).
+    async function loadTrending() {
+        const box = $('#mapp-trending-body'), sec = $('#mapp-trending');
+        if (!box || !hasGuild) return;
+        const r = await api(`${BASE}/trending`);
+        if (!r.ok) return;
+        const listeners = (n) => `${n} listener${n === 1 ? '' : 's'}`;
+        const shelf = (cap, icon, list) => (list.length ? `<div class="mapp-recs-group">
+                <p class="mapp-recs-cap">${ico(icon)}${cap}</p>
+                <div class="mapp-shelf">${list.map((t, i) => cardHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork, rank: i + 1, rankNote: listeners(t.listeners) })).join('')}</div>
+            </div>` : '');
+        const html = shelf('Popular in this server', 'users', r.data.server || []) + shelf('Trending on Percy', 'trend', r.data.global || []);
+        if (sec) sec.hidden = !html;
+        box.innerHTML = html;
+        applyRole(); syncHearts();
+    }
+
     // Recommendations: tracks by the user's top artists, fetched after first paint.
     async function loadRecs() {
         const box = $('#mapp-recs-body'), sec = $('#mapp-recs');
@@ -989,15 +1027,15 @@
     function clearOver() { $$('.is-over-top, .is-over-bottom', queueBox).forEach((r) => r.classList.remove('is-over-top', 'is-over-bottom')); }
     if (queueBox) {
         queueBox.addEventListener('dragstart', (e) => {
-            const li = e.target.closest('.mapp-qrow[draggable="true"]');
+            const li = e.target.closest('.mapp-qrow[data-reorder]');
             if (!li) return;
             dragFrom = +li.dataset.index;
             li.classList.add('is-dragging');
-            if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(dragFrom)); } catch (_) { /* old browsers */ } }
+            if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'copyMove'; try { e.dataTransfer.setData('text/plain', String(dragFrom)); } catch (_) { /* old browsers */ } }
         });
         queueBox.addEventListener('dragover', (e) => {
             if (dragFrom < 0) return;
-            const li = e.target.closest('.mapp-qrow[draggable="true"]');
+            const li = e.target.closest('.mapp-qrow[data-reorder]');
             if (!li) return;
             e.preventDefault();
             const r = li.getBoundingClientRect();
@@ -1006,7 +1044,7 @@
             li.classList.add(after ? 'is-over-bottom' : 'is-over-top');
         });
         queueBox.addEventListener('drop', (e) => {
-            const li = e.target.closest('.mapp-qrow[draggable="true"]');
+            const li = e.target.closest('.mapp-qrow[data-reorder]');
             if (dragFrom < 0 || !li) return;
             e.preventDefault();
             const target = +li.dataset.index;
@@ -1154,7 +1192,7 @@
 
     Object.assign(window.mapp, {
         fmt, art, grad, empty, skeleton, subHtml, authorHtml, artistHref, albumHref, playTrack, queueHint, blocked, np, go, route,
-        liked, likedMeta, playlists, refreshLibrary, renderPlaylists, renderLiked,
+        liked, likedMeta, playlists, refreshLibrary, renderPlaylists, renderLiked, likeTrack,
         once, trackOf, canDestroy, refresh: () => { applyRole(); syncHearts(); }, status: () => status,
     });
 
@@ -1167,5 +1205,6 @@
     requestAnimationFrame(frame);
     refreshLibrary();
     loadRecs();
+    loadTrending();
     if (hasGuild) soon(boot.status ? 5000 : 50);
 })();

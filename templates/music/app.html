@@ -9,7 +9,7 @@
 
 {% macro icon(name) %}<svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-{{ name }}"/></svg>{% endmacro %}
 
-{% macro hcard(t, badge) %}<div class="mapp-card" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}">
+{% macro hcard(t, badge) %}<div class="mapp-card" draggable="true" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}">
     <div class="mapp-card-art">
         {% call art(t.artwork, t.title, "mapp-art--fill") %}
         {% if badge %}<span class="mapp-card-badge">{% call icon("history") %}<time datetime="{{ t.played_at }}">{{ t.played_at }}</time></span>{% endif %}
@@ -117,8 +117,11 @@
         {% else %}
         <a href="#home" data-view-link="home" class="mapp-nav-link">{% call icon("home") %}<span>Servers</span></a>
         {% endif %}
-        <a href="#liked" data-view-link="liked" class="mapp-nav-link">{% call icon("heart") %}<span>Liked Songs</span><span class="mapp-nav-count" id="mapp-liked-count">{{ library.liked.len() }}</span></a>
+        <a href="#liked" data-view-link="liked" class="mapp-nav-link" data-drop="liked">{% call icon("heart") %}<span>Liked Songs</span><span class="mapp-nav-count" id="mapp-liked-count">{{ library.liked.len() }}</span></a>
         <a href="#playlists" data-view-link="playlists" class="mapp-nav-link">{% call icon("playlist") %}<span>Playlists</span><span class="mapp-nav-count" id="mapp-playlists-count">{{ library.playlists.len() }}</span></a>
+        <div class="mapp-nav-pls" id="mapp-nav-playlists"{% if library.playlists.is_empty() %} hidden{% endif %}>
+            {% for p in library.playlists %}<a href="#playlist/{{ p.id }}" class="mapp-nav-sub" data-drop-pl="{{ p.id }}" title="{{ p.name }}">{{ p.name }}</a>{% endfor %}
+        </div>
         {% if is_admin %}
         <p class="mapp-nav-label">Manage</p>
         <a href="#session" data-view-link="session" class="mapp-nav-link mapp-nav-mgr">{% call icon("settings") %}<span>Session settings</span><span class="mapp-chip">DJ</span></a>
@@ -167,6 +170,7 @@
                     {% when None %}<span class="mapp-guild-art g{{ self.grad(g.name) }}">{{ self.initial(g.name) }}</span>
                     {% endmatch %}
                     <span class="mapp-guild-name">{{ g.name }}</span>
+                    {% if g.playing %}<span class="mapp-guild-live"><span class="mapp-dot is-live" aria-hidden="true"></span>Playing now</span>{% endif %}
                 </a>
                 {% endfor %}
             </div>
@@ -217,6 +221,11 @@
                 </div>
             </section>
 
+            <section class="mapp-sec" id="mapp-trending" aria-labelledby="mapp-h-trending" hidden>
+                <div class="mapp-sec-head"><div><h2 id="mapp-h-trending">Trending this week</h2><p>What people picked most in the last 7 days</p></div></div>
+                <div id="mapp-trending-body"></div>
+            </section>
+
             {% if library.top_tracks.is_empty() %}
             <section class="mapp-sec" aria-labelledby="mapp-h-suggest">
                 <div class="mapp-sec-head"><div><h2 id="mapp-h-suggest">Suggestions</h2><p>Popular in this server. Play a few songs and Percy learns your taste.</p></div></div>
@@ -246,7 +255,7 @@
                 <div class="mapp-sec-head"><div><h2 id="mapp-h-top">Your top tracks</h2><p>The songs you play most with Percy</p></div></div>
                 <ol class="mapp-rows" id="mapp-top">
                     {% for t in library.top_tracks.iter().take(8) %}
-                    <li class="mapp-row" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}">
+                    <li class="mapp-row" draggable="true" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}">
                         <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.title }} now" title="Play now">{% call icon("play") %}</button></span>
                         {% call art(t.artwork, t.title, "mapp-art--sm") %}
                         <span class="mapp-row-text"><span class="mapp-row-title">{{ t.title }}</span><span class="mapp-row-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</span></span>
@@ -281,7 +290,7 @@
                 {% else %}
                 <ol class="mapp-rows">
                     {% for t in history %}
-                    <li class="mapp-row" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}">
+                    <li class="mapp-row" draggable="true" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author.as_deref().unwrap_or("") }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}">
                         <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.title }} now" title="Play now">{% call icon("play") %}</button></span>
                         {% call art(t.artwork, t.title, "mapp-art--sm") %}
                         <span class="mapp-row-text"><span class="mapp-row-title">{{ t.title }}</span><span class="mapp-row-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</span></span>
@@ -341,7 +350,7 @@
                 {% else %}
                 <ol class="mapp-rows">
                     {% for t in library.liked %}
-                    <li class="mapp-row" data-uri="{{ t.url }}" data-title="{{ t.name }}" data-author="{{ t.author.as_deref().unwrap_or("") }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}">
+                    <li class="mapp-row" draggable="true" data-uri="{{ t.url }}" data-title="{{ t.name }}" data-author="{{ t.author.as_deref().unwrap_or("") }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}">
                         <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.name }} now" title="Play now">{% call icon("play") %}</button></span>
                         {% if t.artwork.is_some() %}{% call art(t.artwork, t.name, "mapp-art--sm") %}{% else %}<span class="mapp-art mapp-art--sm g{{ self.grad(t.name) }}" aria-hidden="true">{% call icon("heart-fill") %}</span>{% endif %}
                         <span class="mapp-row-text"><span class="mapp-row-title">{{ t.name }}</span><span class="mapp-row-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</span></span>
@@ -462,7 +471,7 @@
             <ol class="mapp-qlist">
                 {% for t in m.queue.iter().take(50) %}
                 {% if loop.first && !t.autoplay %}<li class="mapp-qlabel">Next up</li>{% endif %}
-                <li class="mapp-qrow{% if t.autoplay %} is-auto{% endif %}" data-index="{{ loop.index0 }}" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author }}">
+                <li class="mapp-qrow{% if t.autoplay %} is-auto{% endif %}" data-index="{{ loop.index0 }}" data-uri="{{ t.uri.as_deref().unwrap_or("") }}" data-title="{{ t.title }}" data-author="{{ t.author }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}" draggable="true">
                     {% call art(t.artwork, t.title, "mapp-art--xs") %}
                     <span class="mapp-row-text"><span class="mapp-row-title">{{ t.title }}</span><span class="mapp-row-sub">{{ t.author }}</span></span>
                     {% if t.autoplay %}<span class="mapp-tag">Autoplay</span>{% endif %}
