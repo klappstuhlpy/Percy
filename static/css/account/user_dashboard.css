@@ -122,26 +122,13 @@
 }
 
 /* Actions row */
-.setting-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.25rem;
-}
 
-.setting-status {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    transition: color 0.2s;
-}
 
-.setting-status.is-success {
-    color: var(--success, #4ade80);
-}
 
-.setting-status.is-error {
-    color: var(--error, #f87171);
-}
+
+
+
+
 
 /* ── Roles ───────────────────────────────────────────────────────────── */
 .user-dash-roles {

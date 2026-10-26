@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The whole dashboard and the public pages share one new look: an app shell with a top bar and sidebar, a server picker as a card grid, restyled settings, data, account and catalogue pages, and toasts that distinguish success, info, warning and error. The light theme is supported everywhere.
+- Public leaderboards keep their table layout on phones.
+
+### Fixed
+- Member detail stat tiles no longer leave extra space below them, and long top-role names wrap instead of being cut off.
+- The trailer button on a watch title is a card again instead of an oversized pill.
+- The Notifications settings no longer draw a stray frame around the form.
+- The Connect Discord page is styled like the other site pages.
+
 ### Added
 - A music app: player bar, queue, search, play history, lyrics and your liked songs and playlists, under Music in the sidebar. It adapts to phones and narrow windows.
 

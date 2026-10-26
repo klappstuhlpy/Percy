@@ -210,35 +210,15 @@
 
 /* ── Footer ───────────────────────────────────────────────────── */
 
-.ph-footer {
-    padding: 2rem 0;
-    border-top: 1px solid var(--box-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
 
-.ph-footer-links {
-    display: flex;
-    gap: 1.25rem;
-}
 
-.ph-footer-links a {
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    text-decoration: none;
-}
 
-.ph-footer-links a:hover {
-    color: var(--branding);
-}
 
-.ph-footer-copy {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
+
+
+
+
+
 
 /* ── Responsive ───────────────────────────────────────────────── */
 
@@ -251,8 +231,5 @@
         grid-template-columns: 1fr;
     }
 
-    .ph-footer {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+    
 }

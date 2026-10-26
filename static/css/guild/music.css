@@ -2,54 +2,32 @@
    The `spin` and `pulse` keyframes live in dashboard.css (shared). */
 
 /* ── Equalizer ──────────────────────────────────────────────────────── */
-.eq-container { position: relative; width: 100%; max-width: 900px; }
-.eq-canvas { width: 100%; height: 320px; border: 1px solid var(--box-border); border-radius: 8px; background: var(--box); cursor: pointer; touch-action: none; }
-.eq-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-.eq-presets { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.eq-status { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted, #888); transition: color 0.2s; }
-.eq-status.applying { color: var(--branding, #d97757); }
-.eq-status.applied { color: #4caf50; }
-.eq-status .eq-spinner { width: 12px; height: 12px; border: 2px solid transparent; border-top-color: var(--branding, #d97757); border-radius: 50%; animation: spin 0.6s linear infinite; display: none; }
-.eq-status.applying .eq-spinner { display: inline-block; }
-.eq-preset-label { font-size: 0.82rem; color: var(--text-muted, #888); margin-left: auto; }
-.eq-preset-label strong { color: var(--foreground, #eee); }
+
+
+
+
+
+
+
+
+
+
+
 
 /* ── Filters ────────────────────────────────────────────────────────── */
-.filter-toggles { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
-.filter-toggle {
-    padding: 0.45rem 0.95rem;
-    border-radius: 999px;
-    border: 1px solid var(--box-border);
-    background: var(--box-shade);
-    color: var(--text-muted, #888);
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 500;
-    transition: color 0.15s, background 0.15s, border-color 0.15s;
-}
-.filter-toggle:hover { border-color: var(--branding, #d97757); color: var(--foreground); }
-.filter-toggle.active {
-    background: var(--branding, #d97757);
-    color: #fff;
-    border-color: var(--branding, #d97757);
-}
+
+
+
+
 /* Lowpass: pill wrapper keeping the toggle + its numeric value together. */
-.filter-lowpass {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem 0.35rem 0.25rem 0;
-    border: 1px solid var(--box-border);
-    border-radius: 999px;
-    background: var(--box-shade);
-}
-.filter-lowpass .filter-toggle { border: none; background: transparent; }
-.filter-lowpass .filter-toggle.active { background: var(--branding, #d97757); }
-.lowpass-input { width: 68px; margin: 0; padding: 0.3rem 0.5rem; text-align: center; }
+
+
+
+
 
 /* ── Now-playing pill / 24-7 listener status ────────────────────────── */
 .now-playing { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: var(--box); border: 1px solid var(--box-border); }
-.now-playing .np-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--branding, #d97757); animation: pulse 1.5s infinite; }
+
 
 .listener-status {
     display: flex;

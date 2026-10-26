@@ -57,10 +57,7 @@
     opacity: 0.7;
 }
 
-.percy-nav-glyph {
-    color: var(--brand, #d97757);
-    font-size: 1.1rem;
-}
+
 
 .percy-nav-links {
     display: flex;

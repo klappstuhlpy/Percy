@@ -26,16 +26,9 @@
     border-color: var(--branding);
     color: var(--foreground);
 }
-.cmdk-trigger-glyph { font-size: 1rem; line-height: 1; }
-.cmdk-trigger-text { flex: 1; text-align: left; }
-.cmdk-trigger-kbd {
-    font-size: 0.7rem;
-    padding: 0.1rem 0.35rem;
-    border: 1px solid var(--box-border);
-    border-radius: 0.35rem;
-    background: var(--box);
-    color: var(--text-muted);
-}
+
+
+
 
 /* -- Overlay --------------------------------------------------------------- */
 .cmdk-overlay {

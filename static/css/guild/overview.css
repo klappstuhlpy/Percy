@@ -78,13 +78,8 @@
 }
 
 /* ── Music controls ──────────────────────────────────────────────── */
-.overview-music-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.9rem;
-}
-.overview-music-hint { margin: 0.8rem 0 0; color: var(--text-muted); font-size: 0.82rem; }
+
+
 
 /* ── Leaderboard ─────────────────────────────────────────────────── */
 .overview-subheading { margin: 1.1rem 0 0.4rem; font-size: 0.95rem; color: var(--text-muted); }

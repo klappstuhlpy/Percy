@@ -35,24 +35,8 @@ h1, h2, h3, h4,
 h1 { font-weight: 800; }
 
 /* -- Icon tile (coloured square holding an sprite icon) ------------------ */
-.icon-tile {
-    --tile: var(--branding);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
-    color: var(--tile);
-    background: color-mix(in srgb, var(--tile) 16%, transparent);
-}
-.icon-tile svg {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-}
+
+
 
 /* -- Cards ---------------------------------------------------------------
    The surface itself is components.css's .card; this layer only adds the optional accent
@@ -62,25 +46,12 @@ h1 { font-weight: 800; }
 .card--accent-green  { --card-accent: var(--accent-green); }
 .card--accent-pink   { --card-accent: var(--accent-pink); }
 .card--accent-brand  { --card-accent: var(--brand, var(--branding)); }
-[class*="card--accent-"] .icon-tile { --tile: var(--card-accent); }
+
 
 /* -- Buttons & chips ----------------------------------------------------- */
-.btn-pill,
 .button {
     border-radius: var(--radius-pill);
 }
-.btn-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 1.1rem;
-    font: inherit;
-    font-weight: 600;
-    color: var(--foreground);
-    background: var(--surface-raised);
-    border: 1px solid var(--box-border);
-    cursor: pointer;
-    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-}
-.btn-pill:hover { transform: translateY(-1px); border-color: var(--branding); }
-.btn-pill:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+
+

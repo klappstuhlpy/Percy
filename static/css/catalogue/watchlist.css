@@ -524,13 +524,7 @@
 
 /* ── Attribution (required wherever TMDB data is shown) ──────────── */
 
-.wl-attribution {
-    margin-top: 3.5rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--box-border);
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
+
 
 /* ── Responsive / motion ─────────────────────────────────────────── */
 
