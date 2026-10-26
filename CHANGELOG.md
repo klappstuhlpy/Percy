@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-10-26
+
+### Added
+
+- `discover history`: what this server played lately, with who queued it, ready to queue again.
+- `discover foryou`: songs by the artists you play most.
+- `discover artist <name>` and `discover album <link>`: an artist's top tracks or an album's tracks, with Play all.
+- `queue move` and `queue remove`, plus a remove menu and a move button on the queue card.
+- `playlist rename` and `playlist cover`.
+
+### Changed
+
+- `queue` is now a command group: `/queue show` shows the queue, and `/jump-to` became `/queue jump`.
+- `playlist show` shows each playlist's cover and every song's artist.
+
+### Security
+
+- Playlist commands that take a playlist id only act on your own playlists.
+
 ## [2.17.0] - 2026-10-26
 
 ### Added
