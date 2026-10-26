@@ -78,27 +78,8 @@
     }
 
     // ── Toasts ───────────────────────────────────────────────────────────
-    const toastBox = $('#mapp-toasts');
-    let lastToast = { msg: '', at: 0 };
-    function toast(kind, msg) {
-        if (!msg || !toastBox) return;
-        if (msg === lastToast.msg && Date.now() - lastToast.at < 1500) return;
-        lastToast = { msg, at: Date.now() };
-        const el = document.createElement('div');
-        el.className = `mapp-toast is-${kind}`;
-        el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-        el.innerHTML = `${ico(kind === 'success' ? 'check' : kind === 'error' ? 'alert' : 'info')}<span class="mapp-toast-msg"></span><button type="button" class="mapp-ibtn" aria-label="Dismiss notification">${ico('x')}</button>`;
-        $('.mapp-toast-msg', el).textContent = msg;
-        let timer;
-        const close = () => { clearTimeout(timer); el.classList.add('is-leaving'); setTimeout(() => el.remove(), 180); };
-        const arm = () => { timer = setTimeout(close, kind === 'error' ? 7000 : 4000); };
-        $('button', el).addEventListener('click', close);
-        el.addEventListener('mouseenter', () => clearTimeout(timer));
-        el.addEventListener('mouseleave', arm);
-        toastBox.appendChild(el);
-        while (toastBox.children.length > 4) toastBox.firstElementChild.remove();
-        arm();
-    }
+    // The shared stack (static/js/common/toast.js); the player lifts it above the bottom bar in CSS.
+    const toast = (kind, msg) => window.PercyToast && window.PercyToast.show(kind, msg);
 
     // ── API ──────────────────────────────────────────────────────────────
     function errText(d, status) {

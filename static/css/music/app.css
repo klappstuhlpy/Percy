@@ -1,47 +1,7 @@
 /* Music app shell: tokens, the full-viewport grid, top bar, navigation, rail container and the
    responsive collapse. Bottom bar lives in player.css, content in views.css. */
 
-/* ════ Percy app tokens ═══════════════════════════════════════════════════
-   The palette the dashboard app-shell restyle lifts into static/css/common/tokens.css
-   (see docs/superpowers/plans/2026-10-25-dashboard-app-shell-restyle.md, "Design Tokens").
-   Whitish-neutral: near-black canvas, cool off-white text, soft grey surfaces, one violet. */
-:root {
-    --app-font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --app-bg: #0a0a0b;
-    --app-glow: rgba(235, 238, 245, 0.075);
-    --surface-1: #121214;
-    --surface-2: #1a1a1d;
-    --surface-3: #232327;
-    --line: #26262a;
-    --text: #f0f1f3;
-    --text-muted: #a1a1a8;
-    --text-faint: #7a7a82;
-    --accent: #8351ed;
-    --accent-hover: #9469f2;
-    --accent-contrast: #ffffff;
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-    --radius-pill: 999px;
-    --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.45);
-    --dur-fast: 120ms;
-    --dur-base: 180ms;
-}
-[data-theme="light"] {
-    --app-bg: #f5f5f3;
-    --app-glow: rgba(20, 20, 30, 0.05);
-    --surface-1: #ffffff;
-    --surface-2: #f0f0ee;
-    --surface-3: #e6e6e3;
-    --line: #e1e1dd;
-    --text: #141416;
-    --text-muted: #52525a;
-    --text-faint: #71717a;
-    --accent: #6e41cc;
-    --accent-hover: #5d34b3;
-    --accent-contrast: #ffffff;
-    --shadow-pop: 0 16px 40px rgba(20, 20, 30, 0.14);
-}
+/* Palette, radii, motion: static/css/common/tokens.css (linked before this file). */
 
 .mapp-page {
     --m-bg: var(--app-bg);
@@ -73,6 +33,7 @@
     --m-nav-w: 232px;
     --m-rail-w: 320px;
     --m-bar-h: 88px;
+    --toast-bottom: calc(var(--m-bar-h) + var(--m-s2));
     --m-ease: var(--dur-base) cubic-bezier(0.2, 0.7, 0.2, 1);
     --font-display: var(--app-font);
     margin: 0;

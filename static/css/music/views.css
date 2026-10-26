@@ -257,30 +257,6 @@
 .mapp-lyrics-plain { white-space: pre-wrap; font-size: 18px; line-height: 1.8; font-weight: 600; color: var(--m-muted); }
 .mapp-lyrics-src { margin-top: var(--m-s5); font-size: 12px; color: var(--m-faint); }
 
-/* ── Toasts ───────────────────────────────────────────────────────────── */
-.mapp-toasts {
-    position: fixed; z-index: 60; right: var(--m-s4); bottom: calc(var(--m-bar-h) + var(--m-s2));
-    display: flex; flex-direction: column; align-items: flex-end; gap: var(--m-s2);
-    width: min(360px, calc(100vw - 2 * var(--m-s4))); pointer-events: none;
-}
-.mapp-toast {
-    display: flex; align-items: center; gap: var(--m-s3); width: 100%;
-    padding: 10px var(--m-s2) 10px var(--m-s3);
-    border-radius: var(--m-r); background: var(--m-raised); border: 1px solid var(--m-line);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
-    pointer-events: auto; animation: mapp-toast-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.mapp-toast > svg { flex: none; width: 24px; height: 24px; padding: 4px; border-radius: 50%; color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); }
-.mapp-toast-msg { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.mapp-toast .mapp-ibtn { width: 28px; height: 28px; }
-.mapp-toast .mapp-ibtn svg { width: 14px; height: 14px; }
-.mapp-toast.is-success { --tc: var(--success-text); }
-.mapp-toast.is-info { --tc: var(--info-text); }
-.mapp-toast.is-error { --tc: var(--error-text); }
-.mapp-toast.is-leaving { animation: mapp-toast-out 180ms ease-in forwards; }
-@keyframes mapp-toast-in { from { opacity: 0; transform: translateY(8px); } }
-@keyframes mapp-toast-out { to { opacity: 0; transform: translateX(12px); } }
-
 /* ── Manager views: the admin forms as panels ─────────────────────────── */
 .mapp-view--admin .config-section {
     margin: 0 0 var(--m-s2); padding: var(--m-s5);
@@ -311,7 +287,7 @@
     .mapp-row { grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--m-s3); }
     .mapp-row-idx, .mapp-row-dur { display: none; }
     .mapp-row-acts { opacity: 1; }
-    .mapp-toasts { right: 6px; left: 6px; width: auto; bottom: calc(var(--m-bar-h) + var(--m-tab-h, 60px) + 12px); }
+    .mapp-page { --toast-bottom: calc(var(--m-bar-h) + var(--m-tab-h, 60px) + 12px); }
 }
 
 /* Manager forms come from the dashboard stylesheet; bring their type and colours in line. */

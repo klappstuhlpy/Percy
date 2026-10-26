@@ -319,7 +319,7 @@
     document.addEventListener('click', (e) => {
         const o = e.target.closest('[data-sound-open]');
         if (o) { open(o.dataset.soundOpen); return; }
-        if (!panel.hidden && !panel.contains(e.target) && !launcher.contains(e.target) && !e.target.closest('.mapp-toast')) close(false);
+        if (!panel.hidden && !panel.contains(e.target) && !launcher.contains(e.target) && !e.target.closest('.toast-card')) close(false);
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(true); });
     document.addEventListener('mapp:status', () => {
