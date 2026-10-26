@@ -14,7 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use percy_client::{MusicInfo, MusicViewer, PercyClient, PercyError, UserMusicLibrary};
+use percy_client::{MusicInfo, MusicViewer, PercyClient, PercyError, PlaylistPatch, SaveTrack, UserMusicLibrary};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
@@ -80,10 +80,10 @@ impl TtlCache {
     }
 }
 
-/// Searches are shared across users (user 0), 2 minutes.
-static SEARCH_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(120, 512));
-/// Recommendations are per user and guild, 10 minutes.
-static RECS_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(600, 512));
+/// Searches are shared across users (user 0), 30 minutes; Percy keeps its own hour-long copy.
+static SEARCH_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(1800, 1024));
+/// Recommendations are per user and guild, an hour (a like already drops the user's entries).
+static RECS_CACHE: LazyLock<TtlCache> = LazyLock::new(|| TtlCache::new(3600, 512));
 
 /// How many guild history rows the first frame carries.
 const HISTORY_FIRST_FRAME: u32 = 20;
@@ -574,11 +574,29 @@ pub async fn account_music(State(app): State<AppState>, session: Session) -> Res
     }
 }
 
+/// A track as the browser knows it when saving: artist and cover ride along so the saved row
+/// can show them later (the like/unlike and add/remove calls share this shape).
 #[derive(Deserialize)]
 pub struct LikeBody {
     #[serde(default)]
     name: String,
     url: String,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    artwork: Option<String>,
+}
+
+impl LikeBody {
+    fn save_track(self) -> SaveTrack {
+        let keep = |v: Option<String>| v.filter(|s| !s.trim().is_empty());
+        SaveTrack {
+            name: self.name,
+            url: self.url,
+            author: keep(self.author),
+            artwork: keep(self.artwork),
+        }
+    }
 }
 
 /// `POST /account/music/liked`
@@ -587,7 +605,7 @@ pub async fn account_music_like(State(app): State<AppState>, session: Session, J
         Ok(x) => x,
         Err(r) => return r,
     };
-    match percy.like_track(uid, &b.name, &b.url).await {
+    match percy.like_track(uid, &b.save_track()).await {
         Ok(()) => {
             RECS_CACHE.forget_user(uid);
             Json(json!({"ok": true})).into_response()
@@ -626,6 +644,111 @@ pub async fn account_music_playlist(
     };
     match percy.get_user_playlist(uid, &id.to_string()).await {
         Ok(p) => Json(json!({"ok": true, "playlist": p})).into_response(),
+        Err(e) => percy_fail(&e),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PlaylistNameBody {
+    name: String,
+}
+
+/// `POST /account/music/playlists` — create an empty playlist.
+pub async fn account_music_playlist_create(
+    State(app): State<AppState>,
+    session: Session,
+    Json(b): Json<PlaylistNameBody>,
+) -> Response {
+    let (percy, uid) = match account_gate(&app, &session).await {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+    match percy.create_user_playlist(uid, &b.name).await {
+        Ok(p) => Json(json!({"ok": true, "playlist": p})).into_response(),
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// Playlist ids are numeric; anything else never reaches Percy.
+fn playlist_id(raw: &str) -> Option<String> {
+    raw.parse::<u64>().ok().map(|id| id.to_string())
+}
+
+/// `POST /account/music/playlists/:playlist_id/update` — `{name?, thumbnail?}`; `thumbnail: ""` clears it.
+pub async fn account_music_playlist_update(
+    State(app): State<AppState>,
+    session: Session,
+    Path(raw): Path<String>,
+    Json(patch): Json<PlaylistPatch>,
+) -> Response {
+    let (percy, uid) = match account_gate(&app, &session).await {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+    let Some(id) = playlist_id(&raw) else {
+        return fail(StatusCode::NOT_FOUND, "Not found");
+    };
+    match percy.update_user_playlist(uid, &id, &patch).await {
+        Ok(p) => Json(json!({"ok": true, "playlist": p})).into_response(),
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// `POST /account/music/playlists/:playlist_id/delete`
+pub async fn account_music_playlist_delete(
+    State(app): State<AppState>,
+    session: Session,
+    Path(raw): Path<String>,
+) -> Response {
+    let (percy, uid) = match account_gate(&app, &session).await {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+    let Some(id) = playlist_id(&raw) else {
+        return fail(StatusCode::NOT_FOUND, "Not found");
+    };
+    match percy.delete_user_playlist(uid, &id).await {
+        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// `POST /account/music/playlists/:playlist_id/tracks` — add a track (already there = no-op).
+pub async fn account_music_playlist_add(
+    State(app): State<AppState>,
+    session: Session,
+    Path(raw): Path<String>,
+    Json(b): Json<LikeBody>,
+) -> Response {
+    let (percy, uid) = match account_gate(&app, &session).await {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+    let Some(id) = playlist_id(&raw) else {
+        return fail(StatusCode::NOT_FOUND, "Not found");
+    };
+    match percy.add_user_playlist_track(uid, &id, &b.save_track()).await {
+        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// `POST /account/music/playlists/:playlist_id/tracks/remove` — `{url}`.
+pub async fn account_music_playlist_remove(
+    State(app): State<AppState>,
+    session: Session,
+    Path(raw): Path<String>,
+    Json(b): Json<LikeBody>,
+) -> Response {
+    let (percy, uid) = match account_gate(&app, &session).await {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+    let Some(id) = playlist_id(&raw) else {
+        return fail(StatusCode::NOT_FOUND, "Not found");
+    };
+    match percy.remove_user_playlist_track(uid, &id, &b.url).await {
+        Ok(()) => Json(json!({"ok": true})).into_response(),
         Err(e) => percy_fail(&e),
     }
 }
@@ -1141,10 +1264,12 @@ mod render_tests {
                 PlaylistTrack {
                     name: "Glass Harbour".into(),
                     url: "https://example.com/track/1".into(),
+                    ..Default::default()
                 },
                 PlaylistTrack {
                     name: "Copper Skies".into(),
                     url: "https://example.com/top/0".into(),
+                    ..Default::default()
                 },
             ],
             playlists: vec![
@@ -1152,11 +1277,13 @@ mod render_tests {
                     id: "11".into(),
                     name: "Late night drive".into(),
                     track_count: 24,
+                    ..Default::default()
                 },
                 PlaylistSummary {
                     id: "12".into(),
                     name: "Focus mode".into(),
                     track_count: 9,
+                    ..Default::default()
                 },
             ],
             ..Default::default()

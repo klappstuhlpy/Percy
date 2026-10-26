@@ -465,3 +465,15 @@
     .mapp-hist { order: -1; }
 }
 .mapp-dsec-head .mapp-link { background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; }
+
+/* Playlists: the header's "New playlist" sits at the far end; the ••• menu scrolls when a user
+   has many playlists to pick from. */
+.mapp-head-act { margin-left: auto; flex: none; }
+.mapp-menu { max-width: min(320px, calc(100vw - 16px)); max-height: min(60vh, 360px); overflow-y: auto; overscroll-behavior: contain; }
+.mapp-menu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) {
+    .mapp-head { flex-wrap: wrap; }
+    .mapp-head-act { margin-left: 0; width: 100%; justify-content: center; }
+    /* Phones: the ••• menu already offers "Add to queue", so the row keeps two buttons. */
+    .mapp-row-acts [data-act="add"]:has(~ [data-d="more"]) { display: none; }
+}

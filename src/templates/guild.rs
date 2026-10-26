@@ -291,6 +291,10 @@ pub(crate) struct MusicAppTemplate {
 }
 
 impl MusicAppTemplate {
+    /// "Jump back in": the newest play of each track, so a song on repeat shows once.
+    pub(crate) fn recents(&self) -> Vec<&MusicHistoryItem> {
+        recent_unique(&self.history, 12)
+    }
     pub(crate) fn is_manager(&self) -> bool {
         self.viewer.as_ref().is_some_and(|v| v.is_manager)
     }
@@ -892,5 +896,49 @@ mod tests {
         assert!(html.contains("Download backup"));
         assert!(html.contains("gaming-starter"));
         assert!(html.contains("Template gallery"));
+    }
+}
+
+/// The first (newest) play of each track: same link, or same title and artist when a play has
+/// no link. History arrives newest first.
+pub(crate) fn recent_unique(history: &[MusicHistoryItem], limit: usize) -> Vec<&MusicHistoryItem> {
+    let mut seen = std::collections::HashSet::new();
+    history
+        .iter()
+        .filter(|t| {
+            let key = match t.uri.as_deref().filter(|u| !u.is_empty()) {
+                Some(uri) => (uri.to_string(), String::new()),
+                None => (t.title.to_lowercase(), t.author.as_deref().unwrap_or("").to_lowercase()),
+            };
+            seen.insert(key)
+        })
+        .take(limit)
+        .collect()
+}
+
+#[cfg(test)]
+mod recent_tests {
+    use super::*;
+
+    fn play(title: &str, uri: Option<&str>) -> MusicHistoryItem {
+        MusicHistoryItem {
+            title: title.into(),
+            uri: uri.map(Into::into),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn recent_unique_keeps_the_newest_play_of_each_track() {
+        let h = vec![
+            play("A", Some("u1")),
+            play("B", Some("u2")),
+            play("A", Some("u1")),
+            play("C", None),
+            play("c", None),
+        ];
+        let titles: Vec<_> = recent_unique(&h, 12).iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, ["A", "B", "C"]);
+        assert_eq!(recent_unique(&h, 2).len(), 2);
     }
 }

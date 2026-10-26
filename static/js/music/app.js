@@ -118,6 +118,8 @@
     let seeking = false, seekDraft = 0;
     let volTouched = 0, lastVol = 70;
     const liked = new Map($$('#mapp-liked .mapp-row').map((r) => [r.dataset.uri, r.dataset.title]));
+    const likedMeta = new Map($$('#mapp-liked .mapp-row').map((r) => [r.dataset.uri, { artwork: r.dataset.artwork || '', author: r.dataset.author || '' }]));
+    const playlists = []; // [{id, name, track_count, thumbnail, cover}] from /account/music
     const busy = new Set();
     const np = () => (status && status.now_playing) || null;
     const hasGuild = !!GID;
@@ -516,9 +518,9 @@
 
     // ── Tracks: play, queue, like ────────────────────────────────────────
     function trackOf(el) {
-        if (el.hasAttribute('data-np')) { const t = np() || {}; return { uri: t.uri || '', title: t.title || '', author: t.author || '', artistUrl: t.artist_url || '', albumUrl: (t.album && t.album.url) || '', albumName: (t.album && t.album.name) || '' }; }
+        if (el.hasAttribute('data-np')) { const t = np() || {}; return { uri: t.uri || '', title: t.title || '', author: t.author || '', artwork: t.artwork || '', artistUrl: t.artist_url || '', albumUrl: (t.album && t.album.url) || '', albumName: (t.album && t.album.name) || '' }; }
         const row = el.closest('[data-uri]');
-        return row ? { uri: row.dataset.uri || '', title: row.dataset.title || '', author: row.dataset.author || '', artistUrl: row.dataset.artistUrl || '', albumUrl: row.dataset.albumUrl || '', albumName: row.dataset.albumName || '' } : { uri: '', title: '', author: '' };
+        return row ? { uri: row.dataset.uri || '', title: row.dataset.title || '', author: row.dataset.author || '', artwork: row.dataset.artwork || '', artistUrl: row.dataset.artistUrl || '', albumUrl: row.dataset.albumUrl || '', albumName: row.dataset.albumName || '' } : { uri: '', title: '', author: '' };
     }
 
     async function playTrack(t, now) {
@@ -550,10 +552,10 @@
         await once(`like:${t.uri}`, null, async () => {
             const on = liked.has(t.uri);
             const name = on ? liked.get(t.uri) || t.title : t.title;
-            if (on) liked.delete(t.uri); else liked.set(t.uri, name);
+            if (on) liked.delete(t.uri); else { liked.set(t.uri, name); likedMeta.set(t.uri, { artwork: t.artwork || '', author: t.author || '' }); }
             syncHearts();
             $$('.mapp-like').forEach((b) => { if (trackOf(b).uri === t.uri) { b.classList.remove('is-bump'); void b.offsetWidth; b.classList.add('is-bump'); } });
-            const r = await api(on ? '/account/music/liked/remove' : '/account/music/liked', { method: 'POST', body: on ? { url: t.uri } : { name, url: t.uri } });
+            const r = await api(on ? '/account/music/liked/remove' : '/account/music/liked', { method: 'POST', body: on ? { url: t.uri } : { name, url: t.uri, author: t.author || null, artwork: t.artwork || null } });
             if (!r.ok) {
                 if (on) liked.set(t.uri, name); else liked.delete(t.uri);
                 syncHearts();
@@ -576,13 +578,14 @@
     /* t: {uri, title, author, artwork, ms, meta, stream, likedIcon} */
     function rowHtml(t, i) {
         const ttl = esc(t.title);
-        return `<li class="mapp-row" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}"${t.artistUrl ? ` data-artist-url="${esc(t.artistUrl)}"` : ''}${t.album && t.album.url ? ` data-album-url="${esc(t.album.url)}" data-album-name="${esc(t.album.name)}"` : ''}>
+        return `<li class="mapp-row" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}"${t.artistUrl ? ` data-artist-url="${esc(t.artistUrl)}"` : ''}${t.album && t.album.url ? ` data-album-url="${esc(t.album.url)}" data-album-name="${esc(t.album.name)}"` : ''}>
             <span class="mapp-row-idx"><span>${i + 1}</span><button type="button" data-act="playnow" aria-label="Play ${ttl} now" title="Play now">${ico('play')}</button></span>
             ${t.likedIcon ? `<span class="mapp-art mapp-art--sm g${grad(t.title)}" aria-hidden="true">${ico('heart-fill')}</span>` : art(t.artwork, t.title, 'mapp-art--sm')}
             <span class="mapp-row-text"><span class="mapp-row-title">${ttl}</span><span class="mapp-row-sub">${t.author ? subHtml(t, t.withAlbum) : esc(t.sub || 'Unknown artist')}</span></span>
             <span class="mapp-row-meta">${t.meta || ''}</span>
             <span class="mapp-row-acts">
                 <button type="button" class="mapp-ibtn" data-act="add" aria-label="Add ${ttl} to queue" title="Add to queue">${ico('plus')}</button>
+                ${t.uri ? `<button type="button" class="mapp-ibtn" data-d="more" aria-haspopup="menu" aria-label="More options for ${ttl}" title="More">${ico('more')}</button>` : ''}
                 ${likeBtn(t)}
             </span>
             <span class="mapp-row-dur">${t.stream ? 'LIVE' : t.ms ? fmt(t.ms) : ''}</span>
@@ -590,7 +593,7 @@
     }
     function cardHtml(t) {
         const ttl = esc(t.title);
-        return `<div class="mapp-card" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}">
+        return `<div class="mapp-card" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}" data-artwork="${esc(t.artwork || '')}">
             <div class="mapp-card-art">${art(t.artwork, t.title, 'mapp-art--fill')}
                 ${t.when ? `<span class="mapp-card-badge">${ico('history')}<time datetime="${esc(t.when)}">${esc(ago(t.when))}</time></span>` : ''}
                 <div class="mapp-card-hover">
@@ -603,6 +606,16 @@
     }
     const fromHistory = (h) => ({ uri: h.uri, title: h.title, author: h.author, artwork: h.artwork, ms: h.length_ms, when: h.played_at, meta: `<time datetime="${esc(h.played_at)}">${esc(ago(h.played_at))}</time>` });
 
+    // Newest play of each track (history is newest first): a song on repeat shows once.
+    function uniquePlays(items) {
+        const seen = new Set();
+        return items.filter((h) => {
+            const k = h.uri || JSON.stringify([(h.title || '').toLowerCase(), (h.author || '').toLowerCase()]);
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+    }
     let historyLoaded = false;
     async function refreshHistory() {
         if (!hasGuild) return;
@@ -624,7 +637,7 @@
         const rec = $('#mapp-recents');
         if (rec) {
             rec.innerHTML = items.length
-                ? items.slice(0, 10).map((h) => cardHtml(fromHistory(h))).join('')
+                ? uniquePlays(items).slice(0, 12).map((h) => cardHtml(fromHistory(h))).join('')
                 : empty('history', 'Nothing played here yet', 'Songs played in this server will show up here.');
         }
         applyRole(); syncHearts();
@@ -633,7 +646,10 @@
     function renderLiked() {
         const box = $('#mapp-liked');
         if (!box) return;
-        const items = Array.from(liked, ([url, name]) => ({ uri: url, title: name || url, sub: 'Liked song', likedIcon: true }));
+        const items = Array.from(liked, ([url, name]) => {
+            const m = likedMeta.get(url) || {};
+            return { uri: url, title: name || url, author: m.author || '', artwork: m.artwork || '', likedIcon: !m.artwork };
+        });
         box.innerHTML = items.length
             ? `<ol class="mapp-rows">${items.map(rowHtml).join('')}</ol>`
             : empty('heart', 'Songs you like appear here', 'Tap the heart on any track (in the player, your history or search) to save it.');
@@ -648,8 +664,23 @@
         const r = await api('/account/music');
         if (!r.ok || !r.data.library) return;
         liked.clear();
-        (r.data.library.liked || []).forEach((t) => liked.set(t.url, t.name));
+        likedMeta.clear();
+        (r.data.library.liked || []).forEach((t) => { liked.set(t.url, t.name); likedMeta.set(t.url, { artwork: t.artwork || '', author: t.author || '' }); });
         renderLiked();
+        playlists.splice(0, playlists.length, ...(r.data.library.playlists || []));
+        renderPlaylists();
+    }
+
+    function renderPlaylists() {
+        const c = $('#mapp-playlists-count'); if (c) c.textContent = String(playlists.length);
+        const box = $('#mapp-playlists');
+        if (!box) return;
+        box.innerHTML = playlists.length
+            ? `<div class="mapp-grid">${playlists.map((p) => `<a class="mapp-card mapp-card--link" href="#playlist/${esc(p.id)}">
+                <div class="mapp-card-art">${p.cover ? art(p.cover, p.name, 'mapp-art--fill') : `<span class="mapp-art mapp-art--fill g${grad(p.name)}" aria-hidden="true">${ico('playlist')}</span>`}</div>
+                <p class="mapp-card-title" title="${esc(p.name)}">${esc(p.name)}</p>
+                <p class="mapp-card-sub">${p.track_count} track${p.track_count === 1 ? '' : 's'}</p></a>`).join('')}</div>`
+            : empty('playlist', 'No playlists yet', 'Create one with New playlist, or in Discord with /playlist create.');
     }
 
     // Search: debounced, newest answer wins.
@@ -658,12 +689,12 @@
     function searchIdle() {
         if (results) results.innerHTML = empty('search', 'Find something to play', 'Type a song, an artist or paste a link in the search bar above.');
     }
-    // Session-local search cache (60 s) so retyping a query does not refetch; failures are never kept.
+    // Session-local search cache (10 min) so retyping a query does not refetch; failures are never kept.
     const searchCache = new Map();
     async function cachedSearch(query) {
         const key = query.toLowerCase();
         const hit = searchCache.get(key);
-        if (hit && Date.now() - hit.at < 60000) return hit.r;
+        if (hit && Date.now() - hit.at < 600000) return hit.r;
         const r = await api(`${BASE}/search?q=${encodeURIComponent(query)}&limit=20`);
         if (r.ok) {
             if (searchCache.size >= 50) searchCache.delete(searchCache.keys().next().value);
@@ -1123,7 +1154,8 @@
 
     Object.assign(window.mapp, {
         fmt, art, grad, empty, skeleton, subHtml, authorHtml, artistHref, albumHref, playTrack, queueHint, blocked, np, go, route,
-        liked, once, trackOf, canDestroy, refresh: () => { applyRole(); syncHearts(); }, status: () => status,
+        liked, likedMeta, playlists, refreshLibrary, renderPlaylists, renderLiked,
+        once, trackOf, canDestroy, refresh: () => { applyRole(); syncHearts(); }, status: () => status,
     });
 
     // ── Boot ─────────────────────────────────────────────────────────────

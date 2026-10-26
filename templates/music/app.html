@@ -118,7 +118,7 @@
         <a href="#home" data-view-link="home" class="mapp-nav-link">{% call icon("home") %}<span>Servers</span></a>
         {% endif %}
         <a href="#liked" data-view-link="liked" class="mapp-nav-link">{% call icon("heart") %}<span>Liked Songs</span><span class="mapp-nav-count" id="mapp-liked-count">{{ library.liked.len() }}</span></a>
-        <a href="#playlists" data-view-link="playlists" class="mapp-nav-link">{% call icon("playlist") %}<span>Playlists</span><span class="mapp-nav-count">{{ library.playlists.len() }}</span></a>
+        <a href="#playlists" data-view-link="playlists" class="mapp-nav-link">{% call icon("playlist") %}<span>Playlists</span><span class="mapp-nav-count" id="mapp-playlists-count">{{ library.playlists.len() }}</span></a>
         {% if is_admin %}
         <p class="mapp-nav-label">Manage</p>
         <a href="#session" data-view-link="session" class="mapp-nav-link mapp-nav-mgr">{% call icon("settings") %}<span>Session settings</span><span class="mapp-chip">DJ</span></a>
@@ -210,7 +210,7 @@
                         <p>Songs played in this server will show up here.</p>
                     </div>
                     {% else %}
-                    {% for t in history.iter().take(12) %}
+                    {% for t in self.recents() %}
                     {% call hcard(t, true) %}
                     {% endfor %}
                     {% endif %}
@@ -341,13 +341,14 @@
                 {% else %}
                 <ol class="mapp-rows">
                     {% for t in library.liked %}
-                    <li class="mapp-row" data-uri="{{ t.url }}" data-title="{{ t.name }}" data-author="">
+                    <li class="mapp-row" data-uri="{{ t.url }}" data-title="{{ t.name }}" data-author="{{ t.author.as_deref().unwrap_or("") }}" data-artwork="{{ t.artwork.as_deref().unwrap_or("") }}">
                         <span class="mapp-row-idx"><span>{{ loop.index }}</span><button type="button" data-act="playnow" aria-label="Play {{ t.name }} now" title="Play now">{% call icon("play") %}</button></span>
-                        <span class="mapp-art mapp-art--sm g{{ self.grad(t.name) }}" aria-hidden="true">{% call icon("heart-fill") %}</span>
-                        <span class="mapp-row-text"><span class="mapp-row-title">{{ t.name }}</span><span class="mapp-row-sub">Liked song</span></span>
+                        {% if t.artwork.is_some() %}{% call art(t.artwork, t.name, "mapp-art--sm") %}{% else %}<span class="mapp-art mapp-art--sm g{{ self.grad(t.name) }}" aria-hidden="true">{% call icon("heart-fill") %}</span>{% endif %}
+                        <span class="mapp-row-text"><span class="mapp-row-title">{{ t.name }}</span><span class="mapp-row-sub">{{ t.author.as_deref().unwrap_or("Unknown artist") }}</span></span>
                         <span class="mapp-row-meta"></span>
                         <span class="mapp-row-acts">
                             <button type="button" class="mapp-ibtn" data-act="add" aria-label="Add {{ t.name }} to queue" title="Add to queue">{% call icon("plus") %}</button>
+                            <button type="button" class="mapp-ibtn" data-d="more" aria-haspopup="menu" aria-label="More options for {{ t.name }}" title="More">{% call icon("more") %}</button>
                             <button type="button" class="mapp-ibtn mapp-like is-on" data-act="like" aria-pressed="true" aria-label="Unlike {{ t.name }}" title="Remove from Liked Songs">{% call icon("heart-fill") %}</button>
                         </span>
                         <span class="mapp-row-dur"></span>
@@ -363,19 +364,20 @@
             <div class="mapp-head">
                 <span class="mapp-head-ico">{% call icon("playlist") %}</span>
                 <div><h1 class="mapp-title" id="mapp-h-playlists">Playlists</h1><p class="mapp-lede">Playlists you saved with Percy.</p></div>
+                <button type="button" class="mapp-pill mapp-head-act" data-pl="new">{% call icon("plus") %}New playlist</button>
             </div>
-            <div class="mapp-panel">
+            <div class="mapp-panel" id="mapp-playlists">
             {% if library.playlists.is_empty() %}
             <div class="mapp-empty">
                 <span class="mapp-empty-ico">{% call icon("playlist") %}</span>
                 <h3>No playlists yet</h3>
-                <p>Create one in Discord with <code>/playlist create</code> and it shows up here.</p>
+                <p>Create one with <b>New playlist</b>, or in Discord with <code>/playlist create</code>.</p>
             </div>
             {% else %}
             <div class="mapp-grid">
                 {% for p in library.playlists %}
                 <a class="mapp-card mapp-card--link" href="#playlist/{{ p.id }}">
-                    <div class="mapp-card-art"><span class="mapp-art mapp-art--fill g{{ self.grad(p.name) }}" aria-hidden="true">{% call icon("playlist") %}</span></div>
+                    <div class="mapp-card-art">{% if p.cover.is_some() %}{% call art(p.cover, p.name, "mapp-art--fill") %}{% else %}<span class="mapp-art mapp-art--fill g{{ self.grad(p.name) }}" aria-hidden="true">{% call icon("playlist") %}</span>{% endif %}</div>
                     <p class="mapp-card-title" title="{{ p.name }}">{{ p.name }}</p>
                     <p class="mapp-card-sub">{{ p.track_count }} track{% if p.track_count != 1 %}s{% endif %}</p>
                 </a>

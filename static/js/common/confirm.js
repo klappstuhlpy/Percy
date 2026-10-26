@@ -12,6 +12,10 @@
          typeToConfirm: 'rules',                 // optional: the confirm button waits for this text
      });
 
+   PercyConfirm.input({ title, label, value, placeholder, hint, confirmLabel, type, maxLength, required })
+   asks for one line of text with the same dialog and resolves to the trimmed text, or null
+   on cancel (window.prompt where <dialog> is unavailable).
+
    Loaded on every dashboard page (dashboard_layout.html) and the few standalone pages that
    confirm something. Falls back to window.confirm where <dialog> is unavailable. */
 
@@ -60,6 +64,17 @@
         document.body.appendChild(dialog);
     }
 
+    function reset() {
+        const typeRow = dialog.querySelector('.pc-type');
+        const typeInput = typeRow.querySelector('input');
+        typeInput.oninput = null;
+        typeInput.type = 'text';
+        typeInput.placeholder = '';
+        typeInput.removeAttribute('maxlength');
+        dialog.querySelector('.pc-undo').hidden = false;
+        return { typeRow, typeInput };
+    }
+
     function ask(opts) {
         const o = Object.assign({ consequence: '', undo: null, confirmLabel: 'Confirm', danger: false, typeToConfirm: null }, opts);
         if (typeof HTMLDialogElement === 'undefined') {
@@ -81,8 +96,7 @@
         confirmBtn.textContent = o.confirmLabel;
         confirmBtn.classList.toggle('pc-danger', !!o.danger);
 
-        const typeRow = dialog.querySelector('.pc-type');
-        const typeInput = typeRow.querySelector('input');
+        const { typeRow, typeInput } = reset();
         typeRow.hidden = !o.typeToConfirm;
         typeInput.value = '';
         confirmBtn.disabled = !!o.typeToConfirm;
@@ -99,5 +113,39 @@
         });
     }
 
-    window.PercyConfirm = { ask };
+    function input(opts) {
+        const o = Object.assign({ label: '', value: '', placeholder: '', hint: '', confirmLabel: 'Save', type: 'text', maxLength: 0, required: true }, opts);
+        if (typeof HTMLDialogElement === 'undefined') {
+            const v = window.prompt([o.title, o.hint].filter(Boolean).join(' — '), o.value);
+            return Promise.resolve(v === null ? null : v.trim());
+        }
+        if (!dialog) build();
+        dialog.querySelector('.pc-title').textContent = o.title;
+        const hint = dialog.querySelector('.pc-consequence');
+        hint.textContent = o.hint;
+        hint.hidden = !o.hint;
+        const { typeRow, typeInput } = reset();
+        dialog.querySelector('.pc-undo').hidden = true;
+        typeRow.hidden = false;
+        typeRow.querySelector('span').textContent = o.label;
+        typeInput.type = o.type;
+        typeInput.value = o.value;
+        typeInput.placeholder = o.placeholder;
+        if (o.maxLength) typeInput.maxLength = o.maxLength;
+        const confirmBtn = dialog.querySelector('.pc-confirm');
+        confirmBtn.textContent = o.confirmLabel;
+        confirmBtn.classList.remove('pc-danger');
+        const sync = () => { confirmBtn.disabled = o.required && !typeInput.value.trim(); };
+        typeInput.oninput = sync;
+        sync();
+        return new Promise((resolve) => {
+            dialog.returnValue = 'cancel';
+            dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm' ? typeInput.value.trim() : null), { once: true });
+            dialog.showModal();
+            typeInput.focus();
+            typeInput.select();
+        });
+    }
+
+    window.PercyConfirm = { ask, input };
 })();

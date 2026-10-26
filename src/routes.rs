@@ -59,8 +59,28 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/account/music/liked", post(music_app::account_music_like))
         .route("/account/music/liked/remove", post(music_app::account_music_unlike))
         .route(
+            "/account/music/playlists",
+            post(music_app::account_music_playlist_create),
+        )
+        .route(
             "/account/music/playlists/:playlist_id",
             get(music_app::account_music_playlist),
+        )
+        .route(
+            "/account/music/playlists/:playlist_id/update",
+            post(music_app::account_music_playlist_update),
+        )
+        .route(
+            "/account/music/playlists/:playlist_id/delete",
+            post(music_app::account_music_playlist_delete),
+        )
+        .route(
+            "/account/music/playlists/:playlist_id/tracks",
+            post(music_app::account_music_playlist_add),
+        )
+        .route(
+            "/account/music/playlists/:playlist_id/tracks/remove",
+            post(music_app::account_music_playlist_remove),
         )
         .route(
             "/dashboard/guild/:guild_id/autoresponders",
