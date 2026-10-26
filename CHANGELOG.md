@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-10-26
+
+### Added
+
+- Music: a weekly trending chart for each server and across Percy, shown in the dashboard's music app.
+- Music: the dashboard's server picker shows every server where Percy is playing.
+
+### Changed
+
+- Music: track titles drop credits and upload noise everywhere, so "Song [from X] (feat. Y)" reads as "Song".
+- Music: lyrics are found for many more songs: the lookup cleans the title and artist and tries more ways to match.
+- Music: 24/7 autoplay can start from the song that is playing, without a search or link.
+
 ## [2.16.0] - 2026-10-26
 
 ### Added
