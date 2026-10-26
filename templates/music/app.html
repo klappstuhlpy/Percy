@@ -47,6 +47,11 @@
     {# ─── Top bar ─────────────────────────────────────────────────────── #}
     <header class="mapp-top">
 
+        <div class="mapp-hist" role="group" aria-label="History">
+            <button type="button" class="mapp-ibtn" id="mapp-hist-back" data-hist="-1" aria-label="Back" title="Back" disabled>{% call icon("chevron-left") %}</button>
+            <button type="button" class="mapp-ibtn" id="mapp-hist-fwd" data-hist="1" aria-label="Forward" title="Forward" disabled>{% call icon("chevron-right") %}</button>
+        </div>
+
         <details class="mapp-picker" id="mapp-picker">
             <summary class="mapp-picker-btn" aria-label="Choose a server">
                 {% match selected %}
@@ -320,6 +325,10 @@
             </div>
         </section>
 
+        {# Artist and album pages (filled by detail.js; the route is #artist/<name>?u=<link> and #album?u=<link>) #}
+        <section class="mapp-view mapp-dpage" data-view="artist" aria-label="Artist" hidden><div id="mapp-artist"></div></section>
+        <section class="mapp-view mapp-dpage" data-view="album" aria-label="Album" hidden><div id="mapp-album"></div></section>
+
         {# Lyrics (filled by app.js) #}
         <section class="mapp-view mapp-view--lyrics" data-view="lyrics" aria-labelledby="mapp-h-lyrics" hidden>
             <p class="mapp-eyebrow">Lyrics</p>
@@ -330,10 +339,10 @@
 
         {# Liked Songs #}
         <section class="mapp-view" data-view="liked" aria-labelledby="mapp-h-liked" hidden>
-            <div class="mapp-head">
+<div id="mapp-liked-head">            <div class="mapp-head">
                 <span class="mapp-head-ico mapp-head-ico--like">{% call icon("heart-fill") %}</span>
                 <div><h1 class="mapp-title" id="mapp-h-liked">Liked Songs</h1><p class="mapp-lede" id="mapp-liked-sum">{{ library.liked.len() }} song{% if library.liked.len() != 1 %}s{% endif %}</p></div>
-            </div>
+            </div></div>
             <div class="mapp-panel" id="mapp-liked">
                 {% if library.liked.is_empty() %}
                 <div class="mapp-empty">
@@ -389,7 +398,7 @@
         </section>
 
         {# One playlist (filled by app.js) #}
-        <section class="mapp-view" data-view="playlist" aria-label="Playlist" hidden>
+        <section class="mapp-view mapp-dpage" data-view="playlist" aria-label="Playlist" hidden>
             <div id="mapp-playlist"></div>
         </section>
 
@@ -553,6 +562,7 @@
 <script src="/static/js/common/confirm.js"></script>
 <script src="/static/js/common/unsaved.js"></script>
 <script src="/static/js/music/app.js"></script>
+<script src="/static/js/music/detail.js"></script>
 <script src="/static/js/music/sound.js"></script>
 {% if is_admin %}
 {% include "music/manager_scripts.html" %}

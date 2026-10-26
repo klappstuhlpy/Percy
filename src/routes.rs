@@ -41,6 +41,8 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/dashboard/music/:guild_id/viewer", get(music_app::music_viewer))
         .route("/dashboard/music/:guild_id/history", get(music_app::music_history))
         .route("/dashboard/music/:guild_id/search", get(music_app::music_search))
+        .route("/dashboard/music/:guild_id/artist", get(music_app::music_artist))
+        .route("/dashboard/music/:guild_id/album", get(music_app::music_album))
         .route("/dashboard/music/:guild_id/lyrics", get(music_app::music_lyrics))
         .route(
             "/dashboard/music/:guild_id/recommendations",

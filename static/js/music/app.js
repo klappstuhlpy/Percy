@@ -49,6 +49,20 @@
         img.classList.toggle('is-lb', nxt.startsWith('lb:'));
         img.src = nxt.replace(/^lb:/, '');
     }
+    /* Artist and album links. Percy gives a name (the track's author) and, for Spotify-like sources,
+       the artist/album page link; the pages themselves are static/js/music/detail.js. */
+    const artistHref = (name, url) => `#artist/${encodeURIComponent(name)}${url ? '?u=' + encodeURIComponent(url) : ''}`;
+    const albumHref = (a, artist) => (a && a.url ? `#album?u=${encodeURIComponent(a.url)}&n=${encodeURIComponent(a.name || '')}${artist ? '&a=' + encodeURIComponent(artist) : ''}` : '');
+    /* "A, B" becomes two links; Percy's artist link belongs to the first name. */
+    function authorHtml(author, artistUrl) {
+        const names = String(author || '').split(',').map((n) => n.trim().replace(/ - Topic$/, '')).filter(Boolean);
+        if (!names.length) return 'Unknown artist';
+        return names.map((n, i) => `<a class="mapp-ln" href="${esc(artistHref(n, i === 0 ? artistUrl : ''))}">${esc(n)}</a>`).join(', ');
+    }
+    function subHtml(t, withAlbum) {
+        const href = withAlbum && t.album ? albumHref(t.album, t.author) : '';
+        return authorHtml(t.author, t.artist_url || t.artistUrl) + (href ? ` <span class="mapp-sep">·</span> <a class="mapp-ln" href="${esc(href)}">${esc(t.album.name)}</a>` : '');
+    }
     const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } } };
 
     function ago(iso) {
@@ -226,7 +240,7 @@
     function renderNp() {
         const box = $('#mapp-np');
         const t = np();
-        const key = t ? [t.title, t.author, t.uri, t.artwork, paused, status.channel_name, status.listeners, t.requester && t.requester.name] : [!!status, hasGuild];
+        const key = t ? [t.title, t.author, t.uri, t.artwork, t.artist_url, t.album && t.album.url, paused, status.channel_name, status.listeners, t.requester && t.requester.name] : [!!status, hasGuild];
         if (!box || !changed('np', key)) return;
         if (!t) {
             box.innerHTML = `<div class="mapp-np">
@@ -245,7 +259,7 @@
                 <div class="mapp-np-text">
                     <p class="mapp-np-label">${paused ? 'Paused' : 'Now playing'}</p>
                     <p class="mapp-np-title" title="${esc(t.title)}">${esc(t.title)}</p>
-                    <p class="mapp-np-sub">${esc(t.author)}</p>
+                    <p class="mapp-np-sub">${subHtml(t, true)}</p>
                 </div>
                 ${likeBtn(t, ' data-np')}
             </div>
@@ -260,7 +274,7 @@
         const box = $('#mapp-queue');
         const list = (status && status.queue) || [];
         const mgr = isManager();
-        if (!box || !changed('queue', [list.map((t) => [t.title, t.uri, t.autoplay, t.artwork]), mgr, !!status, hasGuild])) return;
+        if (!box || !changed('queue', [list.map((t) => [t.title, t.uri, t.autoplay, t.artwork, t.artist_url]), mgr, !!status, hasGuild])) return;
         const count = $('#mapp-queue-count');
         if (count) count.textContent = list.length ? `${list.length} track${list.length === 1 ? '' : 's'}` : '';
         if (!status) {
@@ -280,7 +294,7 @@
             html += `<li class="mapp-qrow${t.autoplay ? ' is-auto' : ''}" data-index="${i}" data-uri="${esc(t.uri || '')}" data-title="${esc(t.title)}" data-author="${esc(t.author)}"${edit ? ' draggable="true"' : ''}>
                 ${edit ? `<span class="mapp-grip" title="Drag to reorder" aria-hidden="true">${ico('grip')}</span>` : ''}
                 ${art(t.artwork, t.title, 'mapp-art--xs')}
-                <span class="mapp-row-text"><span class="mapp-row-title">${esc(t.title)}</span><span class="mapp-row-sub">${esc(t.author)}</span></span>
+                <span class="mapp-row-text"><span class="mapp-row-title">${esc(t.title)}</span><span class="mapp-row-sub">${authorHtml(t.author, t.artist_url)}</span></span>
                 ${t.autoplay ? '<span class="mapp-tag">Autoplay</span>' : ''}
                 <span class="mapp-row-dur">${t.is_stream ? 'LIVE' : fmt(t.duration)}</span>
                 ${edit ? `<button type="button" class="mapp-ibtn mapp-q-remove" data-act="qremove" aria-label="Remove ${esc(t.title)} from the queue" title="Remove from queue">${ico('x')}</button>` : ''}
@@ -292,9 +306,9 @@
     function renderBarNow() {
         const box = $('#mapp-bar-now');
         const t = np();
-        if (!box || !changed('bar', t ? [t.title, t.author, t.artwork, t.uri] : [hasGuild])) return;
+        if (!box || !changed('bar', t ? [t.title, t.author, t.artwork, t.uri, t.artist_url] : [hasGuild])) return;
         box.innerHTML = t
-            ? `${art(t.artwork, t.title, 'mapp-art--md')}<div class="mapp-bar-text"><p class="mapp-bar-title" title="${esc(t.title)}">${esc(t.title)}</p><p class="mapp-bar-sub">${esc(t.author)}</p></div>${likeBtn(t, ' data-np')}`
+            ? `${art(t.artwork, t.title, 'mapp-art--md')}<div class="mapp-bar-text"><p class="mapp-bar-title" title="${esc(t.title)}">${esc(t.title)}</p><p class="mapp-bar-sub">${authorHtml(t.author, t.artist_url)}</p></div>${likeBtn(t, ' data-np')}`
             : `<span class="mapp-art mapp-art--md mapp-art--idle" aria-hidden="true">${ico('disc')}</span><div class="mapp-bar-text"><p class="mapp-bar-title">Nothing playing</p><p class="mapp-bar-sub">${hasGuild ? 'Pick a song to get started' : 'Pick a server first'}</p></div>`;
         box.classList.remove('is-swap'); void box.offsetWidth; box.classList.add('is-swap');
         document.title = t ? `${t.title} · ${t.author} | Percy Music` : 'Music | Percy';
@@ -521,9 +535,9 @@
 
     // ── Tracks: play, queue, like ────────────────────────────────────────
     function trackOf(el) {
-        if (el.hasAttribute('data-np')) { const t = np() || {}; return { uri: t.uri || '', title: t.title || '', author: t.author || '' }; }
+        if (el.hasAttribute('data-np')) { const t = np() || {}; return { uri: t.uri || '', title: t.title || '', author: t.author || '', artistUrl: t.artist_url || '', albumUrl: (t.album && t.album.url) || '', albumName: (t.album && t.album.name) || '' }; }
         const row = el.closest('[data-uri]');
-        return row ? { uri: row.dataset.uri || '', title: row.dataset.title || '', author: row.dataset.author || '' } : { uri: '', title: '', author: '' };
+        return row ? { uri: row.dataset.uri || '', title: row.dataset.title || '', author: row.dataset.author || '', artistUrl: row.dataset.artistUrl || '', albumUrl: row.dataset.albumUrl || '', albumName: row.dataset.albumName || '' } : { uri: '', title: '', author: '' };
     }
 
     async function playTrack(t, now) {
@@ -581,10 +595,10 @@
     /* t: {uri, title, author, artwork, ms, meta, stream, likedIcon} */
     function rowHtml(t, i) {
         const ttl = esc(t.title);
-        return `<li class="mapp-row" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}">
+        return `<li class="mapp-row" data-uri="${esc(t.uri || '')}" data-title="${ttl}" data-author="${esc(t.author || '')}"${t.artistUrl ? ` data-artist-url="${esc(t.artistUrl)}"` : ''}${t.album && t.album.url ? ` data-album-url="${esc(t.album.url)}" data-album-name="${esc(t.album.name)}"` : ''}>
             <span class="mapp-row-idx"><span>${i + 1}</span><button type="button" data-act="playnow" aria-label="Play ${ttl} now" title="Play now">${ico('play')}</button></span>
             ${t.likedIcon ? `<span class="mapp-art mapp-art--sm g${grad(t.title)}" aria-hidden="true">${ico('heart-fill')}</span>` : art(t.artwork, t.title, 'mapp-art--sm')}
-            <span class="mapp-row-text"><span class="mapp-row-title">${ttl}</span><span class="mapp-row-sub">${esc(t.author || t.sub || 'Unknown artist')}</span></span>
+            <span class="mapp-row-text"><span class="mapp-row-title">${ttl}</span><span class="mapp-row-sub">${t.author ? subHtml(t, t.withAlbum) : esc(t.sub || 'Unknown artist')}</span></span>
             <span class="mapp-row-meta">${t.meta || ''}</span>
             <span class="mapp-row-acts">
                 <button type="button" class="mapp-ibtn" data-act="add" aria-label="Add ${ttl} to queue" title="Add to queue">${ico('plus')}</button>
@@ -603,7 +617,7 @@
                     <button type="button" class="mapp-card-add" data-act="add" aria-label="Add ${ttl} to queue" title="Add to queue">${ico('plus')}</button>
                 </div>
             </div>
-            <p class="mapp-card-title" title="${ttl}">${ttl}</p><p class="mapp-card-sub">${esc(t.author || 'Unknown artist')}</p>
+            <p class="mapp-card-title" title="${ttl}">${ttl}</p><p class="mapp-card-sub">${authorHtml(t.author, t.artistUrl)}</p>
         </div>`;
     }
     const fromHistory = (h) => ({ uri: h.uri, title: h.title, author: h.author, artwork: h.artwork, ms: h.length_ms, when: h.played_at, meta: `<time datetime="${esc(h.played_at)}">${esc(ago(h.played_at))}</time>` });
@@ -646,6 +660,7 @@
         const c = $('#mapp-liked-count'); if (c) c.textContent = String(n);
         const s = $('#mapp-liked-sum'); if (s) s.textContent = `${n} song${n === 1 ? '' : 's'}`;
         applyRole(); syncHearts();
+        document.dispatchEvent(new CustomEvent('mapp:liked'));
     }
 
     async function refreshLibrary() {
@@ -654,26 +669,6 @@
         liked.clear();
         (r.data.library.liked || []).forEach((t) => liked.set(t.url, t.name));
         renderLiked();
-    }
-
-    async function loadPlaylist(id) {
-        const box = $('#mapp-playlist');
-        if (!box) return;
-        box.innerHTML = `<div class="mapp-head"><span class="mapp-head-ico">${ico('playlist')}</span><div><div class="mapp-skel-line" style="--w:260px"></div></div></div><div class="mapp-panel">${skeleton(6)}</div>`;
-        const r = await api(`/account/music/playlists/${encodeURIComponent(id || '')}`);
-        if (currentView !== 'playlist') return;
-        if (!r.ok) {
-            box.innerHTML = empty('alert', r.status === 404 ? 'Playlist not found' : 'Could not load this playlist', r.status === 404 ? 'It may have been deleted.' : r.error,
-                `<button type="button" class="mapp-btn" data-act="retry-playlist" data-id="${esc(id)}">Try again</button><a class="mapp-btn mapp-btn--ghost" href="#playlists">All playlists</a>`, '', true);
-            return;
-        }
-        const p = r.data.playlist || {};
-        const tracks = p.tracks || [];
-        box.innerHTML = `<div class="mapp-head"><span class="mapp-head-ico">${ico('playlist')}</span>
-                <div><p class="mapp-eyebrow"><a class="mapp-link" href="#playlists">${ico('arrow-left')}Playlists</a></p><h1 class="mapp-title">${esc(p.name || 'Playlist')}</h1><p class="mapp-lede">${tracks.length} track${tracks.length === 1 ? '' : 's'}</p></div></div>
-            <div class="mapp-panel">${tracks.length ? `<ol class="mapp-rows">${tracks.map((t, i) => rowHtml({ uri: t.url, title: t.name, sub: 'Playlist track' }, i)).join('')}</ol>`
-                : empty('playlist', 'This playlist is empty', 'Add songs to it in Discord with /playlist add.')}</div>`;
-        applyRole(); syncHearts();
     }
 
     // Search: debounced, newest answer wins.
@@ -709,7 +704,7 @@
         const list = r.data.results || [];
         results.innerHTML = list.length
             ? `<div class="mapp-shelf-head"><h2>Songs</h2><span class="mapp-row-meta">${list.length} result${list.length === 1 ? '' : 's'} for ${esc(q(query))}</span></div>
-               <ol class="mapp-rows">${list.map((t, i) => rowHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork, ms: t.duration, stream: t.is_stream, meta: esc(t.source || '') }, i)).join('')}</ol>`
+               <ol class="mapp-rows">${list.map((t, i) => rowHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork, ms: t.duration, stream: t.is_stream, meta: esc(t.source || ''), artistUrl: t.artist_url, album: t.album, withAlbum: true }, i)).join('')}</ol>`
             : empty('search', `No results for ${q(query)}`, 'Check the spelling, try fewer words, or paste a link instead.');
         applyRole(); syncHearts();
     }
@@ -847,7 +842,7 @@
         if (!groups.length) { if (sec) sec.hidden = true; return; }
         box.innerHTML = groups.map((g) => `<div class="mapp-recs-group">
                 <p class="mapp-recs-cap">${ico('sparkles')}Because you listen to <b>${esc(g.artist)}</b></p>
-                <div class="mapp-shelf">${(g.tracks || []).map((t) => cardHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork })).join('')}</div>
+                <div class="mapp-shelf">${(g.tracks || []).map((t) => cardHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork, artistUrl: t.artist_url })).join('')}</div>
             </div>`).join('');
         applyRole(); syncHearts();
     }
@@ -918,16 +913,41 @@
         if (lb) lb.setAttribute('aria-pressed', String(v === 'lyrics'));
         main.scrollTop = 0;
     }
+    /* "#view/arg?k=v": the view, one path argument and query params (artist and album links). */
+    function parseHash() {
+        const h = location.hash.slice(1), qi = h.indexOf('?');
+        const dec = (x) => { try { return decodeURIComponent(x); } catch (_) { return x; } };
+        const [raw, ...rest] = (qi < 0 ? h : h.slice(0, qi)).split('/');
+        return { view: dec(raw), arg: dec(rest.join('/')), params: new URLSearchParams(qi < 0 ? '' : h.slice(qi + 1)) };
+    }
+    /* Browser-style back/forward buttons: the index rides in history.state, so a push is
+       "previous + 1" and back/forward restore the stored one. */
+    let navIdx = 0, navMax = 0, navSeen = false;
+    function trackNav() {
+        const st = history.state;
+        if (st && typeof st.mapp === 'number') navIdx = st.mapp;
+        else {
+            navIdx = navSeen ? navIdx + 1 : 0;
+            navMax = navIdx;
+            try { history.replaceState({ mapp: navIdx }, ''); } catch (_) { /* sandboxed */ }
+        }
+        navSeen = true;
+        navMax = Math.max(navMax, navIdx);
+        const b = $('#mapp-hist-back'), f = $('#mapp-hist-fwd');
+        if (b) b.disabled = navIdx <= 0;
+        if (f) f.disabled = navIdx >= navMax;
+    }
     function route() {
-        const [raw, arg] = decodeURIComponent(location.hash.slice(1)).split('/');
-        let v = raw;
+        trackNav();
+        const { view, arg, params } = parseHash();
+        let v = view;
         if (v === 'queue') { openRail(true); v = currentView || 'home'; }
         if (!views.includes(v)) v = 'home';
         show(v);
-        if (v === 'playlist') loadPlaylist(arg);
-        else if (v === 'lyrics') loadLyrics(false);
+        if (v === 'lyrics') loadLyrics(false);
         else if (v === 'history' && !historyLoaded) refreshHistory();
         else if (v === 'search') { if (input && !input.value) searchIdle(); }
+        document.dispatchEvent(new CustomEvent('mapp:route', { detail: { view: v, arg, params } }));
     }
     window.addEventListener('hashchange', route);
 
@@ -1013,6 +1033,8 @@
 
     // ── Clicks (one delegated handler) ───────────────────────────────────
     document.addEventListener('click', async (e) => {
+        const hist = e.target.closest('[data-hist]');
+        if (hist) { history.go(+hist.dataset.hist); return; }
         const railT = e.target.closest('[data-rail-toggle]');
         if (railT) { e.preventDefault(); openRail(!railShown()); return; }
         if (e.target.closest('[data-focus-search]')) { if (!wide.matches) openRail(false); setTimeout(focusSearch, 0); }
@@ -1070,7 +1092,6 @@
             case 'retry-history': historyLoaded = false; refreshHistory(); break;
             case 'retry-search': runSearch(input ? input.value : ''); break;
             case 'retry-lyrics': loadLyrics(true); break;
-            case 'retry-playlist': loadPlaylist(btn.dataset.id); break;
             default: break;
         }
     });
@@ -1117,6 +1138,11 @@
             e.preventDefault(); seekBy(e.key === 'ArrowRight' ? 5000 : -5000); return;
         }
         if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMute(); }
+    });
+
+    Object.assign(window.mapp, {
+        fmt, art, grad, empty, skeleton, subHtml, authorHtml, artistHref, albumHref, playTrack, queueHint, blocked, np, go, route,
+        liked, once, trackOf, canDestroy, refresh: () => { applyRole(); syncHearts(); }, status: () => status,
     });
 
     // ── Boot ─────────────────────────────────────────────────────────────

@@ -335,6 +335,94 @@ pub async fn music_search(
     }
 }
 
+#[derive(Deserialize)]
+pub struct DetailQuery {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    url: String,
+}
+
+/// A link Percy may open: http(s) only, bounded. Anything else is a 400 before it leaves the BFF.
+fn clean_url(raw: &str) -> Result<Option<String>, Response> {
+    let u = raw.trim();
+    if u.is_empty() {
+        return Ok(None);
+    }
+    let lower = u.to_ascii_lowercase();
+    if u.len() > 500 || !(lower.starts_with("https://") || lower.starts_with("http://")) {
+        return Err(fail(StatusCode::BAD_REQUEST, "Invalid link"));
+    }
+    Ok(Some(u.to_string()))
+}
+
+/// `GET /dashboard/music/:guild_id/artist?name=&url=` — artist page data (cached like search).
+pub async fn music_artist(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Query(q): Query<DetailQuery>,
+) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let name = q.name.trim();
+    let url = match clean_url(&q.url) {
+        Ok(u) => u,
+        Err(r) => return r,
+    };
+    if name.chars().count() > 120 || (name.is_empty() && url.is_none()) {
+        return fail(StatusCode::BAD_REQUEST, "Name or link required");
+    }
+    let key = (
+        guild_id,
+        0,
+        format!("artist {} {}", name.to_lowercase(), url.as_deref().unwrap_or("")),
+    );
+    if let Some(hit) = SEARCH_CACHE.get(&key) {
+        return Json(hit).into_response();
+    }
+    match percy.get_music_artist(guild_id, name, url.as_deref()).await {
+        Ok(a) => {
+            let out = json!({"ok": true, "artist": a.artist, "top_tracks": a.top_tracks, "releases": a.releases});
+            SEARCH_CACHE.put(key, out.clone());
+            Json(out).into_response()
+        }
+        Err(e) => percy_fail(&e),
+    }
+}
+
+/// `GET /dashboard/music/:guild_id/album?url=` — album, single or playlist link as a track list.
+pub async fn music_album(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Query(q): Query<DetailQuery>,
+) -> Response {
+    let percy = match member_gate(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let url = match clean_url(&q.url) {
+        Ok(Some(u)) => u,
+        Ok(None) => return fail(StatusCode::BAD_REQUEST, "Link required"),
+        Err(r) => return r,
+    };
+    let key = (guild_id, 0, format!("album {url}"));
+    if let Some(hit) = SEARCH_CACHE.get(&key) {
+        return Json(hit).into_response();
+    }
+    match percy.get_music_album(guild_id, &url).await {
+        Ok(a) => {
+            let out = json!({"ok": true, "album": a.album, "tracks": a.tracks});
+            SEARCH_CACHE.put(key, out.clone());
+            Json(out).into_response()
+        }
+        Err(e) => percy_fail(&e),
+    }
+}
+
 /// `GET /dashboard/music/:guild_id/lyrics`
 pub async fn music_lyrics(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
     let percy = match member_gate(&app, &session, guild_id).await {
@@ -788,7 +876,15 @@ mod tests {
         fail: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> AppState {
         use std::sync::atomic::Ordering::SeqCst;
+        let album_hits = hits.clone();
         let fake = axum::Router::new()
+            .route(
+                "/api/v1/guilds/7001/music/album",
+                axum::routing::get(move || async move {
+                    album_hits.fetch_add(1, SeqCst);
+                    Json(json!({"album": {"title": "Glass Tides", "artists": ["Nova Quill"]}, "tracks": []}))
+                }),
+            )
             .route(
                 "/api/v1/users/42/guilds",
                 axum::routing::get(|| async { Json(json!([{"id": "7001", "name": "Home", "owner": false}])) }),
@@ -818,6 +914,44 @@ mod tests {
         let mut config = Config::test_default();
         config.percy.api_url = Some(format!("http://{addr}"));
         build_state_with(config, FsPath::new(":memory:")).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn album_and_artist_validate_links_and_album_is_cached() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
+        let hits = std::sync::Arc::new(AtomicUsize::new(0));
+        let app = counting_percy(hits.clone(), std::sync::Arc::new(AtomicBool::new(false))).await;
+        let album = |url: &str| {
+            music_album(
+                State(app.clone()),
+                Session::new("42", "ferris"),
+                Path(7001),
+                Query(DetailQuery {
+                    name: String::new(),
+                    url: url.into(),
+                }),
+            )
+        };
+        let artist = |name: &str, url: &str| {
+            music_artist(
+                State(app.clone()),
+                Session::new("42", "ferris"),
+                Path(7001),
+                Query(DetailQuery {
+                    name: name.into(),
+                    url: url.into(),
+                }),
+            )
+        };
+        assert_eq!(album("").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(album("javascript:alert(1)").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(artist("", "").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(artist(&"x".repeat(121), "").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(artist("A", "ftp://x.test/a").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(hits.load(SeqCst), 0);
+        assert_eq!(album("https://x.test/album/1").await.status(), StatusCode::OK);
+        assert_eq!(album("https://x.test/album/1").await.status(), StatusCode::OK);
+        assert_eq!(hits.load(SeqCst), 1);
     }
 
     #[tokio::test]
@@ -954,7 +1088,7 @@ mod render_tests {
         let queue: Vec<Value> = TRACKS[2..9]
             .iter()
             .enumerate()
-            .map(|(i, (t, a))| json!({"title": t, "author": a, "duration": 150_000 + i as u64 * 17_000, "autoplay": i >= 5, "artwork": fake_art(i + 2)}))
+            .map(|(i, (t, a))| json!({"title": t, "author": a, "duration": 150_000 + i as u64 * 17_000, "autoplay": i >= 5, "artwork": fake_art(i + 2), "artist_url": format!("https://example.com/artist/{a}")}))
             .collect();
         let mut m = json!({
             "active": playing, "equalizer": vec![0.0f64; 15], "filters": {}, "presets": ["Flat", "Bass boost", "Vocal"],
@@ -967,6 +1101,7 @@ mod render_tests {
                 "title": TRACKS[0].0, "author": TRACKS[0].1, "duration": 214_000, "position": 81_000,
                 "uri": "https://example.com/track/paper-lanterns", "volume": 64, "loop": 0, "shuffle": false,
                 "requester": {"id": "7", "name": "Ferris"}, "artwork": fake_art(0),
+                "artist_url": "https://example.com/artist/the-quiet-hours", "album": {"name": "Glass Tides", "url": "https://example.com/album/glass-tides"},
             });
         }
         serde_json::from_value(m).unwrap()
