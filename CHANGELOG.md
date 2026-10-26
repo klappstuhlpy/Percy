@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-26
+
+### Added
+- Music: upload a playlist cover (or use an image link) from a button on the cover itself, or drop an image onto it.
+- Music: drag songs from the queue, search, history or any list onto Liked Songs or a playlist in the sidebar.
+- Music: a "Trending this week" section with this server's and Percy's most-picked songs.
+- Music: the server picker shows every server where Percy is playing.
+- The landing page shows the music app.
+
+### Changed
+- Music: 24/7 autoplay can start from the song that is playing, without a search or link.
+
+### Fixed
+- Music: "Add to playlist" opens the list of playlists again.
+- Music: the sidebar's Manage section has its spacing back.
+- Requires kls-core v0.15.0 (percy-client 0.15.0) and Percy 2.17.0.
+
 ## [0.16.0] - 2026-10-26
 
 ### Added
