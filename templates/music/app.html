@@ -32,6 +32,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"/>
 <link rel="stylesheet" href="/static/css/common/tokens.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/common/components.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/shell.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/music/app.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/music/player.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/music/views.css" type="text/css"/>
@@ -98,24 +99,7 @@
             {% if selected.is_some() %}
             <span class="mapp-role" id="mapp-role" data-role="{{ self.role() }}">{{ self.role_label() }}</span>
             {% endif %}
-            <button type="button" class="mapp-ibtn" id="theme-toggle" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">{% call icon("contrast") %}</button>
-            <details class="mapp-me">
-                <summary aria-label="Account menu">
-                    {% match account %}
-                    {% when Some with (a) %}
-                    {% if a.has_discord() %}<img src="/account/discord/avatar" alt="" width="32" height="32" data-initial="{{ self.initial(a.name) }}">{% else %}<span class="mapp-me-fallback">{{ self.initial(a.name) }}</span>{% endif %}
-                    {% when None %}<span class="mapp-me-fallback">?</span>
-                    {% endmatch %}
-                </summary>
-                <div class="mapp-me-pop" role="menu">
-                    {% match account %}{% when Some with (a) %}<p class="mapp-pop-label">{{ a.name }}</p>{% when None %}{% endmatch %}
-                    <a role="menuitem" href="/dashboard">My servers</a>
-                    <a role="menuitem" href="/account">Account</a>
-                    <a role="menuitem" href="/">Percy home</a>
-                    <hr>
-                    <a role="menuitem" href="/logout">Log out</a>
-                </div>
-            </details>
+            {% include "layout/app_top_end.html" %}
         </div>
     </header>
 

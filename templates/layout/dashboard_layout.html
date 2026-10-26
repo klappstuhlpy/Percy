@@ -1,77 +1,112 @@
 {% extends "layout/layout.html" %}
 
+{# The server dashboard's app shell: top bar (brand, server pill, command-palette search, bell,
+   theme + account menu), a collapsible icon nav, and a page-header slot. Pages keep filling the
+   same blocks (`content`, `page_header`, `page_subtitle`, `header_actions`, `page_css`, `page_js`). #}
+
+{% macro icon(name) %}<svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-{{ name }}"/></svg>{% endmacro %}
+
+{# `badge` is non-empty for the Notifications row, which notification_badge.js fills. #}
+{% macro link(path, key, ico, label, badge) %}<a href="/dashboard/guild/{{ guild_id }}{{ path }}" class="dash-nav-link{% if nav_active == key %} active{% endif %}" title="{{ label }}"{% if nav_active == key %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-{{ ico }}"/></svg><span class="dash-nav-text">{{ label }}</span>{% if !badge.is_empty() %}<span class="dash-nav-badge" hidden></span>{% endif %}</a>{% endmacro %}
+
 {% block nav_dashboard_active %} active{% endblock %}
 
 {% block title %}{{ page_title }} — {{ guild_name }} | Dashboard{% endblock %}
 
+{% block body_attrs %} class="app-canvas shell-page"{% endblock %}
+
 {% block css %}
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"/>
+<link rel="stylesheet" href="/static/css/common/tokens.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/components.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/shell.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/common/command_palette.css" type="text/css"/>
 {% block page_css %}{% endblock %}
 {% endblock %}
 
-{% block body %}
-<div class="dashboard-shell">
-    <aside class="dash-sidebar" id="dash-sidebar">
-        <div class="dash-sidebar-top">
-            <a href="/dashboard" class="dash-sidebar-back">&larr; All servers</a>
-            <div class="dash-sidebar-guild">
-                <span class="dash-sidebar-guild-mark" aria-hidden="true"><span class="spark">✻</span></span>
-                <div class="dash-sidebar-guild-text">
-                    <span class="dash-sidebar-guild-name" title="{{ guild_name }}">{{ guild_name }}</span>
-                    <span class="dash-sidebar-guild-sub">Server dashboard</span>
-                </div>
+{% block shell %}
+<div class="shell" id="shell">
+    <a class="shell-skip" href="#dash-main">Skip to content</a>
+
+    <header class="shell-top">
+        <button type="button" class="shell-ibtn shell-burger" id="shell-burger" aria-controls="dash-sidebar" aria-expanded="false" aria-label="Open navigation">{% call icon("menu") %}</button>
+        <a class="shell-brand" href="/dashboard" aria-label="Percy, all servers"><span class="spark" aria-hidden="true">✻</span>Percy</a>
+
+        <details class="shell-picker">
+            <summary class="shell-picker-btn" aria-label="Server: {{ guild_name }}. Switch server">
+                <span class="shell-dot" aria-hidden="true"></span>
+                <span class="shell-picker-name">{{ guild_name }}</span>
+                {% call icon("chevron-down") %}
+            </summary>
+            <div class="shell-pop" role="menu">
+                <p class="shell-pop-label">Current server</p>
+                <a role="menuitem" class="is-on" href="/dashboard/guild/{{ guild_id }}"><span class="shell-picker-name">{{ guild_name }}</span></a>
+                <hr>
+                <a role="menuitem" href="/dashboard">All servers</a>
+                <a role="menuitem" href="/dashboard/guild/{{ guild_id }}/music">Music player</a>
             </div>
-            {# Rendered here, not injected, so the sidebar keeps its height between page loads.
-               It stays invisible (space reserved) until command_palette.js wires it up, so a
-               JS-off page never shows a launcher that does nothing. #}
-            <button type="button" id="cmdk-trigger" class="cmdk-trigger cmdk-trigger--pending" tabindex="-1" aria-hidden="true">
-                <span class="cmdk-trigger-glyph" aria-hidden="true">⌕</span>
-                <span class="cmdk-trigger-text">Search</span>
-                <kbd class="cmdk-trigger-kbd">⌘K</kbd>
-            </button>
+        </details>
+
+        {# Rendered here, not injected, so the bar keeps its layout between page loads. It stays
+           invisible (space reserved) until command_palette.js wires it up, so a JS-off page never
+           shows a launcher that does nothing. #}
+        <button type="button" id="cmdk-trigger" class="shell-search cmdk-trigger--pending" tabindex="-1" aria-hidden="true">
+            {% call icon("search") %}<span>Search settings, commands, pages</span><kbd class="shell-kbd">Ctrl K</kbd>
+        </button>
+
+        <div class="shell-top-end">
+            <a class="shell-ibtn" href="/dashboard/guild/{{ guild_id }}/notifications" aria-label="Notifications" title="Notifications">{% call icon("bell") %}<span class="dash-nav-badge shell-badge" hidden></span></a>
+            {% include "layout/app_top_end.html" %}
         </div>
-        <button type="button" class="dash-sidebar-toggle" aria-expanded="false" aria-controls="dash-sidebar"><span>Menu</span></button>
+    </header>
+
+    <aside class="dash-sidebar" id="dash-sidebar">
         <nav class="dash-nav" aria-label="Dashboard sections">
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Overview</span>
-                <a href="/dashboard/guild/{{ guild_id }}/notifications" class="dash-nav-link{% if nav_active == "notifications" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-bell"/></svg></span>Notifications<span class="dash-nav-badge" hidden></span></a>
-                <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link{% if nav_active == "config" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-sliders"/></svg></span>Configuration</a>
-                <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link{% if nav_active == "members" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-users"/></svg></span>Members</a>
-                <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link{% if nav_active == "stats" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-chart"/></svg></span>Statistics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/analytics" class="dash-nav-link{% if nav_active == "analytics" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-trend"/></svg></span>Analytics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link{% if nav_active == "commands" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-terminal"/></svg></span>Commands</a>
+                {% call link("/notifications", "notifications", "bell", "Notifications", "1") %}
+                {% call link("", "config", "sliders", "Configuration", "") %}
+                {% call link("/members", "members", "users", "Members", "") %}
+                {% call link("/stats", "stats", "chart", "Statistics", "") %}
+                {% call link("/analytics", "analytics", "trend", "Analytics", "") %}
+                {% call link("/commands", "commands", "terminal", "Commands", "") %}
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Features</span>
-                <a href="/dashboard/guild/{{ guild_id }}/leveling" class="dash-nav-link{% if nav_active == "leveling" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-trophy"/></svg></span>Leveling</a>
-                <a href="/dashboard/guild/{{ guild_id }}/economy" class="dash-nav-link{% if nav_active == "economy" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-coins"/></svg></span>Economy</a>
-                <a href="/dashboard/guild/{{ guild_id }}/music" class="dash-nav-link{% if nav_active == "music" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg></span>Music</a>
-                <a href="/dashboard/guild/{{ guild_id }}/autoresponders" class="dash-nav-link{% if nav_active == "autoresponders" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-reply"/></svg></span>Autoresponders</a>
-                <a href="/dashboard/guild/{{ guild_id }}/comics" class="dash-nav-link{% if nav_active == "comics" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-book"/></svg></span>Comics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/temp-channels" class="dash-nav-link{% if nav_active == "temp-channels" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-voice"/></svg></span>Temp Channels</a>
+                {% call link("/leveling", "leveling", "trophy", "Leveling", "") %}
+                {% call link("/economy", "economy", "coins", "Economy", "") %}
+                {% call link("/music", "music", "music", "Music", "") %}
+                {% call link("/autoresponders", "autoresponders", "reply", "Autoresponders", "") %}
+                {% call link("/comics", "comics", "book", "Comics", "") %}
+                {% call link("/temp-channels", "temp-channels", "voice", "Temp Channels", "") %}
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Community</span>
-                <a href="/dashboard/guild/{{ guild_id }}/polls" class="dash-nav-link{% if nav_active == "polls" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-poll"/></svg></span>Polls</a>
-                <a href="/dashboard/guild/{{ guild_id }}/gallery" class="dash-nav-link{% if nav_active == "gallery" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-image"/></svg></span>Image Gallery</a>
-                <a href="/dashboard/guild/{{ guild_id }}/giveaways" class="dash-nav-link{% if nav_active == "giveaways" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-gift"/></svg></span>Giveaways</a>
-                <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link{% if nav_active == "tags" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-tag"/></svg></span>Tags</a>
-                <a href="/dashboard/guild/{{ guild_id }}/role-menus" class="dash-nav-link{% if nav_active == "role-menus" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-list"/></svg></span>Role Menus</a>
-                <a href="/dashboard/guild/{{ guild_id }}/starboard" class="dash-nav-link{% if nav_active == "starboard" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-star"/></svg></span>Starboard</a>
-                <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link{% if nav_active == "highlights" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-sparkles"/></svg></span>Highlights</a>
-                <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link{% if nav_active == "emoji-stats" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-smile"/></svg></span>Emoji Stats</a>
+                {% call link("/polls", "polls", "poll", "Polls", "") %}
+                {% call link("/gallery", "gallery", "image", "Image Gallery", "") %}
+                {% call link("/giveaways", "giveaways", "gift", "Giveaways", "") %}
+                {% call link("/tags", "tags", "tag", "Tags", "") %}
+                {% call link("/role-menus", "role-menus", "list", "Role Menus", "") %}
+                {% call link("/starboard", "starboard", "star", "Starboard", "") %}
+                {% call link("/highlights", "highlights", "sparkles", "Highlights", "") %}
+                {% call link("/emoji-stats", "emoji-stats", "smile", "Emoji Stats", "") %}
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Integrations</span>
-                <a href="/dashboard/guild/{{ guild_id }}/webhooks" class="dash-nav-link{% if nav_active == "webhooks" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-webhook"/></svg></span>Webhooks</a>
-                <a href="/dashboard/guild/{{ guild_id }}/backup" class="dash-nav-link{% if nav_active == "backup" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-archive"/></svg></span>Backup &amp; Templates</a>
-                <a href="/dashboard/guild/{{ guild_id }}/developers" class="dash-nav-link{% if nav_active == "developers" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-code"/></svg></span>Developers</a>
+                {% call link("/webhooks", "webhooks", "webhook", "Webhooks", "") %}
+                {% call link("/backup", "backup", "archive", "Backup & Templates", "") %}
+                {% call link("/developers", "developers", "code", "Developers", "") %}
             </div>
             <div class="dash-nav-group">
-                <a href="/dashboard/guild/{{ guild_id }}/me" class="dash-nav-link dash-nav-link-me{% if nav_active == "me" %} active{% endif %}"><span class="icon-tile nav-ico"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-user"/></svg></span>My Profile</a>
+                {% call link("/me", "me", "user", "My Profile", "") %}
             </div>
         </nav>
+        <div class="shell-nav-foot">
+            <button type="button" class="shell-ibtn shell-collapse" id="shell-collapse" aria-pressed="false" title="Collapse navigation">{% call icon("panel") %}<span class="shell-collapse-label">Collapse</span></button>
+        </div>
         {# Inline so it runs before first paint: .dash-sidebar is what scrolls, and a full page load would reset it to the top. #}
         <script>
         (function () {
@@ -86,12 +121,13 @@
         })();
         </script>
     </aside>
+    <div class="shell-scrim" id="shell-scrim"></div>
 
-    <div class="dashboard-content">
+    <main class="dashboard-content" id="dash-main" tabindex="-1">
         {% block page_header %}
         <div class="dashboard-header dash-rise">
             <div>
-                <h1><span class="spark dash-h1-glyph" aria-hidden="true">✻</span> {{ page_title }}</h1>
+                <h1>{{ page_title }}</h1>
                 {% block page_subtitle %}<p></p>{% endblock %}
             </div>
             {% block header_actions %}{% endblock %}
@@ -99,12 +135,14 @@
         {% endblock %}
 
         {% block content %}{% endblock %}
-    </div>
+    </main>
 </div>
 {% endblock %}
 
 {% block body_end %}
 <script src="/static/js/common/common.js"></script>
+<script src="/static/js/common/toast.js"></script>
+<script src="/static/js/common/shell.js"></script>
 <script src="/static/js/common/confirm.js"></script>
 <script src="/static/js/common/pickers.js" defer></script>
 <script src="/static/js/common/table-sort.js"></script>

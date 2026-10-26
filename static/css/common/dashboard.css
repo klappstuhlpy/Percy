@@ -1,11 +1,5 @@
 /* Percy Bot Dashboard — matches the admin/account design language. */
 
-:root {
-    /* Height reserved for the sticky global top bar (see layout.css
-       .percy-topbar); the sidebar sizes itself against this. */
-    --dash-topbar-h: 3.5rem;
-}
-
 /* ── Cross-document view transitions ──────────────────────────────────────
    dashboard.css only loads on dashboard pages, so this scopes the transition
    to dashboard-internal navigation. The chrome (top bar + sidebar) carries a
@@ -32,6 +26,23 @@
     ::view-transition-new(root) { animation: none; }
 }
 
+.dash-h1-glyph { color: var(--branding); font-size: 0.8em; margin-right: 0.15rem; }
+
+/* Page header. The app shell (shell.css, loaded after this file) restyles it; the standalone
+   server picker (site/guilds.html) still relies on these. */
+.dashboard-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--box-border);
+    margin-bottom: 1.5rem;
+}
+.dashboard-header > div:first-child { min-width: 0; }
+.dashboard-header h1 { font-size: 1.5rem; font-weight: 700; }
+.dashboard-header p { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
+
 .dashboard-container {
     max-width: 1200px;
     margin: 2rem auto;
@@ -53,208 +64,6 @@
     .dash-rise { animation: none; }
 }
 
-.dash-h1-glyph { color: var(--branding); font-size: 0.8em; margin-right: 0.15rem; }
-
-/* ── Wide shell layout (sidebar + content) ───────────────────────────────
-   The dashboard reclaims the horizontal padding the global layout reserves
-   on `main` so guild management can use the full width of the viewport. The
-   :has() override keeps every other page (which doesn't render a shell)
-   untouched. */
-main.grid-item:has(.dashboard-shell),
-main.percy-main:has(.dashboard-shell) {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    max-width: none;
-    padding-top: 3rem;
-}
-
-.dashboard-shell {
-    display: grid;
-    grid-template-columns: 248px minmax(0, 1fr);
-    gap: 2rem;
-    width: 100%;
-    max-width: 1640px;
-    margin: 0 auto;
-    align-items: start;
-}
-
-.dashboard-content {
-    min-width: 0; /* let tables/charts shrink instead of overflowing the grid */
-    /* Guard against any page sub-element (e.g. the live player / eq canvas)
-       poking past the viewport, which lets mobile zoom out and reveals a blank
-       gap on the right. Inner scroll wrappers keep their own overflow-x: auto. */
-    overflow-x: hidden;
-}
-
-/* ── Sidebar ─────────────────────────────────────────────────────────── */
-
-.dash-sidebar {
-    position: sticky;
-    /* Stick exactly at the sidebar's natural resting offset (top bar + the
-       shell's 3rem top padding) so it's already pinned at scroll 0 and never
-       drifts up the first time you scroll. */
-    top: calc(var(--dash-topbar-h) + 3rem);
-    align-self: start;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    /* Only as tall as its content, but never taller than the visible area
-       (viewport minus the top bar and the shell's top padding) so it never
-       grows with the page or gets cropped -- when the nav does exceed that
-       cap, its inner content scrolls instead. */
-    max-height: calc(100dvh - var(--dash-topbar-h) - 3rem - 1.25rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    /* Reserve the scrollbar gutter so showing/hiding it never shifts the
-       layout -- one source of the on-load flicker. */
-    scrollbar-gutter: stable;
-    padding: 1rem;
-    border-radius: 0.75rem;
-    background: var(--box);
-    border: 1px solid var(--box-border);
-    /* Keep the sidebar visually static across same-site dashboard
-       navigations (see the @view-transition block) instead of repainting it. */
-    view-transition-name: dash-sidebar;
-    /* keep a margin to the footer separator */
-    margin-bottom: 1rem;
-}
-
-.dash-sidebar-back {
-    font-size: 0.76rem;
-    color: var(--text-muted);
-    text-decoration: none;
-    transition: color 0.15s;
-}
-.dash-sidebar-back:hover { color: var(--branding); }
-
-.dash-sidebar-guild {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-top: 0.75rem;
-    padding-bottom: 0.85rem;
-    border-bottom: 1px solid var(--box-border);
-}
-.dash-sidebar-guild-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.1rem;
-    height: 2.1rem;
-    flex-shrink: 0;
-    border-radius: 0.55rem;
-    background: var(--tui-bg);
-    border: 1px solid color-mix(in srgb, var(--branding) 40%, var(--box-border));
-    box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--branding) 80%, transparent);
-}
-.dash-sidebar-guild-mark .spark { color: var(--branding); font-size: 1rem; }
-.dash-sidebar-guild-text {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    min-width: 0;
-}
-.dash-sidebar-guild-name {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--foreground);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.dash-sidebar-guild-sub {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-}
-
-/* Mobile-only collapse toggle (hidden on desktop) */
-.dash-sidebar-toggle {
-    display: none;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 0.55rem 0.85rem;
-    font: inherit;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--foreground);
-    background: var(--box-shade);
-    border: 1px solid var(--box-border);
-    border-radius: 0.5rem;
-    cursor: pointer;
-}
-.dash-sidebar-toggle::after {
-    content: "\25BE";
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    transition: transform 0.2s;
-}
-.dash-sidebar-toggle[aria-expanded="true"]::after { transform: rotate(180deg); }
-
-.dash-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 1.1rem;
-}
-.dash-nav-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-}
-.dash-nav-heading {
-    font-size: 0.64rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--text-muted);
-    padding: 0 0.6rem 0.35rem;
-}
-.dash-nav-link {
-    position: relative;
-    display: block;
-    padding: 0.45rem 0.65rem;
-    border-radius: 0.45rem;
-    font-size: 0.84rem;
-    font-weight: 500;
-    color: var(--nav-link);
-    text-decoration: none;
-    border: 1px solid transparent;
-    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
-}
-.dash-nav-link:hover {
-    background: var(--box-shade);
-    color: var(--foreground);
-    transform: translateX(2px);
-}
-.dash-nav-link.active {
-    background: var(--branding-dim);
-    color: var(--branding);
-    border-color: color-mix(in srgb, var(--branding) 35%, transparent);
-    font-weight: 600;
-}
-.dash-nav-link.active::before {
-    content: "";
-    position: absolute;
-    left: -1px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 1.1rem;
-    border-radius: 0 3px 3px 0;
-    background: var(--branding);
-}
-/* Unread + pending count beside the Notifications link (notification_badge.js). */
-.dash-nav-badge { display: inline-block; min-width: 1.15rem; margin-left: .4rem; padding: 0 .35rem; border-radius: 999px;
-  background: #ed4245; color: #fff; font-size: .7rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
-.dash-nav-badge[hidden] { display: none; }
-.dash-nav-link-me {
-    margin-top: 0.25rem;
-    border-top: 1px solid var(--box-border);
-    padding-top: 0.65rem;
-}
 
 /* ── Page info / help callout (shared by feature pages) ──────────────── */
 
@@ -311,30 +120,6 @@ main.percy-main:has(.dashboard-shell) {
     left: 0;
     color: var(--branding);
     font-weight: 700;
-}
-
-.dashboard-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid var(--box-border);
-    margin-bottom: 1.5rem;
-}
-/* Let the title/intro block shrink so the compact Add button stays pinned to
-   the top-right corner instead of being pushed out on narrow screens. */
-.dashboard-header > div:first-child {
-    min-width: 0;
-}
-.dashboard-header h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-.dashboard-header p {
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    margin-top: 0.25rem;
 }
 
 .dashboard-back {
@@ -2507,32 +2292,6 @@ th.th-sortable[aria-sort="descending"]::after {
     font-size: 0.6rem;
     color: var(--text-muted);
     text-align: center;
-}
-
-/* ── Sidebar collapses to a stacked top bar on narrow viewports ──────── */
-@media (max-width: 960px) {
-    .dashboard-shell {
-        grid-template-columns: 1fr;
-        gap: 1.25rem;
-    }
-    .dash-sidebar {
-        position: static;
-        height: auto;
-        max-height: none;
-        top: auto;
-        overflow-y: visible;
-        scrollbar-gutter: auto;
-    }
-    .dash-sidebar-toggle { display: flex; }
-    /* Collapsed by default on mobile; the toggle adds .open to reveal it. */
-    .dash-sidebar .dash-nav { display: none; }
-    .dash-sidebar.open .dash-nav { display: flex; }
-    .dash-nav {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 1rem 1.5rem;
-    }
-    .dash-nav-group { flex: 1 1 180px; }
 }
 
 @media (max-width: 768px) {

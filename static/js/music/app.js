@@ -1022,7 +1022,7 @@
         const shelfBtn = e.target.closest('[data-shelf]');
         if (shelfBtn) { const sh = document.getElementById(shelfBtn.dataset.target || 'mapp-recents'); if (sh) sh.scrollBy({ left: +shelfBtn.dataset.shelf * sh.clientWidth * 0.8 }); return; }
         // Close popovers on outside click.
-        $$('details.mapp-picker[open], details.mapp-me[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+        $$('details.mapp-picker[open], details.shell-me[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
         const btn = e.target.closest('[data-act]');
         if (!btn || btn.disabled) return;
         const act = btn.dataset.act;
@@ -1088,7 +1088,7 @@
         if (img.closest('.mapp-art')) nextCover(img);
         else if (img.dataset.initial !== undefined) {
             const s = document.createElement('span');
-            s.className = 'mapp-me-fallback'; s.textContent = img.dataset.initial || '?';
+            s.className = 'shell-me-fallback'; s.textContent = img.dataset.initial || '?';
             img.replaceWith(s);
         }
     }, true);
@@ -1105,7 +1105,7 @@
         const t = e.target;
         if (e.key === 'Escape') {
             if (!wide.matches && root.classList.contains('is-rail-open')) openRail(false);
-            $$('details.mapp-picker[open], details.mapp-me[open]').forEach((d) => { d.open = false; });
+            $$('details.mapp-picker[open], details.shell-me[open]').forEach((d) => { d.open = false; });
             return;
         }
         if (t.closest && t.closest('input, textarea, select, [contenteditable="true"], .pc-dialog, dialog')) return;

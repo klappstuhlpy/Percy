@@ -1,0 +1,22 @@
+{# The right-hand end of the app top bar, shared by the server dashboard shell and the music
+   player: theme toggle + account menu. Included, so it renders against the page's own context
+   (`account`). Styling lives in static/css/common/shell.css. #}
+<button type="button" class="shell-ibtn" id="theme-toggle" aria-label="Toggle light / dark theme" title="Toggle light / dark theme"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-contrast"/></svg></button>
+<details class="shell-me">
+    <summary aria-label="Account menu">
+        {% match account %}
+        {% when Some with (a) %}
+        {% if a.has_discord() %}<img src="/account/discord/avatar" alt="" width="32" height="32" data-initial="{% if let Some(c) = a.name.chars().next() %}{{ c }}{% endif %}">{% else %}<span class="shell-me-fallback">{% if let Some(c) = a.name.chars().next() %}{{ c }}{% endif %}</span>{% endif %}
+        {% when None %}<span class="shell-me-fallback">?</span>
+        {% endmatch %}
+    </summary>
+    <div class="shell-pop shell-me-pop" role="menu">
+        {% match account %}{% when Some with (a) %}<p class="shell-pop-label">{{ a.name }}</p>{% when None %}{% endmatch %}
+        <a role="menuitem" href="/dashboard">My servers</a>
+        <a role="menuitem" href="/dashboard/music">Music player</a>
+        <a role="menuitem" href="/account">Account</a>
+        <a role="menuitem" href="/">Percy home</a>
+        <hr>
+        <a role="menuitem" href="/logout">Log out</a>
+    </div>
+</details>

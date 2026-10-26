@@ -115,7 +115,7 @@
 .mapp-dot.is-live { background: var(--m-live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--m-live) 25%, transparent); animation: mapp-pulse 2s ease-in-out infinite; }
 @keyframes mapp-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--m-live) 0%, transparent); } }
 
-.mapp-picker-pop, .mapp-me-pop {
+.mapp-picker-pop {
     position: absolute; top: calc(100% + var(--m-s2)); z-index: 40;
     min-width: 260px; max-height: min(420px, 70dvh); overflow: auto;
     padding: var(--m-s2); border-radius: var(--m-r);
@@ -173,20 +173,6 @@
 }
 .mapp-role[data-role="dj"], .mapp-role[data-role="manager"] { color: var(--m-accent); border-color: color-mix(in srgb, var(--m-accent) 40%, transparent); background: var(--m-accent-soft); }
 .mapp-role[data-role="listener"] { color: var(--m-live); border-color: color-mix(in srgb, var(--m-live) 35%, transparent); }
-.mapp-me { position: relative; }
-.mapp-me summary { list-style: none; cursor: pointer; display: block; width: 36px; height: 36px; border-radius: 50%; }
-.mapp-me summary::-webkit-details-marker { display: none; }
-.mapp-me summary img, .mapp-me-fallback {
-    display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
-    background: linear-gradient(135deg, var(--accent-pink), var(--accent-violet)); color: #fff; font-weight: 700;
-    box-shadow: 0 0 0 2px var(--m-bg), 0 0 0 3px var(--m-line); transition: box-shadow var(--m-ease);
-}
-.mapp-me summary:hover img, .mapp-me summary:hover .mapp-me-fallback { box-shadow: 0 0 0 2px var(--m-bg), 0 0 0 3px var(--m-accent); }
-.mapp-me-pop { right: 0; min-width: 200px; }
-.mapp-me-pop a { display: block; padding: 9px 10px; border-radius: var(--m-r-sm); text-decoration: none; font-weight: 600; }
-.mapp-me-pop a:hover { background: var(--m-hover); }
-.mapp-me-pop hr { border: 0; border-top: 1px solid var(--m-line); margin: 6px 0; }
-
 /* Generic icon button */
 .mapp-ibtn {
     position: relative; display: inline-grid; place-items: center; flex: none;
@@ -349,7 +335,7 @@
 /* base.css colours every `a:not(.button)`; the app's own links keep their own colours. */
 .mapp a.mapp-nav-link, .mapp a.mapp-nav-back, .mapp a.mapp-link { color: var(--m-muted); }
 .mapp a.mapp-nav-link:hover, .mapp a.mapp-nav-back:hover, .mapp a.mapp-nav-link.is-on, .mapp a.mapp-link:hover { color: var(--m-text); }
-.mapp a.mapp-btn, .mapp a.mapp-card, .mapp a.mapp-guild, .mapp a.mapp-picker-item, .mapp .mapp-me-pop a { color: var(--m-text); }
+.mapp a.mapp-btn, .mapp a.mapp-card, .mapp a.mapp-guild, .mapp a.mapp-picker-item { color: var(--m-text); }
 .mapp a.mapp-btn--accent { color: var(--m-accent-ink); }
 .mapp .mapp-search input, .mapp .mapp-search input:focus, .mapp .mapp-search input:focus-visible {
     border: 0; background: none; box-shadow: none; padding: 0; margin: 0; outline: none; border-radius: 0;

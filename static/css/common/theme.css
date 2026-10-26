@@ -27,7 +27,6 @@
 
 /* -- Headings ------------------------------------------------------------ */
 h1, h2, h3, h4,
-.dash-sidebar-guild-name,
 .section-header h2 {
     font-family: var(--font-display);
     font-weight: 700;
@@ -114,27 +113,3 @@ h1 { font-weight: 800; }
     background: var(--box-shade);
     border: 1px solid var(--box-border);
 }
-
-/* -- Dashboard sidebar --------------------------------------------------- */
-.dash-nav-link {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    min-height: 40px;
-    padding: 0.3rem 0.55rem;
-    border-radius: 10px;
-}
-.dash-nav-link .icon-tile {
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    --tile: var(--text-muted);
-    background: var(--box-shade);
-}
-.dash-nav-link:hover .icon-tile { --tile: var(--foreground); }
-.dash-nav-link.active .icon-tile {
-    --tile: #fff;
-    background: var(--branding);
-}
-.dash-nav-link.active::before { display: none; }
-.dash-nav-badge { margin-left: auto; }
