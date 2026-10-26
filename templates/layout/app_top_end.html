@@ -6,7 +6,7 @@
     <summary aria-label="Account menu">
         {% match account %}
         {% when Some with (a) %}
-        {% if a.has_discord() %}<img src="/account/discord/avatar" alt="" width="32" height="32" data-initial="{% if let Some(c) = a.name.chars().next() %}{{ c }}{% endif %}">{% else %}<span class="shell-me-fallback">{% if let Some(c) = a.name.chars().next() %}{{ c }}{% endif %}</span>{% endif %}
+        {% if a.has_discord() %}<img src="/account/discord/avatar" alt="" width="32" height="32" data-initial="{% if let Some(c) = a.name.chars().next() %}{{ c|upper }}{% endif %}">{% else %}<span class="shell-me-fallback">{% if let Some(c) = a.name.chars().next() %}{{ c|upper }}{% endif %}</span>{% endif %}
         {% when None %}<span class="shell-me-fallback">?</span>
         {% endmatch %}
     </summary>
@@ -16,6 +16,8 @@
         <a role="menuitem" href="/dashboard/music">Music player</a>
         <a role="menuitem" href="/account">Account</a>
         <a role="menuitem" href="/">Percy home</a>
+        <a role="menuitem" href="/privacy-policy">Privacy</a>
+        <a role="menuitem" href="/terms-of-service">Terms</a>
         <hr>
         <a role="menuitem" href="/logout">Log out</a>
     </div>

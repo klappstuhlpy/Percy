@@ -219,7 +219,7 @@ body:has(.unsaved-banner.visible) { --toast-bottom: 88px; }
 @media (max-width: 640px) { .app-canvas .unsaved-banner { flex-wrap: wrap; } }
 
 .app-canvas .toast {
-    bottom: var(--space-4); right: var(--space-4); border-radius: var(--radius-md);
+    bottom: var(--toast-bottom, var(--space-4)); right: var(--space-4); z-index: 9990; border-radius: var(--radius-md);
     background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
     font-size: 13px; font-weight: 600; box-shadow: var(--shadow-pop);
 }
@@ -237,3 +237,8 @@ body:has(.unsaved-banner.visible) { --toast-bottom: 88px; }
 /* Bare fieldsets used only to disable a group of controls draw no frame. */
 .app-canvas fieldset.notif-settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .md-body a.button { text-decoration: none; }
+
+/* ON/OFF pill on webhooks and autoresponders (markup/JS toggle .active). */
+.app-canvas .toggle-btn { min-width: 48px; padding: 3px 12px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-3); color: var(--text-muted); font-size: 12px; font-weight: 700; cursor: pointer; }
+.app-canvas .toggle-btn.active { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent-hover); }
+.app-canvas .toggle-btn:focus-visible { outline: none; box-shadow: var(--ring-focus); }

@@ -33,6 +33,10 @@
     --space-7: 48px;
     --space-8: 64px;
     --ring-focus: 0 0 0 2px var(--app-bg), 0 0 0 4px var(--accent);
+    --success-text: #4ade80;
+    --error-text: #f87171;
+    --warning-text: #fbbf24;
+    --info-text: #8aa4ff;
 }
 [data-theme="light"] {
     --app-bg: #f5f5f3;
@@ -48,6 +52,10 @@
     --accent-hover: #5d34b3;
     --accent-contrast: #ffffff;
     --shadow-pop: 0 16px 40px rgba(20, 20, 30, 0.14);
+    --success-text: #15803d;
+    --error-text: #b91c1c;
+    --warning-text: #a16207;
+    --info-text: #1d4ed8;
 }
 
 /* The canvas: a soft highlight at the top centre and a faint accent wash top-right. */

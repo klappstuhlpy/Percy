@@ -6,29 +6,6 @@
 /* Keeps its space while command_palette.js has not wired it up yet (or JS is off). */
 .cmdk-trigger--pending { visibility: hidden; }
 
-.cmdk-trigger {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    margin-top: 0.75rem;
-    padding: 0.5rem 0.7rem;
-    background: var(--form-input-background);
-    border: 1px solid var(--box-border);
-    border-radius: 0.6rem;
-    color: var(--text-muted);
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-.cmdk-trigger:hover {
-    border-color: var(--branding);
-    color: var(--foreground);
-}
-
-
-
 
 /* -- Overlay --------------------------------------------------------------- */
 .cmdk-overlay {

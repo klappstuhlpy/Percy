@@ -27,7 +27,7 @@
 
     {% if managed.is_empty() && public.is_empty() && add_percy.is_empty() %}
     <div class="empty empty--lg">
-        <span class="empty-ico" aria-hidden="true"><svg><use href="/static/icons/sprite.svg#i-music"/></svg></span>
+        <span class="empty-ico" aria-hidden="true"><svg><use href="/static/icons/sprite.svg#i-users"/></svg></span>
         <h2>No servers found</h2>
         <p>Add Percy to a server you manage, or join a server that already has Percy.</p>
         <div class="empty-acts">
@@ -110,7 +110,7 @@
             <h2>Add Percy</h2>
             {% if !add_percy.is_empty() %}<span class="chip">{{ add_percy.len() }}</span>{% endif %}
         </div>
-        <p class="pick-sub">Servers you manage where Percy isn't a member yet. Click to invite{% if add_percy.is_empty() %}, or use <strong>Add to a server</strong> above to pick any server{% endif %}.</p>
+        <p class="pick-sub">Servers you manage where Percy isn't a member yet. Click to invite{% if add_percy.is_empty() %}, or use <strong>Add Percy</strong> above to pick any server{% endif %}.</p>
         {% if add_percy.is_empty() %}
         <p class="pick-sub">Don't see a server you manage here? This list is built from Discord when you sign in — <a href="/auth/discord">re-link Discord</a> to refresh it.</p>
         {% else %}

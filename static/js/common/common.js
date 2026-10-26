@@ -42,17 +42,4 @@
             timer = setTimeout(dismiss, level === 'warning' || action ? 8000 : 3000);
         };
     }
-
-    // -- Sidebar collapse toggle (mobile) --------------------------------------
-    // The left sidebar is always visible on desktop; on narrow viewports it
-    // collapses behind a "Menu" button (.dash-sidebar-toggle) that flips the
-    // .open class on the sidebar.
-    const sidebar = document.getElementById('dash-sidebar');
-    const sidebarToggle = sidebar && sidebar.querySelector('.dash-sidebar-toggle');
-    if (sidebarToggle) {
-        sidebarToggle.addEventListener('click', function() {
-            const open = sidebar.classList.toggle('open');
-            sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        });
-    }
 })();

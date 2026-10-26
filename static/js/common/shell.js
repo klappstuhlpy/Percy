@@ -19,11 +19,17 @@
     if (collapseBtn) collapseBtn.addEventListener('click', function () { setCollapsed(!shell.classList.contains('is-collapsed')); });
 
     function setDrawer(on) {
+        var wasOpen = shell.classList.contains('is-drawer');
         shell.classList.toggle('is-drawer', on);
         if (burger) burger.setAttribute('aria-expanded', on ? 'true' : 'false');
+        if (on) { var first = shell.querySelector('.dash-nav-link'); if (first) first.focus(); }
+        else if (wasOpen && burger) burger.focus();
     }
     if (burger) burger.addEventListener('click', function () { setDrawer(!shell.classList.contains('is-drawer')); });
     if (scrim) scrim.addEventListener('click', function () { setDrawer(false); });
+
+    var nav = document.querySelector('.dash-sidebar');
+    if (nav) nav.addEventListener('click', function (e) { if (e.target.closest('.dash-nav-link')) setDrawer(false); });
 
     document.addEventListener('click', function (e) {
         document.querySelectorAll('details.shell-picker[open], details.shell-me[open]').forEach(function (d) {

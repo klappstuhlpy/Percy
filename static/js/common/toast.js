@@ -38,13 +38,20 @@
         x.appendChild(icon('x'));
         el.append(icon(ICONS[kind]), msg, x);
         var timer;
+        var ms = kind === 'error' ? 6500 : kind === 'warning' ? 8000 : 3800;
+        function arm() { clearTimeout(timer); timer = setTimeout(close, ms); }
         function close() {
             clearTimeout(timer);
             el.classList.add('is-leaving');
             setTimeout(function () { el.remove(); }, 200);
         }
         x.addEventListener('click', close);
-        timer = setTimeout(close, kind === 'error' ? 6500 : 3800);
+        arm();
+        // reading time: hovering or focusing the card holds it open
+        el.addEventListener('mouseenter', function () { clearTimeout(timer); });
+        el.addEventListener('mouseleave', arm);
+        el.addEventListener('focusin', function () { clearTimeout(timer); });
+        el.addEventListener('focusout', arm);
         box.appendChild(el);
         while (box.children.length > 4) box.firstElementChild.remove();
     }
