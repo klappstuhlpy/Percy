@@ -716,7 +716,7 @@ select.config-select[multiple] {
 /* -- Tab navigation -- */
 
 .config-tabs {
-    display: flex;
+    display: table;
     gap: 0;
     border-bottom: 1px solid var(--box-border);
     margin-bottom: 1.5rem;
