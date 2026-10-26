@@ -1,6 +1,7 @@
 """User-scoped endpoints (not guild-scoped) -- settings, history, data export."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import time
@@ -177,6 +178,9 @@ async def delete_personal_data(discord_id: int, bot: BotDep) -> dict:
 # ponytail: in-process per-user throttle on previews (a render is ~50 ms of CPU); move to a
 # shared limiter if the API ever runs as more than one process.
 _PREVIEW_INTERVAL = 0.5
+# A burst (the page's card plus the editor's preview) queues for its slot instead of failing;
+# only a backlog longer than this is refused.
+_PREVIEW_MAX_WAIT = 2.0
 _last_preview: dict[int, float] = {}
 
 
@@ -231,9 +235,12 @@ async def put_rank_card(discord_id: int, bot: BotDep, body: RankCardBody) -> dic
 async def preview_rank_card(discord_id: int, bot: BotDep, body: RankCardPreviewBody) -> Response:
     """Render the member's real card in a draft style, as PNG. Nothing is stored."""
     now = time.monotonic()
-    if now - _last_preview.get(discord_id, 0.0) < _PREVIEW_INTERVAL:
+    slot = max(now, _last_preview.get(discord_id, 0.0) + _PREVIEW_INTERVAL)
+    if slot - now > _PREVIEW_MAX_WAIT:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="previewing too fast")
-    _last_preview[discord_id] = now
+    _last_preview[discord_id] = slot
+    if slot > now:
+        await asyncio.sleep(slot - now)
 
     cog = _leveling(bot)
     member = _member(bot, body.guild_id, discord_id)
