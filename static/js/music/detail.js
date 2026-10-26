@@ -589,6 +589,8 @@
         }
         const act = b.dataset.d;
         if (act === 'more') { e.stopPropagation(); openMenu(b); return; }
+        // The player bar's playlist button goes straight to the playlist list (a second click closes it).
+        if (act === 'addpl') { e.stopPropagation(); if (menuFor === b) closeMenu(); else openMenu(b, 'playlists'); return; }
         if (menu) closeMenu();
         if (b.disabled) return;
         if (act === 'tab') {

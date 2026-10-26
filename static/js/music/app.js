@@ -291,7 +291,7 @@
         const t = np();
         if (!box || !changed('bar', t ? [t.title, t.author, t.artwork, t.uri, t.artist_url] : [hasGuild])) return;
         box.innerHTML = t
-            ? `${art(t.artwork, t.title, 'mapp-art--md')}<div class="mapp-bar-text"><p class="mapp-bar-title" title="${esc(t.title)}">${esc(t.title)}</p><p class="mapp-bar-sub">${authorHtml(t.author, t.artist_url)}</p></div>${likeBtn(t, ' data-np')}`
+            ? `${art(t.artwork, t.title, 'mapp-art--md')}<div class="mapp-bar-text"><p class="mapp-bar-title" title="${esc(t.title)}">${esc(t.title)}</p><p class="mapp-bar-sub">${authorHtml(t.author, t.artist_url)}</p></div>${likeBtn(t, ' data-np')}${t.uri ? `<button type="button" class="mapp-ibtn mapp-bar-addpl" data-d="addpl" data-np aria-haspopup="menu" aria-expanded="false" aria-label="Add ${esc(t.title)} to a playlist" title="Add to playlist">${ico('playlist')}</button>` : ''}`
             : `<span class="mapp-art mapp-art--md mapp-art--idle" aria-hidden="true">${ico('disc')}</span><div class="mapp-bar-text"><p class="mapp-bar-title">Nothing playing</p><p class="mapp-bar-sub">${hasGuild ? 'Pick a song to get started' : 'Pick a server first'}</p></div>`;
         box.classList.remove('is-swap'); void box.offsetWidth; box.classList.add('is-swap');
         document.title = t ? `${t.title} · ${t.author} | Percy Music` : 'Music | Percy';

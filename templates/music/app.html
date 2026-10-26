@@ -499,6 +499,7 @@
             {% call art(np.artwork, np.title, "mapp-art--md") %}
             <div class="mapp-bar-text"><p class="mapp-bar-title" title="{{ np.title }}">{{ np.title }}</p><p class="mapp-bar-sub">{{ np.author }}</p></div>
             <button type="button" class="mapp-ibtn mapp-like" data-act="like" data-np aria-pressed="false" aria-label="Like {{ np.title }}" title="Like">{% call icon("heart") %}</button>
+            {% if np.uri.is_some() %}<button type="button" class="mapp-ibtn mapp-bar-addpl" data-d="addpl" data-np aria-haspopup="menu" aria-expanded="false" aria-label="Add {{ np.title }} to a playlist" title="Add to playlist">{% call icon("playlist") %}</button>{% endif %}
             {% when None %}
             <span class="mapp-art mapp-art--md mapp-art--idle" aria-hidden="true">{% call icon("disc") %}</span>
             <div class="mapp-bar-text"><p class="mapp-bar-title">Nothing playing</p><p class="mapp-bar-sub">{% if selected.is_some() %}Pick a song to get started{% else %}Pick a server first{% endif %}</p></div>
