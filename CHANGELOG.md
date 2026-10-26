@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-26
+
+### Added
+- Music: an "Add to playlist" button next to the heart in the player bar.
+
 ## [0.17.0] - 2026-10-26
 
 ### Added
