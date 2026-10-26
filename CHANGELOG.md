@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-10-26
+
+### Added
+
+- Music: playlists can be created, renamed, given a custom cover and deleted from the dashboard, and songs can be added to or removed from any playlist.
+- Music: saved songs keep their artist and cover, so liked songs and playlists show them instead of a placeholder.
+
+### Changed
+
+- Music: search results, artist and album pages and lyrics are cached much longer, so the music app loads faster.
+
+### Fixed
+
+- Music: with looping on, Percy no longer stops and leaves voice when the last song in the queue ends.
+- Music: songs without synced lyrics no longer show an unrelated Genius page instead of lyrics.
+- Rank card previews on the dashboard no longer fail when two load at once.
+
 ## [2.15.0] - 2026-10-26
 
 ### Added
