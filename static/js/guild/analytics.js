@@ -11,7 +11,8 @@
     if (!el) return;
 
     const message = (msg) => { el.innerHTML = `<div class="chart-message">${msg}</div>`; };
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--branding').trim() || '#d97757';
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8351ed';
+    const faint = getComputedStyle(document.documentElement).getPropertyValue('--text-faint').trim() || '#7a7a82';
     const size = () => ({ width: Math.max(220, el.clientWidth - 4), height: 260 });
 
     let chart = null;
@@ -51,8 +52,8 @@
                 },
             ],
             axes: [
-                { stroke: '#71717a' },
-                { stroke: '#71717a', grid: { stroke: 'rgba(127,127,127,0.15)' } },
+                { stroke: faint },
+                { stroke: faint, grid: { stroke: 'rgba(127,127,127,0.15)' } },
             ],
         }, [xs, ys], el);
     }
