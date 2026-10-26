@@ -5,19 +5,19 @@
 {% block title %}Connect Discord | Percy{% endblock %}
 
 {% block css %}
-<link rel="stylesheet" href="/static/css/auth.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/md.css" type="text/css"/>
 {% endblock %}
 
 {% block body %}
-<div class="login-container">
-    <div class="login-card">
-        <div class="login-brand">
-            <span class="login-brand-mark">K</span>
-        </div>
-        <h1 class="login-title">Connect Discord</h1>
-        <p class="login-subtitle">Link your Discord account to access the bot dashboard and manage your servers.</p>
-
-        <a href="/auth/discord" class="button primary login-submit">Connect Discord</a>
+<article class="md-doc">
+    <header class="md-doc-head">
+        <span class="eyebrow">Dashboard</span>
+        <h1>Connect Discord</h1>
+    </header>
+    <div class="md-body">
+        <p>Link your Discord account to access the bot dashboard and manage your servers.</p>
+        <p><a href="/auth/discord" class="button primary">Connect Discord</a></p>
     </div>
-</div>
+</article>
 {% endblock %}

@@ -109,7 +109,7 @@
 
 .lb-col-rank { width: 3rem; text-align: center; }
 .lb-col-rank { color: var(--text-muted); font-weight: 700; }
-.lb-col-level, .lb-col-xp, .lb-col-total, .lb-col-cash, .lb-col-bank {
+.lb-table .lb-col-level, .lb-table .lb-col-xp, .lb-table .lb-col-total, .lb-table .lb-col-cash, .lb-table .lb-col-bank {
     text-align: right;
     white-space: nowrap;
 }
@@ -158,4 +158,16 @@
     .lb-vanity-input-row { flex-direction: column; align-items: stretch; }
     .lb-vanity-input-row input { max-width: none; }
     .lb-username { max-width: 120px; }
+}
+
+/* Ranking tables stay tables on a phone: the shared stacked-card table layout in base.css
+   would split a rank/name/score row into labelled lines. */
+@media (max-width: 768px) {
+    .lb-table-wrap .lb-table thead { display: table-header-group; }
+    .lb-table-wrap .lb-table tbody { display: table-row-group; }
+    .lb-table-wrap .lb-table tr { display: table-row; }
+    .lb-table-wrap .lb-table th, .lb-table-wrap .lb-table td { display: table-cell; padding: 0.5rem 0.4rem; }
+    .lb-table-wrap .lb-table td[data-th]::before { content: none; }
+    .lb-table-wrap .lb-table .lb-col-rank { width: 2rem; padding-inline: 0.25rem; }
+    .lb-table-wrap .lb-table .lb-col-xp, .lb-table-wrap .lb-table .lb-col-bank { display: none; }
 }

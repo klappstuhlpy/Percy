@@ -229,3 +229,11 @@ body:has(.unsaved-banner.visible) { --toast-bottom: 88px; }
 /* Focus rings on page-level interactive bits that had none. */
 .app-canvas .config-input:focus-visible, .app-canvas .config-select:focus-visible { outline: none; }
 .app-canvas summary:focus-visible, .app-canvas .quick-check:focus-within { outline: none; box-shadow: var(--ring-focus); }
+
+/* ── Member-detail stat tiles: fill the row, no trailing gap, long role names wrap ── */
+.app-canvas .config-section .user-stats-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 0; }
+.app-canvas .user-stats-grid .tile-value { font-size: 1.5rem; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; }
+
+/* Bare fieldsets used only to disable a group of controls draw no frame. */
+.app-canvas fieldset.notif-settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.md-body a.button { text-decoration: none; }
