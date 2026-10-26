@@ -770,25 +770,20 @@ pub async fn account_music_playlist_cover(
     }
 }
 
-/// `GET /account/music/covers/:cover_id` — an uploaded cover, for its owner only (covers are not
-/// moderated, so they are never public). The id changes with every upload, so it caches forever.
-pub async fn account_music_cover(
-    State(app): State<AppState>,
-    session: Session,
-    Path(cover_id): Path<String>,
-) -> Response {
+/// `GET /account/music/covers/:cover_id` — an uploaded cover. Served without a session so Discord
+/// can show it on `playlist show`: the id is 128 random bits, so a cover is only reachable by whoever
+/// was handed its link (like a Discord attachment link). Each upload gets a new id, so it caches forever.
+pub async fn account_music_cover(State(app): State<AppState>, Path(cover_id): Path<String>) -> Response {
     let not_found = || StatusCode::NOT_FOUND.into_response();
     if cover_id.len() != 32 || !cover_id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return not_found();
     }
     match crate::db::music_cover(&app.db, &cover_id).await {
-        Ok(Some((owner, content_type, data))) if owner == session.discord_user_id => (
+        Ok(Some((_owner, content_type, data))) => (
             [
                 (header::CONTENT_TYPE, content_type),
-                (
-                    header::CACHE_CONTROL,
-                    "private, max-age=31536000, immutable".to_string(),
-                ),
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable".to_string()),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
             ],
             data,
         )
