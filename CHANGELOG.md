@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-26
+
 ### Changed
 - The whole dashboard and the public pages share one new look: an app shell with a top bar and sidebar, a server picker as a card grid, restyled settings, data, account and catalogue pages, and toasts that distinguish success, info, warning and error. The light theme is supported everywhere.
 - Public leaderboards keep their table layout on phones.
