@@ -93,11 +93,105 @@ class EditModal(discord.ui.Modal, title="Edit Poll"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.interaction = interaction
+        # Acknowledge the submit; the command replies through its own interaction.
+        # Without this Discord reports "Something went wrong" on every successful edit.
+        await interaction.response.defer()
         self.stop()
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         await interaction.response.send_message("Something broke!", ephemeral=True)
         traceback.print_tb(error.__traceback__)
+
+
+def _vote_text(poll: Poll, index: int, *, prefix: str = "you voted") -> str:
+    option = poll.get_option(index)
+    content = option["content"] if option else "?"
+    return f"On the poll *{poll.question}* [`{poll.id}`], {prefix}:\n{poll.to_emoji(index)} - `{content}`"
+
+
+_OUTCOME_ERRORS: dict[str, str] = {
+    "missing": f"{Emojis.error} That poll or option no longer exists.",
+    "ended": f"{Emojis.error} This poll has already ended.",
+    "forbidden": f"{Emojis.error} You don't have the role required to vote on this poll.",
+    "novote": "You haven't voted on this poll.",
+}
+
+
+async def _get_cog(interaction: discord.Interaction) -> Polls:
+    cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore[attr-defined]  # interaction.client is Bot
+    if cog is None:
+        await interaction.response.send_message(
+            f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
+        )
+        raise AppBadArgument(f"{Emojis.error} Polls cog is not loaded")
+    return cog
+
+
+async def _load_poll(interaction: discord.Interaction, poll_id: int) -> Poll:
+    cog = await _get_cog(interaction)
+    assert interaction.guild is not None
+    poll = await cog.get_guild_poll(interaction.guild.id, poll_id)
+    if poll is None:
+        raise AppBadArgument(f"{Emojis.error} Poll was not found")
+    return poll
+
+
+async def _precheck_vote(poll: Poll, interaction: discord.Interaction, index: int) -> bool:
+    """Reject a vote early (before a reason modal opens) when it can't succeed.
+
+    ``Polls.submit_vote`` re-checks all of this under the poll lock; this only spares the
+    voter typing a reason for a vote that would be refused anyway.
+    """
+    error: str | None = None
+    if not poll.running:
+        error = _OUTCOME_ERRORS["ended"]
+    elif not poll.can_vote(interaction.user):
+        error = _OUTCOME_ERRORS["forbidden"]
+    elif (entry := poll.get_entry(interaction.user.id)) is not None and entry[1] == index:
+        error = _vote_text(poll, index)
+
+    if error is not None:
+        await interaction.response.send_message(error, ephemeral=True)
+        return False
+    return True
+
+
+async def _submit_vote(poll: Poll, interaction: discord.Interaction, index: int) -> None:
+    """Shared vote path of the option buttons and the legacy select."""
+    if interaction.message is None or interaction.guild is None:
+        return
+
+    option = poll.get_option(index)
+    if option is None:
+        await interaction.response.send_message(_OUTCOME_ERRORS["missing"], ephemeral=True)
+        return
+
+    responded = False
+    if poll.kwargs.get("with_reason"):
+        modal = PollReasonModal(poll, option, interaction.client)  # type: ignore[arg-type]
+        await interaction.response.send_modal(modal)
+        if await modal.wait():
+            await interaction.followup.send(
+                content=f"{Emojis.error} This poll requires you to submit a reason for your vote.", ephemeral=True
+            )
+            return
+        # The modal consumed the interaction response: refresh the card by direct edit.
+        responded = True
+
+    cog = await _get_cog(interaction)
+    fresh, outcome = await cog.submit_vote(interaction.guild.id, poll.id, interaction.user, index)
+    if fresh is None or outcome not in ("voted", "changed", "unchanged"):
+        send = interaction.followup.send if responded else interaction.response.send_message
+        await send(_OUTCOME_ERRORS.get(outcome, _OUTCOME_ERRORS["missing"]), ephemeral=True)
+        return
+
+    view = create_view(fresh)
+    if responded:
+        await interaction.message.edit(view=view)
+    else:
+        await interaction.response.edit_message(view=view)
+    prefix = "you changed your vote to" if outcome == "changed" else "you voted"
+    await interaction.followup.send(_vote_text(fresh, index, prefix=prefix), ephemeral=True)
 
 
 class PollClearVoteButton(
@@ -112,57 +206,20 @@ class PollClearVoteButton(
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> PollClearVoteButton:
-        cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore[attr-defined]  # interaction.client is Bot
-        if cog is None:
-            await interaction.response.send_message(
-                f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
-            )
-            raise AppBadArgument(f"{Emojis.error} Polls cog is not loaded")
-
-        assert interaction.guild is not None
-        poll = await cog.get_guild_poll(interaction.guild.id, int(match["id"]))
-        if poll is None:
-            raise AppBadArgument(f"{Emojis.error} Poll was not found")
-
-        return cls(poll)
+        return cls(await _load_poll(interaction, int(match["id"])))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-        if interaction.guild_id is None:
-            return False
-
-        if self.poll is None:
-            await interaction.response.send_message(f"{Emojis.error} Poll was not found.", ephemeral=True)
-            return False
-
-        entry = self.poll.get_entry(interaction.user.id)
-        if not entry:
-            await interaction.response.send_message(
-                f"You haven't voted on the poll *{self.poll.question}* [`{self.poll.id}`].", ephemeral=True
-            )
-            return False
-
-        return True
+        return interaction.guild_id is not None
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if interaction.message is None:
+        if interaction.guild is None:
             return
-
-        entry = self.poll.get_entry(interaction.user.id)
-        if entry is None:
+        cog = await _get_cog(interaction)
+        fresh, outcome = await cog.submit_vote(interaction.guild.id, self.poll.id, interaction.user, None)
+        if fresh is None or outcome != "cleared":
+            await interaction.response.send_message(_OUTCOME_ERRORS.get(outcome, _OUTCOME_ERRORS["missing"]), ephemeral=True)
             return
-
-        # ``entries`` holds ``PollEntry`` objects whose hash/eq are record-based, so
-        # discarding the plain ``(user, vote)`` tuple from ``get_entry`` would match
-        # nothing. Rebuild the set by user id instead (handles tuples and PollEntry).
-        self.poll.entries = {e for e in self.poll.entries if next(iter(e)) != interaction.user.id}
-
-        option = self.poll.get_option(entry[1])
-        if option is not None:
-            option["votes"] = max(0, option["votes"] - 1)
-
-        self.poll = await self.poll.edit(options=self.poll.options, votes=len(self.poll.entries))
-
-        await interaction.response.edit_message(view=create_view(self.poll))
+        await interaction.response.edit_message(view=create_view(fresh))
 
 
 class PollInfoButton(
@@ -179,29 +236,10 @@ class PollInfoButton(
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> PollInfoButton:
-        cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore[attr-defined]  # interaction.client is Bot
-        if cog is None:
-            await interaction.response.send_message(
-                f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
-            )
-            raise AppBadArgument(f"{Emojis.error} Polls cog is not loaded")
-
-        assert interaction.guild is not None
-        poll = await cog.get_guild_poll(interaction.guild.id, int(match["id"]))
-        if poll is None:
-            raise AppBadArgument(f"{Emojis.error} Poll was not found")
-
-        return cls(poll)
+        return cls(await _load_poll(interaction, int(match["id"])))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-        if interaction.guild_id is None:
-            return False
-
-        if self.poll is None:
-            await interaction.response.send_message(f"{Emojis.error} Poll was not found.", ephemeral=True)
-            return False
-
-        return True
+        return interaction.guild_id is not None
 
     async def callback(self, interaction: discord.Interaction) -> None:
         embed = discord.Embed(
@@ -212,12 +250,13 @@ class PollInfoButton(
         value = [field["value"] for field in self.poll.to_fields(extras=False)]
         embed.add_field(name="Votes", value="\n".join(value))
 
-        vote = next((option for (user, option) in self.poll.entries if user == interaction.user.id), None)
-        if vote:
-            option = next((i for i in self.poll.options if i["index"] == vote), None)
-            text = f"You've voted: {self.poll.to_emoji(option['index'])} *{option['content']}*" if option else "You've voted."  # type: ignore[index]
+        entry = self.poll.get_entry(interaction.user.id)
+        # ``is not None``: option A has index 0, which a truthiness check reads as "no vote".
+        if entry is not None:
+            option = self.poll.get_option(entry[1])
+            text = f"You've voted: {self.poll.to_emoji(option['index'])} *{option['content']}*" if option else "You've voted."
         else:
-            text = "You haven't voted yet." if self.poll.kwargs.get("running") is True else "You didn't vote."
+            text = "You haven't voted yet." if self.poll.running else "You didn't vote."
 
         embed.add_field(name="Your Vote", value=text, inline=False)
 
@@ -239,81 +278,23 @@ class PollEnterButton(
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> PollEnterButton:
-        cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore[attr-defined]  # interaction.client is Bot
-        if cog is None:
-            await interaction.response.send_message(
-                f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
-            )
-            raise AppBadArgument(f"{Emojis.error} Polls cog is not loaded")
-
-        assert interaction.guild is not None
-        poll = await cog.get_guild_poll(interaction.guild.id, int(match["id"]))
-        if poll is None:
-            raise AppBadArgument(f"{Emojis.error} Poll was not found")
-
-        return cls(poll, int(match["index"]))
+        return cls(await _load_poll(interaction, int(match["id"])), int(match["index"]))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
-
-        if self.poll is None:
-            await interaction.response.send_message(f"{Emojis.error} Poll was not found.", ephemeral=True)
-            return False
-
-        entry = self.poll.get_entry(interaction.user.id)
-        if entry:
-            vote = self.poll.get_option(entry[1])
-            await interaction.response.send_message(
-                f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-                f"{self.poll.to_emoji(vote['index'])} - `{vote['content']}`",  # type: ignore[index]
-                ephemeral=True,
-            )
-            return False
-
-        return True
+        return await _precheck_vote(self.poll, interaction, self.index)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if interaction.message is None:
-            return
-
-        option = self.poll.get_option(self.index)
-        if option is None:
-            return
-        if self.poll.kwargs.get("with_reason"):
-            modal = PollReasonModal(self.poll, option, interaction.client)  # type: ignore
-            await interaction.response.send_modal(modal)
-            if await modal.wait():
-                await interaction.followup.send(
-                    content=f"{Emojis.error} This poll requires you to submit a reason for your vote.", ephemeral=True
-                )
-                return
-            # The modal already consumed the interaction response, so refresh the
-            # poll card with a direct message edit rather than via the interaction.
-            self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
-            reason_options: list[VoteOption] = self.poll.options.copy()
-            reason_options[option["index"]]["votes"] += 1
-            self.poll = await self.poll.edit(options=reason_options, votes=len(self.poll.entries))
-            await interaction.message.edit(view=create_view(self.poll))
-            return
-
-        self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
-        options: list[VoteOption] = self.poll.options.copy()
-        options[option["index"]]["votes"] += 1
-        self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
-
-        await interaction.response.edit_message(view=create_view(self.poll))
-        await interaction.followup.send(
-            f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-            f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
-            ephemeral=True,
-        )
+        await _submit_vote(self.poll, interaction, self.index)
 
 
 class PollEnterSelect(
     discord.ui.DynamicItem[discord.ui.Select],
     template=r"poll:select:(?P<id>[0-9]+)",
 ):
+    """Legacy vote select -- no longer rendered, kept so old poll messages still work."""
+
     def __init__(self, poll: Poll) -> None:
         self.poll: Poll = poll
         super().__init__(
@@ -332,75 +313,15 @@ class PollEnterSelect(
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> PollEnterSelect:
-        cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore
-        if cog is None:
-            await interaction.response.send_message(
-                f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
-            )
-            raise AppBadArgument(f"{Emojis.error} Polls cog is not loaded")
-
-        assert interaction.guild is not None
-        poll = await cog.get_guild_poll(interaction.guild.id, int(match["id"]))
-        if poll is None:
-            raise AppBadArgument(f"{Emojis.error} Poll was not found")
-
-        return cls(poll)
+        return cls(await _load_poll(interaction, int(match["id"])))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
-
-        if self.poll is None:
-            await interaction.response.send_message(f"{Emojis.error} Poll was not found.", ephemeral=True)
-            return False
-
-        vote = next((option for (user, option) in self.poll.entries if user == interaction.user.id), None)
-        if vote:
-            option = next((i for i in self.poll.options if i["index"] == vote), None)
-            await interaction.response.send_message(
-                f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-                f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
-                ephemeral=True,
-            )
-            return False
-
-        return True
+        return await _precheck_vote(self.poll, interaction, int(self.item.values[0]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if interaction.message is None:
-            return
-
-        option = self.poll.get_option(int(self.item.values[0]))
-        if option is None:
-            return
-        if self.poll.kwargs.get("with_reason"):
-            modal = PollReasonModal(self.poll, option, interaction.client)  # type: ignore
-            await interaction.response.send_modal(modal)
-            if await modal.wait():
-                await interaction.followup.send(
-                    content=f"{Emojis.error} This poll requires you to submit a reason for your vote.", ephemeral=True
-                )
-                return
-            # The modal already consumed the interaction response, so refresh the
-            # poll card with a direct message edit rather than via the interaction.
-            self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
-            reason_options: list[VoteOption] = self.poll.options.copy()
-            reason_options[option["index"]]["votes"] += 1
-            self.poll = await self.poll.edit(options=reason_options, votes=len(self.poll.entries))
-            await interaction.message.edit(view=create_view(self.poll))
-            return
-
-        self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
-        options: list[VoteOption] = self.poll.options.copy()
-        options[option["index"]]["votes"] += 1
-        self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
-
-        await interaction.response.edit_message(view=create_view(self.poll))
-        await interaction.followup.send(
-            f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-            f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
-            ephemeral=True,
-        )
+        await _submit_vote(self.poll, interaction, int(self.item.values[0]))
 
 
 class PollRolePingButton(
@@ -428,17 +349,34 @@ class PollRolePingButton(
         return interaction.guild_id is not None
 
     async def callback(self, interaction: discord.Interaction) -> Any:
-        assert isinstance(interaction.user, discord.Member)
+        assert isinstance(interaction.user, discord.Member) and interaction.guild is not None
+        # The role id rides in the custom_id; only ever toggle the role currently configured
+        # as the poll ping role, never an arbitrary id (or a role the server since changed).
+        config = await interaction.client.db.get_guild_config(interaction.guild.id)  # type: ignore[attr-defined]
+        if config is None or config.poll_ping_role_id != self.role_id:
+            await interaction.response.send_message(
+                f"{Emojis.error} This role is no longer the poll notification role.", ephemeral=True
+            )
+            return
+
         role = discord.Object(id=self.role_id)
-        if any(r.id == self.role_id for r in interaction.user.roles):
-            await interaction.user.remove_roles(role)
+        try:
+            await self._toggle(interaction, interaction.user, role)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                f"{Emojis.error} I'm not allowed to manage that role. Please tell a moderator.", ephemeral=True
+            )
+
+    async def _toggle(self, interaction: discord.Interaction, member: discord.Member, role: discord.Object) -> None:
+        if any(r.id == self.role_id for r in member.roles):
+            await member.remove_roles(role)
             await interaction.response.send_message(
                 f"{Emojis.success} Successfully **removed** from you these roles: "
                 f"<@&{self.role_id}>. Click again to re-add.",
                 ephemeral=True,
             )
         else:
-            await interaction.user.add_roles(role)
+            await member.add_roles(role)
             await interaction.response.send_message(
                 f"{Emojis.success} Successfully **added** you the roles: <@&{self.role_id}>. Click again to remove.",
                 ephemeral=True,

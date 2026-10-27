@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from app.core import Bot, Cog, ConfirmationView, Context, Flags, LayoutView, flag, store_true
 from app.core.models import AppBadArgument, BadArgument, PermissionTemplate, cooldown, describe, group
+from app.core.pagination import BasePaginatorV2
 from app.database import BaseRecord
 from app.services import TagFinder
 from app.utils import (
@@ -34,6 +35,30 @@ if TYPE_CHECKING:
     from discord.app_commands import Choice
 
 
+# Tag content is user-authored and only `clean_content`-ed on the prefix path (modals skip it), so every
+# send of it must refuse to ping: no @everyone/@here, no roles, no users. Replying still pings the replied user.
+TAG_MENTIONS = discord.AllowedMentions(everyone=False, roles=False, users=False, replied_user=True)
+# Meta cards (info/stats/lists) render owners as mentions purely for display.
+NO_MENTIONS = discord.AllowedMentions.none()
+CONTENT_LIMIT = 2000
+PENDING_OWNER = -1  # owner_id while a transfer request awaits the recipient
+ALIASES_SHOWN = 12  # keeps the info card under the 4000-char CV2 text cap even with fully-escaped 100-char names
+
+
+def _header(text: str, thumbnail: str | None) -> discord.ui.Item[Any]:
+    """A card heading, with the thumbnail beside it only when there is one (an empty URL is a 400)."""
+    if thumbnail:
+        return discord.ui.Section(text, accessory=discord.ui.Thumbnail(thumbnail))
+    return discord.ui.TextDisplay(text)
+
+
+def content_payload(content: str, *, filename: str = "tag.txt") -> dict[str, Any]:
+    """Send kwargs for tag content: plain text when it fits, a text file when it does not (e.g. escaped raw output)."""
+    if len(content) <= CONTENT_LIMIT:
+        return {"content": content, "allowed_mentions": TAG_MENTIONS}
+    return {"file": discord.File(io.BytesIO(content.encode("utf-8")), filename), "allowed_mentions": TAG_MENTIONS}
+
+
 # region Converters & Flags
 
 
@@ -44,7 +69,7 @@ class TagPageEntry(BaseRecord, table="tags", pk="id"):
     __slots__ = ("id", "name")
 
     def __str__(self) -> str:
-        return f"{self.name} [`{self.id}`]"
+        return f"{discord.utils.escape_markdown(self.name)} [`{self.id}`]"
 
 
 class TagNameOrID(commands.clean_content):
@@ -60,7 +85,7 @@ class TagNameOrID(commands.clean_content):
         lower = converted.lower().strip()
 
         if not lower:
-            raise BadArgument("Please enter a valid tag name" + " or id." if self.with_id else ".")
+            raise BadArgument("Please enter a valid tag name" + (" or id." if self.with_id else "."))
 
         if len(lower) > 100:
             raise BadArgument(f"Tag names must be 100 characters or less. (You have *{len(lower)}* characters)")
@@ -162,15 +187,15 @@ class TagInfoView(TagLayoutView):
         container = self._make_container()
         tag = self.tag
 
-        container.add_item(discord.ui.Section(
-            f"## {tag.name}\n-# Tag Information",
-            accessory=discord.ui.Thumbnail(get_asset_url(self.ctx.guild) or "")
+        container.add_item(_header(
+            f"## {discord.utils.escape_markdown(tag.name)}\n-# Tag Information", get_asset_url(self.ctx.guild)
         ))
 
         container.add_item(discord.ui.Separator())
 
         fields: list[str] = []
-        fields.append(f"**Owner** — <@{tag.owner_id}>")
+        owner = "*Pending transfer*" if tag.owner_id == -1 else f"<@{tag.owner_id}>"
+        fields.append(f"**Owner** — {owner}")
         uses_line = f"**Uses** — {tag.uses}"
         if self._rank and self._rank in (1, 2, 3):
             uses_line += f" • **#{self._rank}** {medal_emoji(self._rank - 1)}"
@@ -183,9 +208,12 @@ class TagInfoView(TagLayoutView):
         if tag.aliases:
             container.add_item(discord.ui.Separator())
             aliases_text = "\n".join(
-                f"• **{alias.name}** [`{alias.id}`] — {discord.utils.format_dt(alias.created_at.replace(tzinfo=datetime.UTC), 'D')}"
-                for alias in tag.aliases
+                f"• **{discord.utils.escape_markdown(alias.name)}** [`{alias.id}`] — "
+                f"{discord.utils.format_dt(alias.created_at.replace(tzinfo=datetime.UTC), 'D')}"
+                for alias in tag.aliases[:ALIASES_SHOWN]
             )
+            if len(tag.aliases) > ALIASES_SHOWN:
+                aliases_text += f"\n-# … and {len(tag.aliases) - ALIASES_SHOWN} more"
             container.add_item(discord.ui.TextDisplay(
                 f"### Aliases ({len(tag.aliases)})\n{aliases_text}"
             ))
@@ -207,10 +235,7 @@ class TagInfoView(TagLayoutView):
         self.add_item(container)
 
     async def _view_content(self, interaction: discord.Interaction) -> None:
-        content = self.tag.content
-        if len(content) > 2000:
-            content = content[:1997] + "…"
-        await interaction.response.send_message(content, ephemeral=True)
+        await interaction.response.send_message(**content_payload(self.tag.content), ephemeral=True)
 
     async def _edit_tag(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.tag.owner_id:
@@ -239,20 +264,27 @@ class TagInfoView(TagLayoutView):
             )
             return
 
-        confirm = ConfirmationView(interaction.user, delete_after=True, timeout=60.0, content="Are you sure you want to delete this tag? This cannot be undone.")
-        confirm.message = await interaction.response.send_message(view=confirm)
+        confirm = ConfirmationView(
+            interaction.user, delete_after=True, timeout=60.0,
+            content="Are you sure you want to delete this tag? This cannot be undone.",
+        )
+        await interaction.response.send_message(view=confirm, ephemeral=True)
+        confirm.message = await interaction.original_response()
         await confirm.wait()
         if not confirm.value:
             return
 
         await self.tag.delete()
+        # Replace the info card itself so its Edit/Delete buttons can't act on a deleted tag.
         self.clear_items()
         container = discord.ui.Container(accent_colour=helpers.Colour.success_accent())
         container.add_item(discord.ui.TextDisplay(
-            f"{Emojis.success} Tag **{self.tag.name}** [`{self.tag.id}`] has been deleted."
+            f"{Emojis.success} Tag **{discord.utils.escape_markdown(self.tag.name)}** [`{self.tag.id}`] has been deleted."
         ))
         self.add_item(container)
-        await interaction.followup.send(view=self, ephemeral=True)
+        if interaction.message is not None:
+            with contextlib.suppress(discord.HTTPException):
+                await interaction.message.edit(view=self, allowed_mentions=NO_MENTIONS)
         self.stop()
 
 
@@ -311,10 +343,7 @@ class TagSuggestView(TagLayoutView):
             )
             return
 
-        content = tag.content
-        if len(content) > 2000:
-            content = content[:1997] + "…"
-        await interaction.response.send_message(content)
+        await interaction.response.send_message(**content_payload(tag.content))
         if interaction.message:
             with contextlib.suppress(discord.HTTPException):
                 await interaction.message.delete()
@@ -322,126 +351,23 @@ class TagSuggestView(TagLayoutView):
         self.stop()
 
 
-class TagListView(TagLayoutView):
-    """Paginated CV2 view for tag list and search results."""
+class TagListPaginator(BasePaginatorV2[asyncpg.Record]):
+    """Paginated CV2 card for tag list and search results (``title``/``description``/``sort`` ride in ``extras``)."""
 
-    PER_PAGE = 15
+    async def format_page(self, entries: list[asyncpg.Record], /) -> list[discord.ui.Item[Any]]:
+        header = f"## {self.extras.get('title', 'Tags')}"
+        if description := self.extras.get("description"):
+            header += f"\n-# {description}"
+        lines = "\n".join(
+            f"`{i}.` {TagPageEntry(record=row)}" for i, row in enumerate(entries, self.numerate_start)
+        )
+        return [discord.ui.TextDisplay(header), discord.ui.Separator(), discord.ui.TextDisplay(lines or "*No tags.*")]
 
-    def __init__(
-        self,
-        entries: list[asyncpg.Record],
-        *,
-        ctx: Context,
-        title: str = "Tags",
-        description: str = "",
-        sort: str = "name",
-    ) -> None:
-        super().__init__(members=ctx.author)
-        self.entries = entries
-        self.ctx = ctx
-        self._title = title
-        self._description = description
-        self._sort = sort
-        self._page = 0
-        self._total_pages = max(1, (len(entries) + self.PER_PAGE - 1) // self.PER_PAGE)
-        self._build_page()
-
-    def _build_page(self) -> None:
-        self.clear_items()
-        container = self._make_container()
-
-        header = f"## {self._title}"
-        if self._description:
-            header += f"\n-# {self._description}"
-        container.add_item(discord.ui.TextDisplay(header))
-        container.add_item(discord.ui.Separator())
-
-        start = self._page * self.PER_PAGE
-        end = start + self.PER_PAGE
-        page_entries = self.entries[start:end]
-
-        lines = []
-        for i, row in enumerate(page_entries, start + 1):
-            entry = TagPageEntry(record=row)
-            lines.append(f"`{i}.` {entry}")
-        container.add_item(discord.ui.TextDisplay("\n".join(lines)))
-
-        container.add_item(discord.ui.Separator())
-
-        footer = f"-# Page {self._page + 1}/{self._total_pages} • {pluralize(len(self.entries)):entry|entries} • Sorted by: {self._sort}"
-        container.add_item(discord.ui.TextDisplay(footer))
-
-        if self._total_pages > 1:
-            prev_btn = discord.ui.Button(
-                label="◀",
-                style=discord.ButtonStyle.secondary,
-                disabled=self._page == 0,
-            )
-            prev_btn.callback = self._prev
-
-            page_btn = discord.ui.Button(
-                label=f"{self._page + 1}/{self._total_pages}",
-                style=discord.ButtonStyle.secondary,
-                disabled=True,
-            )
-
-            next_btn = discord.ui.Button(
-                label="▶",
-                style=discord.ButtonStyle.secondary,
-                disabled=self._page >= self._total_pages - 1,
-            )
-            next_btn.callback = self._next
-
-            search_btn = discord.ui.Button(
-                label="Jump",
-                style=discord.ButtonStyle.primary,
-            )
-            search_btn.callback = self._jump
-
-            container.add_item(discord.ui.ActionRow(prev_btn, page_btn, next_btn, search_btn))
-
-        self.add_item(container)
-
-    async def _prev(self, interaction: discord.Interaction) -> None:
-        self._page = max(0, self._page - 1)
-        self._build_page()
-        await interaction.response.edit_message(view=self)
-
-    async def _next(self, interaction: discord.Interaction) -> None:
-        self._page = min(self._total_pages - 1, self._page + 1)
-        self._build_page()
-        await interaction.response.edit_message(view=self)
-
-    async def _jump(self, interaction: discord.Interaction) -> None:
-        modal = _JumpToPageModal(self._total_pages)
-        await interaction.response.send_modal(modal)
-        if await modal.wait():
-            return
-        self._page = modal.page
-        self._build_page()
-        await modal.interaction.response.edit_message(view=self)
-
-
-class _JumpToPageModal(discord.ui.Modal, title="Jump to Page"):
-    page_number = discord.ui.TextInput(label="Page Number", style=discord.TextStyle.short)
-
-    def __init__(self, total: int) -> None:
-        super().__init__(timeout=30)
-        self._total = total
-        self.page_number.placeholder = f"1 – {total}"
-        self.page: int = 0
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        value = self.page_number.value
-        if not value.isdigit() or not (1 <= int(value) <= self._total):
-            await interaction.response.send_message(
-                f"{Emojis.error} Enter a number between 1 and {self._total}.", ephemeral=True
-            )
-            self.stop()
-            return
-        self.page = int(value) - 1
-        self.interaction = interaction
-        self.stop()
+    def footer_items(self) -> list[discord.ui.Item[Any]]:
+        return [discord.ui.TextDisplay(
+            f"-# Page {self.current_page}/{self.total_pages} \N{BULLET} "
+            f"{pluralize(len(self.entries)):entry|entries} \N{BULLET} Sorted by: {self.extras.get('sort', 'name')}"
+        )]
 
 
 class TagGuildStatsView(TagLayoutView):
@@ -465,9 +391,8 @@ class TagGuildStatsView(TagLayoutView):
         guild = ctx.guild
         assert guild is not None
 
-        container.add_item(discord.ui.Section(
-            f"## Tag Statistics\n-# {guild.name}",
-            accessory=discord.ui.Thumbnail(get_asset_url(guild) or "")
+        container.add_item(_header(
+            f"## Tag Statistics\n-# {discord.utils.escape_markdown(guild.name)}", get_asset_url(guild)
         ))
 
         container.add_item(discord.ui.Separator())
@@ -482,7 +407,7 @@ class TagGuildStatsView(TagLayoutView):
         if most_used:
             container.add_item(discord.ui.Separator())
             most_used_text = "\n".join(
-                f"{medal_emoji(i)} **{record['name']}** — {record['uses']} uses"
+                f"{medal_emoji(i)} **{discord.utils.escape_markdown(record['name'])}** — {record['uses']} uses"
                 for i, record in enumerate(most_used)
             )
             container.add_item(discord.ui.TextDisplay(f"### Most Used Tags\n{most_used_text}"))
@@ -523,9 +448,8 @@ class TagMemberStatsView(TagLayoutView):
 
         container = self._make_container()
 
-        container.add_item(discord.ui.Section(
-            f"## {member.display_name}\n-# Tag Statistics",
-            accessory=discord.ui.Thumbnail(member.display_avatar.url)
+        container.add_item(_header(
+            f"## {discord.utils.escape_markdown(member.display_name)}\n-# Tag Statistics", member.display_avatar.url
         ))
 
         container.add_item(discord.ui.Separator())
@@ -540,7 +464,7 @@ class TagMemberStatsView(TagLayoutView):
         if top_tags:
             container.add_item(discord.ui.Separator())
             top_text = "\n".join(
-                f"{medal_emoji(i)} **{record['name']}** — {record['uses']} uses"
+                f"{medal_emoji(i)} **{discord.utils.escape_markdown(record['name'])}** — {record['uses']} uses"
                 for i, record in enumerate(top_tags)
             )
             container.add_item(discord.ui.TextDisplay(f"### Top Tags\n{top_text}"))
@@ -667,13 +591,13 @@ class TagTransferConfirmButton(
 
         tag_id = int(match["tag_id"])
         from_id = int(match["from_id"])
-        tag = await cog.get_tag(tag_id, owner_id=from_id)
+        tag = await cog.get_tag(tag_id, owner_id=PENDING_OWNER, only_parent=True)
         if tag is None:
             if interaction.message is not None:
                 await interaction.message.delete()
             raise AppBadArgument(f"{Emojis.error} Tag was not found")
 
-        if not isinstance(tag, Tag) or tag.owner_id != -1:
+        if not isinstance(tag, Tag) or tag.owner_id != PENDING_OWNER:
             if interaction.message is not None:
                 await interaction.message.delete()
             raise AppBadArgument(f"{Emojis.error} Tag is not pending for transfer.")
@@ -687,7 +611,7 @@ class TagTransferConfirmButton(
         return True
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        assert isinstance(interaction.user, discord.Member)
+        # The request lives in DMs, so the user is a plain ``discord.User`` here — never assert Member.
         await self.tag.transfer(interaction.user, only_parent=True)
         if interaction.message is not None:
             await interaction.message.delete()
@@ -720,13 +644,13 @@ class TagTransferDeclineButton(
 
         tag_id = int(match["tag_id"])
         from_id = int(match["from_id"])
-        tag = await cog.get_tag(tag_id, owner_id=from_id)
+        tag = await cog.get_tag(tag_id, owner_id=PENDING_OWNER, only_parent=True)
         if tag is None:
             if interaction.message is not None:
                 await interaction.message.delete()
             raise AppBadArgument(f"{Emojis.error} Tag was not found")
 
-        if not isinstance(tag, Tag) or tag.owner_id != -1:
+        if not isinstance(tag, Tag) or tag.owner_id != PENDING_OWNER:
             if interaction.message is not None:
                 await interaction.message.delete()
             raise AppBadArgument(f"{Emojis.error} Tag is not pending for transfer.")
@@ -797,6 +721,12 @@ class Tag(BaseRecord, table="tags", pk="id"):
         connection: asyncpg.Connection | None = None,
     ) -> Tag:
         try:
+            if "name" in values and values["name"] != self.name:
+                # The canonical tag_lookup row carries the name too; renaming only `tags` would leave the
+                # old name resolving and surface it as a phantom alias.
+                async with self.bot.db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
+                    await self.bot.db.tags.rename_lookup(self.id, self.name, values["name"], connection=conn)
+                    return await super()._update(key, values, connection=conn)
             return await super()._update(key, values, connection=connection)
         except asyncpg.UniqueViolationError:
             raise BadArgument("A Tag with this name already exists.", "name_or_id")
@@ -811,7 +741,7 @@ class Tag(BaseRecord, table="tags", pk="id"):
     async def delete(self) -> None:
         await self.bot.db.tags.delete_tag(self.id)
 
-    async def transfer(self, to: discord.Member, only_parent: bool = False) -> None:
+    async def transfer(self, to: discord.abc.Snowflake, only_parent: bool = False) -> None:
         async with self.bot.db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
             await self.update(owner_id=to.id, connection=conn)  # type: ignore[arg-type]
             if not only_parent:
@@ -835,7 +765,7 @@ class AliasTag(BaseRecord, table="tag_lookup", pk="id"):
     def choice_text(self) -> str:
         return f"[{self.id}] {self.name}"
 
-    async def transfer(self, to: discord.Member, /, *, connection: asyncpg.Connection | None = None) -> None:
+    async def transfer(self, to: discord.abc.Snowflake, /, *, connection: asyncpg.Connection | None = None) -> None:
         db = self.parent.bot.db if self.parent else connection
         async with db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
             await db.tags.transfer_alias(self.id, to.id, connection=conn)  # type: ignore[union-attr]
@@ -904,11 +834,15 @@ class Tags(Cog):
         record = await repo.get_tag_record(name_or_id, owner_id=owner_id, location_id=location_id)
         parent = Tag(bot=self.bot, record=record) if record else None
 
-        if not parent:
-            record = await repo.get_parent_record_via_alias(name_or_id)
+        # exact_match wants the row that owns *this* name, so an alias must come back as the alias, not its parent.
+        if not parent and not exact_match:
+            record = await repo.get_parent_record_via_alias(name_or_id, owner_id=owner_id, location_id=location_id)
             parent = Tag(bot=self.bot, record=record) if record else None
 
-        if parent and not exact_match:
+        if parent and exact_match:
+            return parent
+
+        if parent:
             if not only_parent:
                 aliases = await repo.get_alias_records(parent.id, parent.name, owner_id=owner_id, location_id=location_id)
                 parent.aliases = [AliasTag(parent=parent, record=alias) for alias in aliases]
@@ -944,15 +878,10 @@ class Tags(Cog):
         if not result:
             raise BadArgument(f"No Tag with the name or ID `{name_or_id}` found.", "name_or_id")
 
-        tag: Tag = result  # type: ignore
-        content = tag.raw_content if escape_markdown else tag.content
-        await ctx.send(content, reference=ctx.replied_reference)
-
-        _aliases = getattr(tag, "aliases", None)
-        updated = await tag.add(uses=1)
-        tag = updated
-        if _aliases:
-            tag.aliases = _aliases  # type: ignore
+        assert isinstance(result, Tag)
+        content = result.raw_content if escape_markdown else result.content
+        await ctx.send(**content_payload(content), reference=ctx.replied_reference)
+        await result.add(uses=1)
 
     @staticmethod
     async def create_tag(ctx: Context, name: str, content: str) -> None:
@@ -987,7 +916,7 @@ class Tags(Cog):
 
     def is_tag_reserved(self, guild_id: int, name: str) -> bool:
         """Helper method to check if a Tag with ``name`` is currently being made or reserved."""
-        first_word, *_ = name.partition(" ")
+        first_word = name.partition(" ")[0].lower()
 
         root: commands.GroupMixin = self.bot.get_command("tag")  # type: ignore
         if first_word in root.all_commands:
@@ -1130,19 +1059,21 @@ class Tags(Cog):
         converter = TagNameOrID()
         original = ctx.message
 
-        async def get_user_input(prompt: str, timeout: float = 60.0) -> str | None:
+        async def get_user_input(prompt: str, timeout: float = 60.0) -> discord.Message | None:
             try:
                 await ctx.send(prompt)
                 user_input = await self.bot.wait_for(
                     "message", timeout=timeout, check=lambda msg: msg.author == ctx.author and ctx.channel == msg.channel
                 )
-                return user_input.content
             except TimeoutError:
                 return None
+            messages.append(user_input)
+            return user_input
 
-        name = await get_user_input("What would you like the tag's **name** to be?")
-        if name is None:
+        name_message = await get_user_input("What would you like the tag's **name** to be?")
+        if name_message is None:
             return
+        name = name_message.content
 
         try:
             ctx.message = original
@@ -1164,16 +1095,18 @@ class Tags(Cog):
                 f"Please enter now a content for the tag.\n"
                 f'You can type "`{ctx.prefix}abort`" to abort the tag make process.'
             )
-            content = await get_user_input(content_prompt, timeout=100.0)
+            content_message = await get_user_input(content_prompt, timeout=100.0)
+            content = content_message.content if content_message else None
 
             if content == f"{ctx.prefix}abort":
                 return
 
-            if content:
-                clean_content = await TagContent().convert(ctx, content)
+            if content or (content_message and content_message.attachments):
+                clean_content = await TagContent().convert(ctx, content or "")
 
-                if ctx.message.attachments:
-                    clean_content = f"{clean_content}\n{ctx.message.attachments[0].url}"
+                # The attachment rides on the reply, not on the original command message.
+                if content_message and content_message.attachments:
+                    clean_content = f"{clean_content}\n{content_message.attachments[0].url}".strip()
 
                 await self.create_tag(ctx, name, clean_content)
 
@@ -1209,7 +1142,7 @@ class Tags(Cog):
             top_users=list(top_tag_users_records),
             top_creators=list(top_creators_records),
         )
-        await ctx.send(view=view)
+        await ctx.send(view=view, allowed_mentions=NO_MENTIONS)
 
     async def member_tag_stats(self, ctx: Context, member: discord.Member | discord.User) -> None:
         assert ctx.guild is not None
@@ -1231,7 +1164,7 @@ class Tags(Cog):
             total_uses=records["total_uses"],
             top_tags=list(top_records),
         )
-        await ctx.send(view=view)
+        await ctx.send(view=view, allowed_mentions=NO_MENTIONS)
 
     @staticmethod
     async def send_tags_to_text(ctx: Context, tags: list[asyncpg.Record]) -> None:
@@ -1287,15 +1220,20 @@ class Tags(Cog):
             else:
                 modal = TagEditModal(tag)
                 await ctx.interaction.response.send_modal(modal)
-                await modal.wait()
+                if await modal.wait():  # timed out: nothing was submitted
+                    return
                 ctx.interaction = modal.interaction  # type: ignore
                 content = modal.content.value
-                name = modal.tag_name.value
+                name = modal.tag_name.value.strip()
+                if self.is_tag_reserved(ctx.guild.id, name):
+                    raise BadArgument("Hey, that's a reserved tag name. Choose another one.", "name_or_id")
 
         if content and len(content) > 2000:
             raise BadArgument("Tag Content is too long, max. 2000 characters.", "content")
 
-        await tag.update(name=name, use_embed=use_embed, content=content)
+        # Only the fields actually given: `content=None` would null the column (a CHECK violation).
+        changes = {"name": name, "use_embed": use_embed, "content": content}
+        await tag.update(**{k: v for k, v in changes.items() if v is not None})
         await ctx.send_success("Successfully edited tag.")
         await self.send_tag(ctx, tag.id)
 
@@ -1330,6 +1268,7 @@ class Tags(Cog):
             raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
 
         await raw_tag.delete()
+        await ctx.send_success(f"Tag **{discord.utils.escape_markdown(raw_tag.name)}** [`{raw_tag.id}`] was deleted.")
 
     @tag.command("info", description="Shows you Information about a Tag.", guild_only=True)
     @describe(name_or_id="The name or id of the tag to get info about.")
@@ -1352,7 +1291,7 @@ class Tags(Cog):
         rank = await tag.get_rank()
 
         view = TagInfoView(tag, ctx=ctx, rank=rank)
-        await ctx.send(view=view, allowed_mentions=None)
+        await ctx.send(view=view, allowed_mentions=NO_MENTIONS)
 
     @tag.command("raw", description="This displays you the raw content of a tag.", aliases=["content"], guild_only=True)
     @describe(name_or_id="The name or id of the tag to display the escaped markdown content.")
@@ -1394,15 +1333,14 @@ class Tags(Cog):
             return
 
         guild_name = ctx.guild.name if ctx.guild is not None else "this server"
-        view = TagListView(
-            rows,
-            ctx=ctx,
+        await TagListPaginator.start(
+            ctx,
+            entries=rows,
+            per_page=15,
             title="Tag List",
-            description=f"{member}'s tags in {guild_name}",
+            description=discord.utils.escape_markdown(f"{member.display_name}'s tags in {guild_name}"),
             sort=flags.sort,
         )
-        msg = await ctx.send(view=view)
-        view.message = msg
 
     @tag.command("search", description="Search for tags matching the given query.", guild_only=True)
     @describe(query="The tag name to search for")
@@ -1427,15 +1365,14 @@ class Tags(Cog):
             await self.send_tags_to_text(ctx, rows)
             return
 
-        view = TagListView(
-            rows,
-            ctx=ctx,
+        await TagListPaginator.start(
+            ctx,
+            entries=rows,
+            per_page=15,
             title="Tag Search",
-            description=f"Results for \"{query}\"",
+            description=f"Results for \"{discord.utils.escape_markdown(query[:100])}\"",
             sort=flags.sort,
         )
-        msg = await ctx.send(view=view)
-        view.message = msg
 
     @tag.command("find", description="Find the most relevant tag for a question (AI).", guild_only=True)
     @describe(query="Describe what you're looking for in plain language.")
@@ -1522,9 +1459,13 @@ class Tags(Cog):
 
         tag: Tag = raw_tag
         view = TagTransferView(tag, from_user=ctx.author, guild=ctx.guild)
-        await member.send(view=view)
+        try:
+            await member.send(view=view)
+        except discord.Forbidden:
+            await ctx.send_error(f"I can't DM **{member}**, so they can't accept the transfer.")
+            return
+        await tag.update(owner_id=PENDING_OWNER)
         await ctx.send_info(f"Transfer request for tag **{tag.name}** has been sent to **{member}**.")
-        await tag.update(owner_id=-1)
 
     @tag.command(
         "claim",
@@ -1548,6 +1489,9 @@ class Tags(Cog):
             raise BadArgument("Could not find a tag with that name.", "name_or_id")
 
         tag: Tag | AliasTag = raw_tag
+        if tag.owner_id == PENDING_OWNER:
+            await ctx.send_error(f"Tag **{tag.name}** is waiting on a transfer and cannot be claimed.")
+            return
         guild = ctx.guild
         assert guild is not None
         member = await self.bot.get_or_fetch_member(guild, tag.owner_id)

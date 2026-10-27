@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import warnings
@@ -61,6 +62,8 @@ class PollCreateFlags(Flags):
     with_reason: bool | Any = store_true(description="Whether to ask for a reason for the vote or not.")
     image: discord.Attachment = flag(description="The image for the poll.")
     image_url: str | ValidURL = flag(description="The image URL for the poll.", converter=ValidURL)
+    hide_results: bool | Any = store_true(description="Hide the vote counts until the poll ends.")
+    role: discord.Role = flag(description="Only members with this role can vote.")
 
     opt_1: str = flag(description="The first option for the poll.", aliases=["option_1", "opt1", "1"], required=True)
     opt_2: str = flag(description="The second option for the poll.", aliases=["option_2", "opt2", "2"], required=True)
@@ -115,6 +118,11 @@ class Polls(Cog):
         super().__init__(bot)
 
         self._message_cache: dict[int, discord.Message] = {}
+        # Serialises every read-modify-write of one poll row (votes, edits, ending): the row
+        # is rewritten whole, so two unserialised writers silently drop each other's votes.
+        # ponytail: one lock per poll id for the process lifetime (dropped on delete); a
+        # single-process bot needs nothing stronger -- a DB row lock if Percy ever shards.
+        self._poll_locks: dict[int, asyncio.Lock] = {}
         # Phase 5: natural-language → structured poll fields (gated on AIFlags.polls).
         self._event_ai: EventExtractor = EventExtractor(bot.ai)
         self.cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
@@ -172,6 +180,57 @@ class Polls(Cog):
             else:
                 self._message_cache[message_id] = msg
                 return msg
+
+    def poll_lock(self, poll_id: int) -> asyncio.Lock:
+        """The lock guarding writes to poll ``poll_id`` (also taken by the dashboard PATCH)."""
+        return self._poll_locks.setdefault(poll_id, asyncio.Lock())
+
+    async def submit_vote(
+        self, guild_id: int, poll_id: int, user: discord.abc.User, index: int | None, /
+    ) -> tuple[Poll | None, str]:
+        """|coro|
+
+        Cast (``index``) or clear (``None``) ``user``'s vote against a freshly loaded poll.
+
+        Returns the updated poll and an outcome: ``voted``/``changed``/``unchanged``/``cleared``
+        on success, ``missing``/``ended``/``forbidden``/``novote`` when nothing was written.
+        """
+        async with self.poll_lock(poll_id):
+            poll = await self.get_guild_poll(guild_id, poll_id)
+            if poll is None:
+                return None, "missing"
+            if not poll.running:
+                return poll, "ended"
+
+            if index is None:
+                if poll.clear_vote(user.id) is None:
+                    return poll, "novote"
+                outcome = "cleared"
+            else:
+                if not poll.can_vote(user):
+                    return poll, "forbidden"
+                try:
+                    previous = poll.cast_vote(user.id, index)
+                except ValueError:
+                    return poll, "missing"
+                if previous == index:
+                    return poll, "unchanged"
+                outcome = "voted" if previous is None else "changed"
+
+            poll = await poll.edit(options=poll.options, votes=poll.votes)
+        return poll, outcome
+
+    async def refresh_poll_message(self, guild_id: int, poll_id: int, /) -> None:
+        """|coro| Re-render a poll's message from the database (e.g. after a dashboard edit)."""
+        poll = await self.get_guild_poll(guild_id, poll_id)
+        if poll is None:
+            return
+        await poll.fetch_message()
+        if poll.message:
+            try:
+                await poll.message.edit(view=create_view(poll))
+            except discord.HTTPException:
+                log.warning("Could not refresh the message of poll %s.", poll_id)
 
     async def poll_id_autocomplete(self, interaction: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
         assert interaction.guild is not None
@@ -368,10 +427,13 @@ class Polls(Cog):
         int
             The ID of the poll that was ended.
         """
-        if poll.kwargs.get("running") is False:
-            return None
-
-        poll = await poll.edit(running=False)
+        async with self.poll_lock(poll.id):
+            # Re-read under the lock: the caller's copy may predate votes cast since, and
+            # ``edit`` rewrites the whole row (the dashboard passes a cached poll here).
+            fresh = await self.get_guild_poll(poll.guild_id, poll.id)
+            if fresh is None or not fresh.running:
+                return None
+            poll = await fresh.edit(running=False)
         await self.bot.timers.delete("poll", poll_id=str(poll.id))
 
         if (poll.message_id is not None and poll.message is MISSING) or (
@@ -381,8 +443,9 @@ class Polls(Cog):
 
         if poll.message:
             try:
-                open_thread: bool = bool(poll.kwargs.get("thread") and poll.message.thread)
-                if open_thread and poll.channel and poll.message.thread:
+                # Any discussion thread on the poll closes with it (older polls stored the
+                # thread question under ``thread_question``, so don't key this off the kwarg).
+                if poll.message.thread is not None:
                     await poll.message.thread.edit(archived=True, locked=True)
 
                 # ``poll`` is already running=False, so the rebuilt CV2 card shows
@@ -442,6 +505,16 @@ class Polls(Cog):
             await ctx.send_error("You must provide at least 2 options.")
             return
 
+        # Validate everything before posting anything: a failed check after the placeholder
+        # message (and thread) went out used to leave an orphaned "Preparing Poll..." behind.
+        if flags.with_reason and not config.poll_reason_channel:
+            await ctx.send_error("You must set a reason channel to require user reasons.")
+            return
+
+        if flags.ping and not config.poll_ping_role_id:
+            await ctx.send_error("You must set a ping role to use the ping feature.")
+            return
+
         to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
 
         image_url = flags.image_url
@@ -460,17 +533,10 @@ class Polls(Cog):
         new_index = len(await self.get_guild_polls(ctx.guild.id)) + 1  # type: ignore[misc]
 
         if flags.thread_question:
-            thread = await message.create_thread(name=question, auto_archive_duration=4320)
+            # Discord caps thread names at 100 characters.
+            thread = await message.create_thread(name=question[:100], auto_archive_duration=4320)
             thread_message = await thread.send(flags.thread_question)
             await thread_message.pin(reason="Poll Discussion")
-
-        if flags.with_reason and not config.poll_reason_channel:
-            await ctx.send_error("You must set a reason channel to require user reasons.")
-            return
-
-        if flags.ping and not config.poll_ping_role_id:
-            await ctx.send_error("You must set a ping role to use the ping feature.")
-            return
 
         poll = await self.create_poll(
             channel.id,
@@ -482,8 +548,11 @@ class Polls(Cog):
             question=question,
             description=flags.description,
             options=to_options,
-            thread_question=flags.thread_question,
+            # ``thread`` is what the card, the edit command and the dashboard read.
+            thread=flags.thread_question or None,
             with_reason=flags.with_reason,
+            hide_results=bool(flags.hide_results),
+            role_id=flags.role.id if flags.role else None,
             image=image_url,
             color=str(flags.color),
             votes=0,
@@ -653,7 +722,11 @@ class Polls(Cog):
             await ctx.send_error("Poll not found.")
             return
 
-        await poll.delete()
+        async with self.poll_lock(poll.id):
+            await poll.delete()
+        self._poll_locks.pop(poll.id, None)
+        if self.bot.timers is not None:
+            await self.bot.timers.delete("poll", poll_id=str(poll.id))
         await ctx.send_success(f"Poll [`{poll_id}`] has been deleted.")
 
     @polls.command(
@@ -676,8 +749,13 @@ class Polls(Cog):
         - Thread
         """
         await ctx.defer()
-        assert ctx.guild is not None
+        # Held for the whole edit: it rewrites the row from the copy loaded below, so a vote
+        # landing in between (thread calls take a while) would otherwise be lost.
+        async with self.poll_lock(poll_id):
+            await self._edit_poll(ctx, poll_id, flags)
 
+    async def _edit_poll(self, ctx: Context, poll_id: int, flags: PollEditFlags) -> None:
+        assert ctx.guild is not None
         poll = await self.get_guild_poll(ctx.guild.id, poll_id)
         if not poll:
             await ctx.send_error("Poll not found.")
@@ -690,7 +768,11 @@ class Polls(Cog):
         if poll.message_id is not None and poll.message is MISSING:
             await poll.fetch_message()
 
-        open_thread = poll.kwargs.get("thread_question", None) and poll.message.thread
+        if not poll.message:
+            await ctx.send_error(f"I can't find the poll message anymore. Try `{ctx.clean_prefix}polls debug {poll.id}`.")
+            return
+
+        open_thread = (poll.kwargs.get("thread") or poll.kwargs.get("thread_question")) and poll.message.thread
         form: dict[str, Any] = {}
 
         if flags.question and flags.question != "--clear":
@@ -717,7 +799,11 @@ class Polls(Cog):
             form["image"] = flags.image_url
 
         if flags.color:
-            form["color"] = str(flags.color)
+            try:
+                form["color"] = str(helpers.Colour.from_str(str(flags.color)))
+            except ValueError:
+                await ctx.send_error(f"`{flags.color}` is not a colour. Use a hex code like `#5865F2`.")
+                return
 
         if flags.thread_question:
             if open_thread:
@@ -730,9 +816,9 @@ class Polls(Cog):
                     form["thread"] = None
                 else:
                     if thread:
-                        msg = [msg async for msg in thread.history(limit=2, oldest_first=True)][1]
-                        if msg.author.id == self.bot.user.id:
-                            await msg.edit(content=flags.thread_question)
+                        history = [msg async for msg in thread.history(limit=2, oldest_first=True)]
+                        if len(history) > 1 and history[1].author.id == self.bot.user.id:
+                            await history[1].edit(content=flags.thread_question)
 
                     form["thread"] = flags.thread_question
             else:
@@ -760,8 +846,10 @@ class Polls(Cog):
             if content:
                 is_option = index + 1 <= len(options)
                 if not is_option:
-                    if content != "--clear":
-                        options.append(VoteOption(index=index, content=content, votes=0))
+                    if content != "--clear" and len(options) < 8:
+                        # Indices stay contiguous: ``--opt_5`` on a 2-option poll becomes option C,
+                        # not an index-4 option whose button would resolve to nothing.
+                        options.append(VoteOption(index=len(options), content=content, votes=0))
                 elif content == "--clear":
                     options = poll.remove_option(options[index]) or options
                 else:
@@ -806,7 +894,8 @@ class Polls(Cog):
 
         modal = EditModal(poll)
         await ctx.interaction.response.send_modal(modal)
-        await modal.wait()
+        if await modal.wait():
+            return  # timed out: nothing was submitted
 
         await ctx.full_invoke(
             poll_id,
@@ -891,7 +980,7 @@ class Polls(Cog):
                     for r in records
                     if fuzzy.partial_ratio(
                         flags.keyword.lower(),
-                        r["metadata"]["kwargs"].get("question").lower(),  # type: ignore
+                        Poll(cog=self, record=r).question.lower(),
                     )
                     > 70
                 ]
@@ -925,20 +1014,24 @@ class Polls(Cog):
             return
 
         member = member or ctx.author
-        user_polls = list(filter(lambda poll: any(x[0] == member.id for x in poll.entries), polls))
+        user_polls = [poll for poll in polls if poll.get_entry(member.id) is not None]
+        if not user_polls:
+            await ctx.send_error(f"{member} hasn't voted on any poll here.")
+            return
 
         class FieldPaginator(BasePaginator[Poll]):
             async def format_page(self, entries: list[Poll], /) -> discord.Embed:
                 embed = discord.Embed(
                     title=f"Poll History for {member}", colour=helpers.Colour.white(), timestamp=discord.utils.utcnow()
                 )
-                embed.set_footer(text=f"{pluralize(len(polls)):entry|entries}")
+                embed.set_footer(text=f"{pluralize(len(user_polls)):entry|entries}")
 
                 for poll in entries:
-                    vote = next(option for (user, option) in poll.entries if user == member.id)
+                    entry = poll.get_entry(member.id)
+                    option = poll.get_option(entry[1]) if entry else None
                     embed.add_field(
                         name=f"{poll.id} (#{poll.kwargs.get('index')}): {poll.question}",
-                        value=f"You've voted: {poll.to_emoji(poll.options[vote]['index'])} - *{poll.options[vote]['content']}*",
+                        value=f"Voted: {poll.to_emoji(option['index'])} - *{option['content']}*" if option else "Voted.",
                         inline=False,
                     )
 

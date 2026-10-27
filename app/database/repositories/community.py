@@ -35,10 +35,12 @@ class PollsRepository(BaseRepository):
 
     _SORT_CLAUSES: ClassVar[dict[str, str]] = {
         'id': 'id',
-        'new': "metadata #>> ARRAY['kwargs', 'published'] DESC",
-        'old': "metadata #>> ARRAY['kwargs', 'published'] ASC",
-        'most votes': "metadata #>> ARRAY['kwargs', 'votes'] DESC",
-        'least votes': "metadata #>> ARRAY['kwargs', 'votes'] ASC",
+        # ``published`` is a column (the kwargs never held it), and ``#>>`` yields text, so
+        # the vote count is cast -- as text "9" sorted above "10".
+        'new': "published DESC",
+        'old': "published ASC",
+        'most votes': "COALESCE((metadata #>> ARRAY['kwargs', 'votes'])::int, 0) DESC",
+        'least votes': "COALESCE((metadata #>> ARRAY['kwargs', 'votes'])::int, 0) ASC",
     }
 
     async def create(
@@ -312,22 +314,40 @@ class TagsRepository(BaseRepository):
         query = f"SELECT * FROM tags WHERE {where} LIMIT 1;"
         return await self.fetchrow(query, *form.values())
 
-    async def get_parent_record_via_alias(self, name_or_id: str | int) -> asyncpg.Record | None:
-        """Fetches a parent tag by resolving a name/ID against the ``tag_lookup`` table."""
+    async def get_parent_record_via_alias(
+            self, name_or_id: str | int, *, owner_id: int | None = None, location_id: int | None = None
+    ) -> asyncpg.Record | None:
+        """Fetches a parent tag by resolving an alias name/ID in ``tag_lookup``.
+
+        ``owner_id`` narrows on the *parent's* owner and ``location_id`` on the guild — both must be honoured,
+        or a lookup scoped to "my tags in this server" falls through to any tag in any server.
+        """
         if _is_id(name_or_id):
-            clause, value = 'tags.id', name_or_id
+            form: dict[str, Any] = {'t.id': int(name_or_id)}
         else:
             assert isinstance(name_or_id, str)
-            clause, value = 'LOWER(tags.name)', name_or_id.lower()
+            form = {'LOWER(t.name)': name_or_id.lower()}
+        if location_id:
+            form['t.location_id'] = location_id
+        if owner_id:
+            form['tags.owner_id'] = owner_id
 
+        where = ' AND '.join(f'{k}=${i}' for i, k in enumerate(form, 1))
         query = f"""
             SELECT tags.*
             FROM tags
                      INNER JOIN tag_lookup t on t.parent_id = tags.id
-            WHERE {clause}=$1
+            WHERE {where}
             LIMIT 1;
         """
-        return await self.fetchrow(query, value)
+        return await self.fetchrow(query, *form.values())
+
+    async def rename_lookup(
+            self, tag_id: int, old_name: str, new_name: str, *, connection: asyncpg.Connection | None = None
+    ) -> None:
+        """Renames a tag's canonical ``tag_lookup`` row alongside a rename of the tag itself."""
+        await (connection or self.db).execute(
+            "UPDATE tag_lookup SET name=$3 WHERE parent_id=$1 AND name=$2;", tag_id, old_name, new_name)
 
     async def get_alias_records(
             self,

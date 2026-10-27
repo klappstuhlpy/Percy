@@ -162,7 +162,8 @@ async def get_polls(
             'question': _kwargs.get('content', _kwargs.get('question', 'Untitled Poll')),
             'description': _kwargs.get('description') or '',
             'options': [opt['content'] for opt in _kwargs.get('options', [])],
-            'image_url': _kwargs.get('image_url') or '',
+            # The poll card reads ``image``; ``image_url`` is the legacy dashboard-only key.
+            'image_url': _kwargs.get('image') or _kwargs.get('image_url') or '',
             'color': _kwargs.get('color') or '',
             'published': record['published'].isoformat() if record.get('published') else None,
             'expires': record['expires'].isoformat() if record.get('expires') else None,
@@ -274,6 +275,21 @@ async def create_poll(
 
 @router.patch("/polls/{poll_id}")
 async def patch_poll(guild: GuildDep, bot: BotDep, poll_id: int, body: PatchPollBody) -> dict:
+    if body.options is not None and len([o for o in body.options if o]) > 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='a poll can have at most 8 options')
+
+    cog = bot.get_cog('Polls')
+    if cog is None:
+        return await _patch_poll(guild, bot, poll_id, body)
+    # Same lock as votes: this rewrites the row, so an unserialised vote would be lost.
+    async with cog.poll_lock(poll_id):
+        result = await _patch_poll(guild, bot, poll_id, body)
+    # Without this the Discord card kept showing the old text until the next vote.
+    await cog.refresh_poll_message(guild.id, poll_id)
+    return result
+
+
+async def _patch_poll(guild: discord.Guild, bot: Any, poll_id: int, body: PatchPollBody) -> dict:
     record = await bot.db.polls.get(poll_id, guild.id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='poll not found')
@@ -292,11 +308,14 @@ async def patch_poll(guild: GuildDep, bot: BotDep, poll_id: int, body: PatchPoll
         kwargs['description'] = body.description if body.description else None
 
     if body.image_url is not None:
-        kwargs['image_url'] = body.image_url if body.image_url else None
+        # ``image`` is the key the poll card renders; drop the legacy dashboard-only key.
+        kwargs['image'] = body.image_url if body.image_url else None
+        kwargs.pop('image_url', None)
 
     if body.color is not None:
         kwargs['color'] = body.color if body.color else None
 
+    values: dict[str, Any] = {}
     if body.options is not None:
         new_options = body.options
         if isinstance(new_options, list) and len(new_options) >= 2:
@@ -311,12 +330,21 @@ async def patch_poll(guild: GuildDep, bot: BotDep, poll_id: int, body: PatchPoll
                 else:
                     updated.append({'content': opt_text, 'index': i, 'votes': 0})
             if len(updated) >= 2:
+                # Re-numbering shifts options left past a removed one; move each vote with
+                # its option instead of letting it land on whatever took the old index.
+                remap = {}
                 for idx, opt in enumerate(updated):
+                    if any(opt is old for old in existing):
+                        remap[opt['index']] = idx
                     opt['index'] = idx
                 kwargs['options'] = updated
+                values['entries'] = [
+                    (entry[0], remap[entry[1]]) for entry in record.get('entries') or [] if entry[1] in remap
+                ]
 
     metadata['kwargs'] = kwargs
-    await bot.db.polls.update(poll_id, {'metadata': metadata})
+    values['metadata'] = metadata
+    await bot.db.polls.update(poll_id, values)
     invalidate_cog_cache(bot, 'Polls', 'get_guild_polls', guild.id)
 
     return {'ok': True}
@@ -410,34 +438,10 @@ async def create_giveaway(guild: GuildDep, bot: BotDep, body: CreateGiveawayBody
     if not isinstance(channel, discord.TextChannel):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='a valid text channel is required')
 
-    from app.cogs.giveaway import GiveawayEnterButton
-
     expires = discord.utils.utcnow() + datetime.timedelta(seconds=duration)
-    message = await channel.send(embed=discord.Embed(description='*Preparing Giveaway...*'))
-    giveaway = await cog.create_giveaway(
-        message.channel.id,
-        message.id,
-        guild.id,
-        bot.user.id,
-        description=description,
-        prize=prize,
-        winner_count=winners,
-        created=discord.utils.utcnow().isoformat(),
-        expires=expires.isoformat(),
+    giveaway, _ = await cog.start_giveaway(
+        channel, guild.id, bot.user.id, prize=prize, description=description, winners=winners, expires=expires,
     )
-
-    await bot.timers.create(
-        expires,
-        'giveaway',
-        giveaway_id=giveaway.id,
-        created=discord.utils.utcnow(),
-        timezone='UTC',
-    )
-
-    view = discord.ui.View(timeout=None)
-    view.add_item(GiveawayEnterButton(giveaway))
-    await message.edit(embed=giveaway.to_embed(), view=view)
-
     return {'ok': True, 'id': giveaway.id}
 
 
@@ -474,11 +478,7 @@ async def delete_giveaway(guild: GuildDep, bot: BotDep, giveaway_id: int) -> dic
     await bot.db.giveaways.delete_giveaway(giveaway_id)
 
     with suppress(Exception):
-        if giveaway.message is discord.utils.MISSING:
-            await giveaway.fetch_message()
-        if giveaway.message:
-            await giveaway.message.edit(
-                content=f'This giveaway for *{giveaway.prize}* was cancelled.', embed=None, view=None)
+        await giveaway.edit_message(giveaway.to_layout(state='cancelled'))
 
     return {'ok': True}
 

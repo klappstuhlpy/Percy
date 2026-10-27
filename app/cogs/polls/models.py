@@ -25,6 +25,7 @@ __all__ = (
     "PollEntry",
     "VoteOption",
     "lineformat",
+    "percentages",
 )
 
 _MAX_VOTE_BAR_LENGTH = 10
@@ -39,6 +40,23 @@ def lineformat(x: int) -> str:
     txt[0] = Emojis.PollVoteBar.start
 
     return "".join(txt)
+
+
+def percentages(counts: list[int]) -> list[int]:
+    """Whole-number percentages that always sum to exactly 100 (or all 0 with no votes).
+
+    Plain ``round()`` lets three equal options read 33/33/33 = 99%; the largest-remainder
+    method hands the leftover points to the options with the biggest fractional parts.
+    """
+    total = sum(counts)
+    if not total:
+        return [0] * len(counts)
+    exact = [c * 100 / total for c in counts]
+    result = [int(x) for x in exact]
+    by_remainder = sorted(range(len(counts)), key=lambda i: exact[i] - result[i], reverse=True)
+    for i in by_remainder[: 100 - sum(result)]:
+        result[i] += 1
+    return result
 
 
 class VoteOption(TypedDict):
@@ -70,7 +88,7 @@ class Poll(BaseRecord, table="polls", pk="id"):
     channel_id: int
     guild_id: int
     metadata: dict[str, Any]
-    entries: set[PollEntry]
+    entries: set[tuple[int, int]]
     expires: datetime.datetime
     published: datetime.datetime
 
@@ -114,12 +132,68 @@ class Poll(BaseRecord, table="polls", pk="id"):
     def _coerce(self) -> None:
         self.args = self.metadata.get("args", [])
         self.kwargs = self.metadata.get("kwargs", {})
-        self.question = self.kwargs.get("question", "N/A")
-        self.votes = self.kwargs.get("votes", 0)
+        # ``edit()`` and the dashboard PATCH store the question under ``content``, creation
+        # under ``question`` -- the newer ``content`` wins, matching the dashboard's GET.
+        self.question = self.kwargs.get("content") or self.kwargs.get("question") or "N/A"
         self.description = self.kwargs.get("description", "N/A")
         self.options = self.kwargs.get("options", [])
-        self.color = helpers.Colour.from_str(self.kwargs.get("color") or "#ffffff")
-        self.entries = {PollEntry(record=entry) for entry in self.entries or []}
+        try:
+            self.color = helpers.Colour.from_str(self.kwargs.get("color") or "#ffffff")
+        except ValueError:
+            # A free-text colour (edit modal, dashboard) must not make the poll unloadable.
+            self.color = helpers.Colour.white()
+        # Plain ``(user_id, vote)`` tuples: DB composites and tuples index the same way.
+        self.entries = {(int(e[0]), int(e[1])) for e in self.entries or []}
+        self.recount()
+
+    def recount(self) -> None:
+        """Derive every vote counter from ``entries``, the only source of truth.
+
+        Entries pointing at an option that no longer exists are dropped, so a removed
+        option can't leave a voter locked out with a vote for nothing.
+        """
+        valid = {option["index"] for option in self.options}
+        self.entries = {(user, vote) for user, vote in self.entries if vote in valid}
+        for option in self.options:
+            option["votes"] = sum(1 for _, vote in self.entries if vote == option["index"])
+        self.votes = len(self.entries)
+        self.kwargs["votes"] = self.votes
+
+    @property
+    def running(self) -> bool:
+        return self.kwargs.get("running") is True
+
+    @property
+    def results_hidden(self) -> bool:
+        """Whether counts stay hidden until the poll closes."""
+        return self.running and bool(self.kwargs.get("hide_results"))
+
+    def can_vote(self, user: discord.abc.User) -> bool:
+        """Whether ``user`` holds the poll's required role (always true without one)."""
+        role_id = self.kwargs.get("role_id")
+        return not role_id or any(role.id == role_id for role in getattr(user, "roles", ()))
+
+    def cast_vote(self, user_id: int, index: int) -> int | None:
+        """Record ``user_id``'s vote for option ``index``, replacing an earlier vote.
+
+        Returns the option index the user voted for before (``None`` if this is their first
+        vote). Raises ``ValueError`` for an unknown option.
+        """
+        if self.get_option(index) is None:
+            raise ValueError(f"unknown option {index}")
+        previous = self.get_entry(user_id)
+        self.entries = {entry for entry in self.entries if entry[0] != user_id}
+        self.entries.add((user_id, index))
+        self.recount()
+        return previous[1] if previous else None
+
+    def clear_vote(self, user_id: int) -> int | None:
+        """Remove ``user_id``'s vote; returns the option index it was for, if any."""
+        previous = self.get_entry(user_id)
+        if previous is not None:
+            self.entries.discard(previous)
+            self.recount()
+        return previous[1] if previous else None
 
     @property
     def jump_url(self) -> str | None:
@@ -174,20 +248,18 @@ class Poll(BaseRecord, table="polls", pk="id"):
     def to_fields(self, extras: bool = True) -> list[dict]:
         """Converts the poll to fields."""
         fields = []
-        for i, option in enumerate(self.options):
+        hidden = self.results_hidden
+        shares = percentages([option["votes"] for option in self.options])
+        for option, share in zip(self.options, shares, strict=True):
             v = option["votes"]
             votes = self.votes
-
-            p = v / votes if votes else 0
             x = (v * _MAX_VOTE_BAR_LENGTH) // votes if votes else 0
 
-            fields.append(
-                {
-                    "name": f"{Emojis.PollVoteBar.corner} " + option["content"],
-                    "value": f"{self.to_emoji(option['index'])}{lineformat(x)} **{v}** {pluralize(v, pass_content=True):vote} ({round(p * 100)}%)",
-                    "inline": False
-                }
-            )
+            if hidden:
+                value = f"{self.to_emoji(option['index'])} *Results are shown when the poll ends.*"
+            else:
+                value = f"{self.to_emoji(option['index'])}{lineformat(x)} **{v}** {pluralize(v, pass_content=True):vote} ({share}%)"
+            fields.append({"name": f"{Emojis.PollVoteBar.corner} " + option["content"], "value": value, "inline": False})
 
         if extras:
             fields.append({"name": "Voting", "value": f"Total Votes: **{self.votes}**", "inline": True})
@@ -247,12 +319,14 @@ class Poll(BaseRecord, table="polls", pk="id"):
         container.add_item(discord.ui.TextDisplay(header))
         container.add_item(discord.ui.Separator())
 
-        running = self.kwargs.get("running") is True
-        for i, field in enumerate(self.to_fields(extras=False)):
+        running = self.running
+        for option, field in zip(self.options, self.to_fields(extras=False), strict=True):
             if running:
                 item = discord.ui.Section(
                     f"{field['name']}\n{field['value']}",
-                    accessory=PollEnterButton(self, i)
+                    # The option's own index, not its list position: the button resolves
+                    # the vote through ``get_option(index)``.
+                    accessory=PollEnterButton(self, option["index"])
                 )
             else:
                 item = discord.ui.TextDisplay(f"{field['name']}\n{field['value']}")
@@ -268,6 +342,8 @@ class Poll(BaseRecord, table="polls", pk="id"):
             extras.append(f"{label} {discord.utils.format_dt(self.expires, 'R')}")
         if thread := self.kwargs.get("thread"):
             extras.append(f"Thread: {thread}")
+        if running and (role_id := self.kwargs.get("role_id")):
+            extras.append(f"Only <@&{role_id}> can vote")
 
         container.add_item(discord.ui.TextDisplay(" • ".join(extras)))
 
@@ -292,15 +368,15 @@ class Poll(BaseRecord, table="polls", pk="id"):
         """
         if len(self.options) > 2:
             self.options.remove(option)
+            # Re-number the remaining options and move every vote with its option --
+            # otherwise a vote for "C" would silently become a vote for whatever slid into C's slot.
+            remap: dict[int, int] = {}
             for index, ch in enumerate(sorted(self.options, key=lambda x: x["index"])):
+                remap[ch["index"]] = index
                 ch["index"] = index
 
-            self.votes -= option["votes"]
-            self.entries = {
-                PollEntry.temporary(user, user_option)
-                for user, user_option in self.entries
-                if user_option != option["index"]
-            }
+            self.entries = {(user, remap[vote]) for user, vote in self.entries if vote in remap}
+            self.recount()
             return self.options
         return None
 
