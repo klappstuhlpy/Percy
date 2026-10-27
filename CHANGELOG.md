@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.18.1] - 2026-10-27
+
+### Fixed
+
+- Bot startup no longer waits on Lavalink; cogs, the dashboard API and the AI check start together.
+- Dashboard changes to leveling, autoresponders, comic feeds and polls take effect without a restart.
+- Ignored channels are respected again for members who used a command elsewhere first.
+- Giveaway reroll works, and entries clicked at the same moment are all kept.
+- Lotteries started from the dashboard now draw.
+- Release DMs, highlights, voice XP and audit logs keep running after a single error.
+- Reminders set more than 40 days ahead fire on time.
+- Flags: quoted values containing `--`, `--name=value with spaces`, upper-case flags and a lone `-` parse correctly.
+- Hybrid commands used as slash commands show the right error (e.g. missing permissions); context menus answer when they fail.
+
+### Security
+
+- Economy and game bets can no longer be spent twice by sending commands or clicks at the same time.
+- Blacklisted users and disabled commands are blocked for slash commands too.
+- Outbound webhooks and `emoji create` refuse private and internal addresses.
+- Role menus refuse roles with moderator or admin permissions, and roles above the manager's own.
+- Highlights only notify you about channels you can read.
+- Regex autoresponders can no longer freeze the bot.
+- DJ-only mode applies to music commands, not just the player panel.
+- Reminders only mention their recipients.
+- Error messages no longer include internal details.
+
 ## [2.18.0] - 2026-10-26
 
 ### Added
