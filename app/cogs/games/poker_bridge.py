@@ -350,7 +350,7 @@ class PokerSession:
                         f"+{sum(pot.amount // len(winners) for winners, pot in self.winners if player in winners)}"
                     )
                     if won_lost_chips == "+0":
-                        won_lost_chips = f"-{player.bet}"
+                        won_lost_chips = f"-{player.total_bet}"
 
                     name_parts.append(f"{Emojis.Economy.coin} {won_lost_chips}")
 

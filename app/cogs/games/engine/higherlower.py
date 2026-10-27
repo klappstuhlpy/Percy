@@ -82,10 +82,10 @@ class HigherLower:
         self.rounds += 1
 
         if correct:
+            # Price the call from the card it was made on, before ``current`` moves on.
+            self.multiplier *= self.step_multiplier(higher)
             self.current = self.next
             self.next = self.add_next_card(hidden=True)
-
-            self.multiplier *= self.step_multiplier(higher)
         else:
             self.busted = True
         return self.next, correct

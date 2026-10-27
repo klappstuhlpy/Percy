@@ -239,6 +239,9 @@ class RussianRoulette(LayoutView):
             if self.turn >= len(self.order):
                 self.turn = 0
             self._status = f"\N{COLLISION SYMBOL} **BANG!** {current.member.mention} is out. The cylinder reloads."
+            # Actually reload: the spent cylinder would otherwise run dry (IndexError) and strand the pot.
+            self.chambers = [1, 0, 0, 0, 0, 0]
+            self._rng.shuffle(self.chambers)
         else:
             self._status = f"\N{WHITE HEAVY CHECK MARK} *click* — {current.member.mention} survives."
             self.turn = (self.turn + 1) % len(self.order)
@@ -277,4 +280,11 @@ class RussianRoulette(LayoutView):
             for player in self.players:
                 balance = await self.ctx.bot.db.get_user_balance(player.member.id, self.ctx.guild.id)
                 await balance.add(cash=self.ante)
+        # Abandoned mid-game: the pot is split among the survivors instead of vanishing.
+        elif self.phase is Phase.PLAYING and self.ctx.guild is not None and self.order:
+            self.phase = Phase.ENDED
+            share, rest = divmod(self.pot, len(self.order))
+            for i, player in enumerate(self.order):
+                balance = await self.ctx.bot.db.get_user_balance(player.member.id, self.ctx.guild.id)
+                await balance.add(cash=share + (rest if i == 0 else 0))
         self.cog.russian_tables.pop(self.ctx.channel.id, None)

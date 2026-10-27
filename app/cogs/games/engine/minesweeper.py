@@ -45,10 +45,19 @@ class Board:
         """
         for field in random.sample(list(chain.from_iterable(self.board)), self.mines):
             field.mine = True
+        self._count_values()
 
-            for j, i in self.get_neighbours(field):
-                if not self.board[j][i].mine:
-                    self.board[j][i].value += 1
+    def _count_values(self) -> None:
+        """Recompute every cell's adjacent-mine count (``board`` is indexed ``[y][x]``)."""
+        for field in chain.from_iterable(self.board):
+            field.value = 0 if field.mine else sum(self.board[y][x].mine for x, y in self.get_neighbours(field))
+
+    def _move_mine_off(self, field: MSField) -> None:
+        """First-click safety: relocate the mine under ``field`` to a random free cell."""
+        free = [f for f in chain.from_iterable(self.board) if not f.mine and f is not field]
+        random.choice(free).mine = True
+        field.mine = False
+        self._count_values()
 
     @staticmethod
     def get_neighbours(field: MSField) -> list[tuple[int, int]]:
@@ -62,8 +71,10 @@ class Board:
     def mark(self, field: MSField) -> bool:
         """Mark a cell as selected, iterative flood-fill to avoid RecursionError.
 
-        Returns ``False`` if a mine was hit, ``True`` otherwise.
+        Returns ``False`` if a mine was hit, ``True`` otherwise. The first click of a game is never a mine.
         """
+        if field.mine and not any(f.revealed for f in chain.from_iterable(self.board)):
+            self._move_mine_off(field)
         stack = [field]
 
         while stack:
@@ -76,8 +87,8 @@ class Board:
                 return False  # hit a mine
 
             if current.value == 0:
-                for i, j in self.get_neighbours(current):
-                    neighbour = self.board[i][j]
+                for x, y in self.get_neighbours(current):
+                    neighbour = self.board[y][x]
                     if not neighbour.revealed:
                         stack.append(neighbour)
 

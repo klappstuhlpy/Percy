@@ -22,7 +22,7 @@ def simulate_race(rng: random.Random | None = None) -> tuple[int, list[list[int]
 
     Returns ``(winner_index, frames)`` where ``winner_index`` is 0-based and ``frames``
     is the list of position snapshots (one per tick) for animation. The winner is the
-    horse furthest along when the first horse crosses :data:`TRACK_LENGTH`.
+    horse furthest along when the first horse crosses :data:`TRACK_LENGTH` (dead heats drawn at random).
     """
     source = rng or random
     positions = [0] * NUM_HORSES
@@ -33,8 +33,9 @@ def simulate_race(rng: random.Random | None = None) -> tuple[int, list[list[int]
             positions[i] = min(TRACK_LENGTH, positions[i] + source.randint(0, 2))
         frames.append(positions.copy())
 
-    winner = max(range(NUM_HORSES), key=lambda i: positions[i])
-    return winner, frames
+    # A photo finish is common; break ties at random so lane 1 does not win every dead heat.
+    leaders = [i for i in range(NUM_HORSES) if positions[i] == max(positions)]
+    return source.choice(leaders), frames
 
 
 def parimutuel_multiplier(total_pool: int, total_on_winner: int, *, edge: float = HOUSE_EDGE) -> float:

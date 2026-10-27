@@ -251,236 +251,69 @@ class Ranker:
 
     @classmethod
     def rank_one_hand(cls, hand_combos: np.ndarray, group_by: bool = False) -> np.ndarray[Any, np.dtype[Any]]:
-        """Returns the rank of a combination of cards.
+        """Returns the rank of each 5-card combination.
 
-        The rank is calculated by checking the combination of cards for a straight flush, four of a kind, full house,
-        flush, straight, three of a kind, two pairs, one pair, and high card.
+        The score is ``category * 16**5 + tiebreak``: the category is the hand class
+        (0 = high card ... 8 = straight flush) and the tiebreak packs the five card values
+        ordered by (multiplicity, value) into base-16 digits, so the most significant
+        group sits in the highest digit (quads before kicker, trips before pair, high
+        pair before low pair before kicker). The ace counts low in the wheel (A-2-3-4-5).
 
         Parameters
         ----------
         hand_combos : np.ndarray
-            The combination of cards.
+            ``(N, 5, 2)`` array of ``(value, suit)`` cards. Not modified.
         group_by : bool
-            Whether to group the results by rank.
-
-        Returns
-        -------
-        np.ndarray[Any, np.dtype[Any]]
-            The rank of the combination of cards.
+            Return plain integer scores (fast path for the simulation) instead of
+            :class:`RankingItem` objects carrying a display name.
         """
-        num_combos = hand_combos[:, :, 0]
-        num_combos.sort(axis=1)
+        nums = np.sort(hand_combos[:, :, 0], axis=1)
+        suits = hand_combos[:, :, 1]
 
-        suit_combos = hand_combos[:, :, 1]
+        counts = (nums[:, :, None] == nums[:, None, :]).sum(axis=2)
+        ordered = np.take_along_axis(nums, np.argsort(counts * 16 + nums, axis=1, kind="stable"), axis=1)
 
-        is_suit_arr = cls.is_suit_arr(suit_combos)
-        is_straight_arr = cls.is_straight_arr(num_combos)
+        flush = np.all(suits == suits[:, :1], axis=1)
+        distinct = np.all(counts == 1, axis=1)
+        wheel = distinct & (nums[:, 4] == 14) & (nums[:, 3] == 5)
+        straight = distinct & ((nums[:, 4] - nums[:, 0] == 4) | wheel)
+        ordered[wheel] = [1, 2, 3, 4, 5]
 
-        rank_arr: np.ndarray[Any, np.dtype[Any]] = np.zeros(num_combos.shape[0], dtype=RankingItem)  # type: ignore
-
-        cls.straight_flush_check(num_combos, rank_arr, is_straight_arr, is_suit_arr)
-        cls.four_of_a_kind_check(num_combos, rank_arr)
-        cls.full_house_check(num_combos, rank_arr)
-        cls.flush_check(num_combos, suit_combos, rank_arr, is_suit_arr)
-        cls.straight_check(num_combos, rank_arr, is_straight_arr)
-        cls.three_of_a_kind_check(num_combos, rank_arr)
-        cls.two_pairs_check(num_combos, rank_arr)
-        cls.one_pair_check(num_combos, rank_arr)
-        cls.high_card_check(num_combos, rank_arr)
+        max_count = counts.max(axis=1)
+        pairs = (counts == 2).sum(axis=1) // 2
+        category = np.select(
+            [straight & flush, max_count >= 4, (max_count == 3) & (pairs == 1), flush, straight, max_count == 3, pairs == 2,
+             pairs == 1],
+            [8, 7, 6, 5, 4, 3, 2, 1],
+            0,
+        )
+        scores = category * 16**5 + np.sum(ordered * np.power(16, np.arange(5)), axis=1)
 
         if group_by:
-            return np.array([x.rank for x in rank_arr]) * (16**5) + np.sum(
-                num_combos * np.power(16, np.arange(0, 5)), axis=1
-            )
+            return scores
 
-        for i, ranking in enumerate(rank_arr):
-            ranking = cast("RankingItem", ranking)
-            # Example: Implement the logic for each RankingItem
+        rank_arr: np.ndarray[Any, np.dtype[Any]] = np.empty(len(scores), dtype=object)
+        for i in range(len(scores)):
             rank_arr[i] = RankingItem(
-                name=ranking.name,
-                cards=ranking.cards,
-                rank=ranking.rank * (16**5) + np.sum(ranking.cards * np.power(16, np.arange(0, 5))),
+                rank=int(scores[i]), cards=ordered[i], name=cls._hand_name(int(category[i]), ordered[i], int(suits[i, 0]))
             )
-
         return rank_arr
 
     @staticmethod
-    def is_straight_arr(num_combos: np.ndarray) -> bool:
-        """Returns whether the combination of cards is a straight."""
-        straight_check: np.ndarray = np.zeros(len(num_combos), dtype=int)
-        for i in range(4):
-            if i <= 2:
-                straight_check += num_combos[:, i] == (num_combos[:, i + 1] - 1)
-            else:
-                straight_check += num_combos[:, i] == (num_combos[:, i + 1] - 1)
-                straight_check += (num_combos[:, i] == 5) & (num_combos[:, i + 1] == 14)
-
-        return straight_check == 4
-
-    @staticmethod
-    def is_suit_arr(suit_combos: np.ndarray) -> bool:
-        """Returns whether the combination of cards is a flush."""
-        return np.max(suit_combos, axis=1) == np.min(suit_combos, axis=1)
-
-    @staticmethod
-    def straight_flush_check(
-        num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool, suit_arr: bool
-    ) -> None:
-        """Checks if the combination of cards is a straight flush."""
-        ace_low_straight = np.max(num_combos[:, 4]) == 14 and np.min(num_combos[:, 0]) == 2
-        straight_label = "Low" if ace_low_straight else "High"
-
-        rank_arr[(rank_arr == 0) & (straight_arr & suit_arr)] = RankingItem(
-            rank=8, name=f"{UNAMED[np.max(num_combos[:, 4])]} {straight_label}", cards=num_combos[0, :5]
-        )
-
-        # Rearrange order of 2345A to A2345
-        reorder_idx = (rank_arr == 8) & (num_combos[:, 0] == 2) & (num_combos[:, 4] == 14)
-        num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
-
-    @staticmethod
-    def four_of_a_kind_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
-        """Checks if the combination of cards is a four of a kind."""
-        small = np.all(num_combos[:, 0:4] == num_combos[:, :1], axis=1)  # 22223
-        large = np.all(num_combos[:, 1:] == num_combos[:, 4:], axis=1)  # 24444
-
-        condition = small | large
-        four_of_a_kind = item_by_count(num_combos[condition], 4)
-        rank_arr[(rank_arr == 0) & condition] = RankingItem(rank=7, name=f"{four_of_a_kind[0]}s", cards=num_combos[0, :5])
-
-        reorder_idx = (rank_arr == 7) & small
-        num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
-
-    @staticmethod
-    def full_house_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
-        """Checks if the combination of cards is a full house."""
-        small = np.all(
-            (num_combos[:, 0:3] == num_combos[:, :1]) & (num_combos[:, 3:4] == num_combos[:, 4:5]), axis=1
-        )  # 22233
-
-        large = np.all(
-            (num_combos[:, 0:1] == num_combos[:, 1:2]) & (num_combos[:, 2:5] == num_combos[:, 4:]), axis=1
-        )  # 22444
-
-        condition = small | large
-        three_pair, two_pair = item_by_count(num_combos[condition], 3), item_by_count(num_combos[condition], 2)
-        rank_arr[(rank_arr == 0) & condition] = RankingItem(
-            rank=6, name=f"{UNAMED[three_pair[0]]}s over {UNAMED[two_pair[0]]}s", cards=num_combos[0, :5]
-        )
-
-        reorder_idx = (rank_arr == 6) & small
-        num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 3:], num_combos[reorder_idx, :3]], axis=1)
-
-    @staticmethod
-    def flush_check(
-        num_combos: np.ndarray, suit_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], suit_arr: bool
-    ) -> None:
-        """Checks if the combination of cards is a flush."""
-        rank_arr[(rank_arr == 0) & suit_arr] = RankingItem(
-            rank=5, name=RevDict(SUITS)[np.max(suit_combos, axis=1)[0]].title(), cards=num_combos[0, :5]
-        )
-
-    @staticmethod
-    def straight_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool) -> None:
-        """Checks if the combination of cards is a straight."""
-        ace_low_straight = np.max(num_combos[:, 4]) == 14 and np.min(num_combos[:, 0]) == 2
-        straight_label = "Low" if ace_low_straight else "High"
-
-        rank_arr[(rank_arr == 0) & straight_arr] = RankingItem(
-            rank=4, name=f"{UNAMED[np.max(num_combos[:, 4])]} {straight_label}", cards=num_combos[0, :5]
-        )
-
-        # Rearrange order of 2345A to A2345
-        reorder_idx = (rank_arr == 4) & (num_combos[:, 0] == 2) & (num_combos[:, 4] == 14)
-        num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
-
-    @staticmethod
-    def three_of_a_kind_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
-        """Checks if the combination of cards is a three of a kind."""
-        small = np.all((num_combos[:, 0:3] == num_combos[:, :1]), axis=1)  # 22235
-        middle = np.all((num_combos[:, 1:4] == num_combos[:, 1:2]), axis=1)  # 23335
-        large = np.all((num_combos[:, 2:] == num_combos[:, 2:3]), axis=1)  # 36AAA
-
-        condition = small | middle | large
-        three_of_a_kind = item_by_count(num_combos[condition], 3)
-        rank_arr[(rank_arr == 0) & condition] = RankingItem(
-            rank=3, name=f"{UNAMED[three_of_a_kind[0]]}s", cards=num_combos[0, :5]
-        )
-
-        reorder_small = (rank_arr == 3) & small
-        reorder_middle = (rank_arr == 3) & large
-
-        num_combos[reorder_small, :] = np.concatenate([num_combos[reorder_small, 3:], num_combos[reorder_small, :3]], axis=1)
-        num_combos[reorder_middle, :] = np.concatenate(
-            [num_combos[reorder_middle, :1], num_combos[reorder_middle, 4:], num_combos[reorder_middle, 1:4]], axis=1
-        )
-
-    @staticmethod
-    def two_pairs_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
-        """Checks if the combination of cards is a two pairs."""
-        small = np.all(
-            (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 2:4] == num_combos[:, 2:3]), axis=1
-        )  # 2233A
-
-        middle = np.all(
-            (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 3:] == num_combos[:, 4:]), axis=1
-        )  # 223AA
-
-        large = np.all(
-            (num_combos[:, 1:3] == num_combos[:, 1:2]) & (num_combos[:, 3:] == num_combos[:, 4:]), axis=1
-        )  # 233AA
-
-        condition = small | middle | large
-        two_pairs = item_by_count(num_combos[condition], 2)
-        if len(two_pairs) == 2:
-            rank_arr[(rank_arr == 0) & (small | middle | large)] = RankingItem(
-                rank=2, name=f"{UNAMED[two_pairs[0]]}s and {UNAMED[two_pairs[1]]}s", cards=num_combos[0, :5]
-            )
-
-        reorder_small = (rank_arr == 2) & small
-        reorder_middle = (rank_arr == 2) & large
-
-        num_combos[reorder_small, :] = np.concatenate([num_combos[reorder_small, 4:], num_combos[reorder_small, :4]], axis=1)
-        num_combos[reorder_middle, :] = np.concatenate(
-            [num_combos[reorder_middle, 2:3], num_combos[reorder_middle, 0:2], num_combos[reorder_middle, 3:]], axis=1
-        )
-
-    @staticmethod
-    def one_pair_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
-        """Checks if the combination of cards is a one pair."""
-        small = np.all((num_combos[:, 0:2] == num_combos[:, :1]), axis=1)  # 22345
-        mid_small = np.all((num_combos[:, 1:3] == num_combos[:, 1:2]), axis=1)  # 23345
-        mid_large = np.all((num_combos[:, 2:4] == num_combos[:, 2:3]), axis=1)  # 23445
-        large = np.all((num_combos[:, 3:] == num_combos[:, 3:4]), axis=1)  # 23455
-
-        condition = small | mid_small | mid_large | large
-        one_pair = item_by_count(num_combos[condition], 2)
-        rank_arr[(rank_arr == 0) & condition] = RankingItem(rank=1, name=f"{UNAMED[one_pair[0]]}s", cards=num_combos[0, :5])
-
-        reorder_small = (rank_arr == 1) & small
-        reorder_mid_small = (rank_arr == 1) & mid_small
-        reorder_mid_large = (rank_arr == 1) & mid_large
-
-        num_combos[reorder_small, :] = np.concatenate([num_combos[reorder_small, 2:], num_combos[reorder_small, :2]], axis=1)
-        num_combos[reorder_mid_small, :] = np.concatenate(
-            [num_combos[reorder_mid_small, :1], num_combos[reorder_mid_small, 3:], num_combos[reorder_mid_small, 1:3]],
-            axis=1,
-        )
-        num_combos[reorder_mid_large, :] = np.concatenate(
-            [num_combos[reorder_mid_large, :2], num_combos[reorder_mid_large, 4:], num_combos[reorder_mid_large, 2:4]],
-            axis=1,
-        )
-
-    @staticmethod
-    def high_card_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
-        """Checks if the combination of cards is a high card."""
-        rank_arr[(rank_arr == 0)] = RankingItem(
-            rank=0, name=f"{UNAMED[np.max(num_combos[:, 4])]} High", cards=num_combos[0, :5]
-        )
-
-        # Rearrange order of 2345A to A2345
-        reorder_idx = (rank_arr == 0) & (num_combos[:, 0] == 2) & (num_combos[:, 4] == 14)
-        num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
+    def _hand_name(category: int, ordered: np.ndarray, suit: int) -> str:
+        """Human-readable detail for a hand (``ordered`` is least to most significant)."""
+        top, second = int(ordered[4]), int(ordered[1])
+        if category in (8, 4):
+            return f"{UNAMED[top]} {'Low' if int(ordered[0]) == 1 else 'High'}"
+        if category == 5:
+            return RevDict(SUITS)[suit].title()
+        if category == 6:
+            return f"{UNAMED[top]}s over {UNAMED[second]}s"
+        if category == 2:
+            return f"{UNAMED[second]}s and {UNAMED[top]}s"
+        if category == 0:
+            return f"{UNAMED[top]} High"
+        return f"{UNAMED[top]}s"
 
 
 class Player:
@@ -496,6 +329,10 @@ class Player:
 
         self.stack: int = stack
         self.bet: int = 0
+        # Chips put into the pot this hand, across all streets; pots are built from it at showdown.
+        self.total_bet: int = 0
+        # Whether the player may still raise: false once they acted, until a full raise reopens the action.
+        self.raise_ok: bool = True
 
         self.wait_for_allin_call: bool = False
         self.folded: bool = False
@@ -519,6 +356,8 @@ class Player:
     def reset(self) -> None:
         """Resets the player"""
         self.bet = 0
+        self.total_bet = 0
+        self.raise_ok = True
         self.wait_for_allin_call = False
         self.folded = False
         self.all_in = False
@@ -640,6 +479,8 @@ class TexasHoldem:
 
         # Showdown order tracking (last aggressor shows first)
         self.last_aggressor_index: int | None = None
+        # Size of the last full raise on this street (the minimum raise increment).
+        self.last_raise_size: int = self.big_blind
 
         # Pots
         self.pot: Pot = Pot(amount=0)
@@ -728,46 +569,71 @@ class TexasHoldem:
 
     def Call(self) -> None:
         """Calls the bet for the current player."""
-        call_amount = max([player.bet for player in self.players]) - self.players[self.player_index].bet
+        call_amount = self.max_bet - self.players[self.player_index].bet
 
         player = self.players[self.player_index]
-        contribution = min(player.stack, call_amount)
-
-        if call_amount > contribution:
-            # This should never happen due to the button being
-            # locked if the player can't afford the call, but we'll never know
-            # if discord is going to be bugcord or not
+        if player.stack <= call_amount:
+            # Calling for the whole stack (or less) is an all-in.
             self.AllIn()
         else:
-            self._log_action(f"{self._get_player_name(player)} calls {contribution}")
-            self.Raise(contribution)
+            self._log_action(f"{self._get_player_name(player)} calls {call_amount}")
+            self.Raise(call_amount)
 
     def Raise(self, amount: int) -> None:
-        """Raises the bet for the current player by adding `amount` chips to their current bet."""
+        """Raises the bet for the current player by adding `amount` chips to their current bet.
+
+        Also the money path for calls and all-ins. A bet increase puts everyone else back
+        on the clock; only a *full* raise (at least the last raise size) lets players who
+        already acted raise again, so a short all-in does not reopen the betting.
+        """
         player = self.players[self.player_index]
+        previous_max = self.max_bet
 
-        # Calculate the amount the player can contribute (capped by their stack)
-        contribution = min(player.stack, amount)
+        contribution = max(0, min(player.stack, amount))
+        self._commit(player, contribution)
 
-        if self.side_pots:
-            # if we have at least one side pot, we will update this one and not the initial pot
-            self.side_pots[-1] += contribution
-        else:
-            self.pot += contribution
-
-        # Deduct the contribution from the player's stack
-        player.stack -= contribution
-        player.bet += contribution
-
-        # Track last aggressor for showdown order
-        self.last_aggressor_index = self.player_index
+        if player.bet > previous_max:
+            raise_size = player.bet - previous_max
+            full_raise = raise_size >= self.last_raise_size
+            if full_raise:
+                self.last_raise_size = raise_size
+            self.last_aggressor_index = self.player_index
+            for other in self.playing_players:
+                if other is not player and not other.all_in:
+                    other.checked = False
+                    if full_raise:
+                        other.raise_ok = True
 
         self.Check()
+
+    def _commit(self, player: Player, amount: int) -> None:
+        """Moves ``amount`` chips from the player's stack into the pot."""
+        player.stack -= amount
+        player.bet += amount
+        player.total_bet += amount
+        self.pot += amount
+        if player.stack == 0:
+            player.all_in = True
+
+    @property
+    def max_bet(self) -> int:
+        """int: The highest bet in front of any player on this street."""
+        return max((player.bet for player in self.players), default=0)
+
+    @property
+    def min_raise_to(self) -> int:
+        """int: The smallest total bet that counts as a full raise right now."""
+        return self.max_bet + self.last_raise_size
+
+    def can_raise(self, player: Player) -> bool:
+        """Whether ``player`` may raise: the action is open to them and they have chips beyond a call."""
+        return player.raise_ok and player.stack > self.max_bet - player.bet
 
     def Check(self) -> None:
         """Checks the street for the current player."""
         player = self.players[self.player_index]
         player.checked = True
+        player.raise_ok = False
         self._log_action(f"{self._get_player_name(player)} checks")
 
     def Fold(self) -> None:
@@ -810,13 +676,15 @@ class TexasHoldem:
         # Check for blind escalation before dealing
         self._check_blind_escalation()
 
+        # Fresh, shuffled deck every hand; the old one would run dry after a few hands.
+        self.deck = Deck(game="poker", decks=self.deck.decks)
         self.deal()
 
-        self.pot.players = self.players
+        self.pot = Pot(amount=0)
+        self.side_pots = []
 
-        # Initialize dealer button on first hand
-        if self.dealer_index is None:
-            self.dealer_index = 0
+        # Initialize dealer button on first hand (and keep it in range if seats left)
+        self.dealer_index = 0 if self.dealer_index is None else self.dealer_index % len(self.players)
 
         # Derive blind positions from dealer
         # Heads-up (2 players): dealer is SB and acts first pre-flop
@@ -839,13 +707,10 @@ class TexasHoldem:
         else:
             self.player_index = (bb_index + 1) % num_players
 
-        # Set sb and bb and take their bets
-        for index in self.blind_index:
-            player = self.players[index]
-            player.bet = self.small_blind if index == self.blind_index[0] else self.big_blind
-            player.stack -= player.bet
-
-        self.pot.amount = self.small_blind + self.big_blind
+        # Post the blinds; a short stack posts what it has and is all-in.
+        self.last_raise_size = self.big_blind
+        self._commit(self.players[sb_index], min(self.players[sb_index].stack, self.small_blind))
+        self._commit(self.players[bb_index], min(self.players[bb_index].stack, self.big_blind))
 
         # Auto-fold players who are sitting out
         for player in self.players:
@@ -856,12 +721,24 @@ class TexasHoldem:
         if self.odds_mode != OddsMode.NONE:
             self.analysis.append(cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True)))
 
+        # The first actor may be sitting out or all-in from a blind: hand the turn on
+        # (or end/run out the hand) exactly as if the seat before them had acted.
+        first = self.players[self.player_index]
+        if first.folded or first.all_in:
+            self.player_index = (self.player_index - 1) % num_players
+            self.switch_player()
+
     def end(self) -> None:
         """Ends the game by calculating the winner(s).
 
         This function is called when the game is over and calculates the winner(s) of the game.
         """
         self.state = TableState.FINISHED
+
+        # Rebuild main/side pots from what everyone put in this hand.
+        pots = self._build_pots()
+        if pots:
+            self.pot, self.side_pots = pots[0], pots[1:]
 
         # Special case: only one player remains (everyone else folded)
         # Award all pots to the remaining player without revealing cards
@@ -904,8 +781,7 @@ class TexasHoldem:
             pot_winners = [p for p, r in pot_player_ranks if r.value == best_value]
 
             # Distribute the pot among winners
-            for winner in pot_winners:
-                winner.stack += pot.amount // len(pot_winners)
+            self._award(pot.amount, pot_winners)
 
             # Check if this pot resulted in a tie
             if len(pot_winners) > 1:
@@ -915,6 +791,51 @@ class TexasHoldem:
 
         # Save hand to history after normal showdown
         self._save_hand_history()
+
+    def _build_pots(self) -> list[Pot]:
+        """Splits this hand's contributions into a main pot and side pots.
+
+        Each distinct contribution level of a non-folded player closes a pot that only
+        players who reached that level can win; folded chips stay in as dead money. An
+        uncalled bet ends up in a pot whose only contender is the bettor (a refund).
+        """
+        contenders = [p for p in self.players if not p.folded]
+        pots: list[Pot] = []
+        previous = 0
+        for level in sorted({p.total_bet for p in contenders}):
+            if level <= previous:
+                continue
+            amount = sum(min(p.total_bet, level) - min(p.total_bet, previous) for p in self.players)
+            pots.append(Pot(amount=amount, players=[p for p in contenders if p.total_bet >= level]))
+            previous = level
+        dead = sum(max(0, p.total_bet - previous) for p in self.players)
+        if dead:
+            if pots:
+                pots[-1] += dead
+            else:
+                pots.append(Pot(amount=dead, players=contenders))
+        return pots
+
+    def _award(self, amount: int, winners: list[Player]) -> None:
+        """Splits ``amount`` between ``winners``; odd chips go to the first winners left of the button."""
+        share, odd = divmod(amount, len(winners))
+        n = len(self.players)
+        dealer = self.dealer_index or 0
+        by_seat = sorted(winners, key=lambda p: (self.players.index(p) - dealer - 1) % n)
+        for i, winner in enumerate(by_seat):
+            winner.stack += share + (1 if i < odd else 0)
+
+    def abort_hand(self) -> None:
+        """Cancels a running hand and returns every chip put in this hand to its owner."""
+        if self.state != TableState.RUNNING:
+            return
+        for player in self.players:
+            player.stack += player.total_bet
+            player.total_bet = 0
+            player.bet = 0
+        self.pot = Pot(amount=0)
+        self.side_pots = []
+        self.state = TableState.STOPPED
 
     def add_player(self, member: discord.Member, stack: int) -> None:
         """Adds a player to the table.
@@ -1057,9 +978,14 @@ class TexasHoldem:
         assert self.blind_index is not None
         utg_index = (self.blind_index[1] + 1) % len(self.players)
 
-        # Must be UTG and not have acted yet
+        # Must be UTG, pre-flop, on the clock and not have acted yet
         player_index = self.players.index(player)
-        return player_index == utg_index and not player.checked and player.bet == 0
+        return (
+            player_index == utg_index == self.player_index
+            and len(self.community_arr) == 0
+            and not player.checked
+            and player.bet == 0
+        )
 
     def post_straddle(self, member: discord.Member) -> bool:
         """Posts a straddle (voluntary blind of 2x BB from UTG position).
@@ -1088,10 +1014,10 @@ class TexasHoldem:
         self.straddle_index = player_index
         self.straddle_amount = straddle_amount
 
-        player.bet = straddle_amount
-        player.stack -= straddle_amount
+        self._commit(player, straddle_amount)
         player.has_straddled = True
-        self.pot += straddle_amount
+        # The straddle acts as the new big blind: min raise is to twice the straddle.
+        self.last_raise_size = straddle_amount
 
         # Action moves to player after straddler
         self.player_index = (player_index + 1) % len(self.players)
@@ -1270,6 +1196,7 @@ class TexasHoldem:
 
         # Track wins per player across all boards
         board_winners: list[list[Player]] = []
+        all_board_ranks: list[list[tuple[Player, HandResult]]] = []
 
         for board in self.run_it_twice_boards:
             # Convert board to numpy array for evaluation
@@ -1287,31 +1214,26 @@ class TexasHoldem:
             best_value = board_ranks[0][1].value
             winners = [p for p, r in board_ranks if r.value == best_value]
             board_winners.append(winners)
+            all_board_ranks.append(board_ranks)
 
             # Store ranks for the first board (for display)
             if not self.ranks:
                 self.ranks = board_ranks
 
-        # Distribute pots based on board wins
+        # Distribute pots based on board wins (best eligible hand per board, per pot)
         for pot in [self.pot, *self.side_pots]:
-            pot_amount_per_board = pot.amount // num_boards
-
-            for winners in board_winners:
-                # Filter to players in this pot
-                pot_winners = [w for w in winners if w in pot.players]
-                if not pot_winners:
+            per_board, odd = divmod(pot.amount, num_boards)
+            all_winners: list[Player] = []
+            for i, ranks in enumerate(all_board_ranks):
+                eligible = [(p, r) for p, r in ranks if p in pot.players]
+                if not eligible:
                     continue
-
-                # Split this board's share among winners
-                share = pot_amount_per_board // len(pot_winners)
-                for winner in pot_winners:
-                    winner.stack += share
-
+                best = max(r.value for _, r in eligible)
+                pot_winners = [p for p, r in eligible if r.value == best]
+                self._award(per_board + (odd if i == 0 else 0), pot_winners)
                 if len(pot_winners) > 1:
                     self.tie = True
-
-            # Record overall winners (unique winners across all boards)
-            all_winners = list({w for winners in board_winners for w in winners if w in pot.players})
+                all_winners += [w for w in pot_winners if w not in all_winners]
             self.winners.append((all_winners, pot))
 
     def remove_player(self, member: discord.Member) -> int:
@@ -1331,6 +1253,8 @@ class TexasHoldem:
         """
         player = next((p for p in self.players if p.member == member), None)
         assert player is not None
+        if self.dealer_index is not None and self.players.index(player) < self.dealer_index:
+            self.dealer_index -= 1
         self.players.remove(player)
         return player.stack
 
@@ -1347,6 +1271,9 @@ class TexasHoldem:
         """
         self.state = TableState.PREPARED
 
+        seats = list(self.players)
+        dealer = seats[self.dealer_index] if self.dealer_index is not None and self.dealer_index < len(seats) else None
+
         # Reset players and remove players with no chips
         removed: list[Player] = []
         for player in list(self.players):
@@ -1361,9 +1288,14 @@ class TexasHoldem:
 
         self.reset()
 
-        # Rotate dealer button (blinds will be derived in start())
-        if self.dealer_index is not None and len(self.players) > 0:
-            self.dealer_index = (self.dealer_index + 1) % len(self.players)
+        # Rotate the button to the next seat still at the table (blinds are derived in start())
+        if dealer is not None and self.players:
+            start = seats.index(dealer)
+            for step in range(1, len(seats) + 1):
+                candidate = seats[(start + step) % len(seats)]
+                if candidate in self.players:
+                    self.dealer_index = self.players.index(candidate)
+                    break
         # Clear blind_index so start() recalculates from new dealer position
         self.blind_index = None
         return removed
@@ -1379,54 +1311,57 @@ class TexasHoldem:
 
             self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
 
-    def __update_pots(self) -> None:
-        """Remove folded players from all pots so they cannot win them."""
-        for pot in [self.pot, *self.side_pots]:
-            pot.players = [player for player in pot.players if not player.folded]
-
     def switch_player(self, by_raise: bool = False) -> None:
-        """Switches to the next player.
+        """Advances the hand after the current player acted.
+
+        Ends the hand when one player is left, runs the board out when the betting is
+        closed and at most one player can still bet, starts the next street when the
+        round is complete, and otherwise passes the turn to the next player who must act.
+        ``by_raise`` is kept for callers; reopening is decided in :meth:`Raise`.
 
         The caller (bridge) is responsible for (re)starting the autoplay timer for
         the new current player when the game is still running.
         """
-        self.__update_pots()
+        if self.state != TableState.RUNNING:
+            return  # stale button press after the hand ended
 
-        self.player_index = (self.player_index + 1) % len(self.players)
-
-        current_player = self.players[self.player_index]
-        if current_player.folded or current_player.all_in:
-            self.switch_player(by_raise=by_raise)
-            return
-
-        if self.game_is_over:
-            if len(self.playing_players) != 1:
-                self.__fill_left_community_cards()
-
+        if len(self.playing_players) <= 1:
             self.end()
             return
 
-        if by_raise:
-            # A raise reopens betting - all players except the raiser and all-in players must act again
-            for player in self.playing_players:
-                if not player.all_in and player != self.players[self.player_index]:
-                    player.checked = False
-        else:
-            # Check if the betting round is complete (all active players have acted)
-            active_players = [p for p in self.playing_players if not p.all_in]
-            if all(player.checked for player in active_players) if active_players else True:
-                # Next street - reset all check flags and bets for the new round
+        able = [p for p in self.playing_players if not p.all_in]
+        max_bet = self.max_bet
+        if all(p.checked and p.bet == max_bet for p in able):
+            if len(self.community_arr) == 5 or len(able) <= 1:
+                self.__fill_left_community_cards()
+                self.end()
+            else:
                 self._start_new_street()
+            return
+
+        self.player_index = self._next_to_act(self.player_index)
+
+    def _next_to_act(self, index: int) -> int:
+        """The next seat after ``index`` that is neither folded nor all-in."""
+        for _ in range(len(self.players)):
+            index = (index + 1) % len(self.players)
+            player = self.players[index]
+            if not player.folded and not player.all_in:
+                return index
+        return index
 
     def _start_new_street(self) -> None:
         """Starts a new betting street: resets flags, handles all-in side pots, deals community cards."""
         assert self.blind_index is not None
         assert self.dealer_index is not None
 
-        # Reset check flags for the new street
-        for player in self.playing_players:
+        # Reset check flags and bets for the new street (folded players' bets too)
+        for player in self.players:
             player.checked = False
-            player.bet = 0  # Reset bets for the new street
+            player.raise_ok = True
+            player.bet = 0
+        self.last_raise_size = self.big_blind
+        self.last_aggressor_index = None
 
         # Post-flop action starts left of the dealer: the SB with 3+ players,
         # the BB (non-dealer) heads-up — the same seat either way.
@@ -1439,13 +1374,6 @@ class TexasHoldem:
             self.player_index = (self.player_index + 1) % len(self.players)
             if self.player_index == start_index:
                 break  # Avoid infinite loop
-
-        # Handle all-in player side pot creation
-        if all_in_player := next((player for player in self.playing_players if player.wait_for_allin_call), None):
-            all_in_player.wait_for_allin_call = False
-            remaining_players = [p for p in self.playing_players if not p.all_in]
-            if remaining_players:
-                self.side_pots.append(Pot(amount=0, players=remaining_players))
 
         # Deal community cards
         for _ in range(self.to_draw):
@@ -1474,9 +1402,9 @@ class TexasHoldem:
 
         player.checked = True
 
-        max_bet = max([p.bet for p in self.playing_players])
-        if player.bet != max_bet:
+        if player.bet != self.max_bet:
             player.folded = True
+            player.folded_on_street = self.current_street
 
         self.switch_player()
         return True

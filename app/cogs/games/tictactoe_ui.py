@@ -176,9 +176,9 @@ class TicTacToe(LayoutView):
         if initial:
             description = f"Challenge accepted! {next_player.member.mention} goes first and {last_player.member.mention} goes second.\n\n" + description
 
-        if winner and amount:
-            if isinstance(winner, Player):
-                loser = self.players[(self.player_index - 1) % len(self.players)]
+        if winner:
+            if isinstance(winner, Player) and amount:
+                loser = self.current_player  # the turn already passed to the side that just lost
 
                 container.accent_colour = kind_colour(winner.kind)
                 description = (

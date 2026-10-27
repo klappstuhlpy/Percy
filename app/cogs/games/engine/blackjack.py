@@ -283,7 +283,8 @@ class BlackjackGame:
         Also checks that requirements for a blackjack are met.
         """
         if hand.surrendered:
-            return WinningType.SURRENDER
+            # Late surrender: it is not honoured against a dealer blackjack (the dealer would have peeked).
+            return WinningType.DEALER_BLACKJACK if self.dealer_has_blackjack() else WinningType.SURRENDER
 
         player_value = hand.value
         dealer_value = self.dealer.value

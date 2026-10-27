@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 import discord
@@ -37,7 +39,28 @@ class TableView(LayoutView):
 
         async def callback(self, interaction: discord.Interaction) -> None:
             """Starts a new game with the same bet"""
-            table = self.table.wake_up(self.table.ctx, self.table.active_hand.bet)
+            # One new round per finished table, and only once its stake is taken.
+            if self.disabled:
+                await interaction.response.defer()
+                return
+            self.disabled = True
+            games = self.table.ctx.bot.get_cog("Games")
+            running = games.blackjack_tables.get(self.table.ctx.user.id) if games else None
+            if running is not None and running.is_running:
+                await interaction.response.send_message(
+                    f"{Emojis.error} You are already playing a game of Blackjack.", ephemeral=True
+                )
+                return
+            bet = self.table.initial_bet  # not the active hand's bet, which a double-down may have grown
+            if await interaction.client.db.economy.debit_cash(interaction.user.id, interaction.guild_id, bet) is None:  # type: ignore[attr-defined]
+                self.disabled = False
+                await interaction.response.send_message(
+                    f"{Emojis.error} You do not have enough **cash** for that.", ephemeral=True
+                )
+                return
+            table = self.table.wake_up(self.table.ctx, bet)
+            if games:
+                games.blackjack_tables[table.ctx.user.id] = table
 
             # Shuffle cards, just for aesthetics
             await interaction.response.edit_message(
@@ -56,27 +79,27 @@ class TableView(LayoutView):
             if not await table.view.check_for_winner(interaction):
                 await interaction.message.edit(view=table.view.render())
 
-            table.ctx.bot.get_cog("Games").blackjack_tables[table.ctx.user.id] = table
-
     def __init__(self, table: Blackjack) -> None:
         super().__init__(timeout=300.0, members=table.ctx.user)
 
         self.table: Blackjack = table
         self.economy: Economy | None = self.table.ctx.bot.get_cog("Economy")  # type: ignore
         self._game_over: bool = False
+        # Serialises the action buttons: two clicks racing the first edit must not both act (or both pay).
+        self._lock = asyncio.Lock()
 
         self.hit = discord.ui.Button(label="Hit", style=discord.ButtonStyle.blurple)
-        self.hit.callback = self._on_hit  # type: ignore[assignment]
+        self.hit.callback = functools.partial(self._locked, self._on_hit)  # type: ignore[assignment]
         self.stand = discord.ui.Button(label="Stand", style=discord.ButtonStyle.red)
-        self.stand.callback = self._on_stand  # type: ignore[assignment]
+        self.stand.callback = functools.partial(self._locked, self._on_stand)  # type: ignore[assignment]
         self.double_down = discord.ui.Button(label="Double Down", style=discord.ButtonStyle.grey)
-        self.double_down.callback = self._on_double_down  # type: ignore[assignment]
+        self.double_down.callback = functools.partial(self._locked, self._on_double_down)  # type: ignore[assignment]
         self.split = discord.ui.Button(label="Split", style=discord.ButtonStyle.grey, disabled=True)
-        self.split.callback = self._on_split  # type: ignore[assignment]
+        self.split.callback = functools.partial(self._locked, self._on_split)  # type: ignore[assignment]
         self.insurance = discord.ui.Button(label="Insurance", style=discord.ButtonStyle.green, disabled=True)
-        self.insurance.callback = self._on_insurance  # type: ignore[assignment]
+        self.insurance.callback = functools.partial(self._locked, self._on_insurance)  # type: ignore[assignment]
         self.surrender_btn = discord.ui.Button(label="Surrender", style=discord.ButtonStyle.grey, disabled=True)
-        self.surrender_btn.callback = self._on_surrender  # type: ignore[assignment]
+        self.surrender_btn.callback = functools.partial(self._locked, self._on_surrender)  # type: ignore[assignment]
         self.help = discord.ui.Button(
             label="Help", style=discord.ButtonStyle.grey, emoji="\N{WHITE QUESTION MARK ORNAMENT}"
         )
@@ -94,6 +117,25 @@ class TableView(LayoutView):
         self.clear_items()
         self.add_item(self.table.build_container(self, colour, text, image_url, with_buttons))
         return self
+
+    async def _locked(self, action, interaction: discord.Interaction) -> None:
+        """Run one action button under the table lock, ignoring clicks on a finished hand or table."""
+        async with self._lock:
+            if self._game_over or self.table.active_hand.finished:
+                await interaction.response.defer()
+                return
+            await action(interaction)
+
+    async def on_timeout(self) -> None:
+        """An abandoned table stands every open hand and settles, so the stake is resolved and the player unlocked."""
+        async with self._lock:
+            if self._game_over or self.table.message is None:
+                return
+            while self.table.playing_players:
+                self.table.advance_hand()
+                self.table.stand()
+            with suppress(discord.HTTPException):
+                await self.check_for_winner(self.table.ctx)
 
     async def finish_game(self, interaction: discord.Interaction) -> tuple[str, discord.Colour]:
         """Process all hands and return combined result text and overall colour."""
@@ -124,8 +166,9 @@ class TableView(LayoutView):
                     insurance_result = f" (Insurance -{fnumb(hand.insurance_bet)})"
 
             if winner == WinningType.PLAYER_BLACKJACK:
-                amount = int(hand.bet * 1.5)
-                results.append(f"**Blackjack{hand_num}!** +{Emojis.Economy.cash} {fnumb(amount)}{insurance_result}")
+                # 3:2 — the stake comes back plus one and a half times it.
+                amount = hand.bet + int(hand.bet * 1.5)
+                results.append(f"**Blackjack{hand_num}!** +{Emojis.Economy.cash} {fnumb(amount - hand.bet)}{insurance_result}")
                 has_win = True
             elif winner == WinningType.SURRENDER:
                 amount = hand.bet // 2
@@ -210,8 +253,11 @@ class TableView(LayoutView):
             # Game over - reveal dealer's hole card
             self.table.dealer.set_card_hidden(1, False)
 
-            await self.update_buttons(active=False)
+            # Flip before the first await so nothing else can settle this table a second time.
+            if self._game_over:
+                return True
             self._game_over = True
+            await self.update_buttons(active=False)
 
             text, color = await self.finish_game(interaction)
             if isinstance(interaction, Context):
@@ -247,15 +293,13 @@ class TableView(LayoutView):
             insurance_cost = hand.bet // 2
 
             self.split.disabled = not can_split
-            self.double_down.disabled = not (hand.bet <= balance.cash)
+            # Doubling, like splitting, is a first-action-of-the-hand decision.
+            self.double_down.disabled = not (len(hand) == 2 and hand.bet <= balance.cash)
             # Insurance: only when dealer shows Ace, first action, and player can afford it
             self.insurance.disabled = not (self.table.can_offer_insurance and insurance_cost <= balance.cash)
-            # Late Surrender: only on first action, not after split, and dealer must not have blackjack
-            can_surrender = (
-                len(hand) == 2
-                and not hand.splitted
-                and not self.table.dealer_has_blackjack()
-            )
+            # Late Surrender: only on first action, not after split. Whether the dealer holds blackjack must not
+            # shape the controls (that would leak the hole card); the engine voids a surrender against one instead.
+            can_surrender = len(hand) == 2 and not hand.splitted
             self.surrender_btn.disabled = not can_surrender
 
     async def _on_hit(self, interaction: discord.Interaction) -> None:
@@ -281,6 +325,9 @@ class TableView(LayoutView):
 
     async def _on_double_down(self, interaction: discord.Interaction) -> None:
         """Doubles the bet and hits the player"""
+        if len(self.table.active_hand) != 2:
+            await interaction.response.send_message(f"{Emojis.error} You can only double on your first two cards.", ephemeral=True)
+            return
         if not await self._pay(interaction, self.table.active_hand.bet):
             return
 
@@ -294,6 +341,10 @@ class TableView(LayoutView):
 
     async def _on_split(self, interaction: discord.Interaction) -> None:
         """Splits the hand"""
+        values = [min(v, 10) if v != 14 else 11 for v in self.table.active_hand.card_arr[:, 0]]
+        if len(values) != 2 or values[0] != values[1]:
+            await interaction.response.send_message(f"{Emojis.error} You can only split a starting pair.", ephemeral=True)
+            return
         if not await self._pay(interaction, self.table.active_hand.bet):
             return
         self.table.split()
@@ -304,6 +355,9 @@ class TableView(LayoutView):
     async def _on_insurance(self, interaction: discord.Interaction) -> None:
         """Takes insurance (half the original bet) against dealer blackjack."""
         insurance_cost = self.table.active_hand.bet // 2
+        if not self.table.can_offer_insurance:
+            await interaction.response.defer()
+            return
 
         if not await self._pay(interaction, insurance_cost):
             return
@@ -315,6 +369,9 @@ class TableView(LayoutView):
 
     async def _on_surrender(self, interaction: discord.Interaction) -> None:
         """Surrenders the hand, forfeiting half the bet."""
+        if len(self.table.active_hand) != 2 or self.table.active_hand.splitted:
+            await interaction.response.defer()
+            return
         self.table.surrender()
 
         if not await self.check_for_winner(interaction):

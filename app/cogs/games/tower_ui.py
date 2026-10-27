@@ -28,6 +28,9 @@ class Tower(LayoutView):
     TREE1: ClassVar[str] = "\N{EVERGREEN TREE}"
     TREE2: ClassVar[str] = "\N{DECIDUOUS TREE}"
 
+    #: Chance a stack collapses. Must exceed 1/3: at 30% "stack once, cash out" returned 0.7 * 1.5 = 1.05x (player edge).
+    CRASH_CHANCE: ClassVar[float] = 0.35
+
     def __init__(self, player: discord.Member, bet: int) -> None:
         super().__init__()
         self.player = player
@@ -151,9 +154,7 @@ class Tower(LayoutView):
             await interaction.response.defer()
             return
         # Now calculate the probability of the tower crashing or not
-        rate = random.uniform(0, 1)
-        if rate > 0.7:
-            # probability of 30% to crash
+        if random.random() < self.CRASH_CHANCE:
             self._compose(failed=True)
             await interaction.response.edit_message(view=self)
             await self._record(interaction, GameResult.LOSS, -self.bet)

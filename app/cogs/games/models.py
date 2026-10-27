@@ -102,4 +102,10 @@ _ICONS: dict[Game, str] = {
     Game.RUSSIAN_ROULETTE: "\N{PISTOL}",
     Game.HORSERACE: "\N{HORSE}",
     Game.COINFLIP: "\N{COIN}",
+    Game.CRASH: "\N{CHART WITH UPWARDS TREND}",
+    Game.SCRATCH: "\N{TICKET}",
+    Game.SNAKE_EYES: "\N{SNAKE}",
+    Game.GAMBLE: "\N{GAME DIE}",
+    Game.FIGHT: "\N{BOXING GLOVE}",
+    Game.HEIST: "\N{BANK}",
 }

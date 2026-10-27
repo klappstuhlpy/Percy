@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import discord
+from discord.ext import commands
 
 from app.cogs.games.engine import roulette as engine
+from app.cogs.games.engine.cards import MinimumBet
 from app.cogs.games.engine.roulette import Payout
 from app.core.views import LayoutView
+from app.services.economy import GuildEconomySettings
 from app.utils import NotCaseSensitiveEnum, fnumb, helpers, pluralize
 from config import Emojis
 
@@ -293,13 +296,44 @@ class RouletteView(LayoutView):
             )
             return
 
-        if (space := await Space.convert(interaction, modal.space.value)) is None:
+        try:
+            space = await Space.convert(interaction, modal.space.value)  # type: ignore[arg-type]
+        except commands.BadArgument:
+            space = None
+        if space is None or space is Space.SINGLE_NUMBERS__:
             await interaction.response.send_message(
                 f"{Emojis.error} Could not determine space, please use a space from above.", ephemeral=True
             )
             return
 
-        self.table.place(Bet(interaction.user, space, bet))
+        # Same rules as the ``roulette`` command: a minimum, the guild's cap, and a stake actually taken.
+        assert interaction.guild_id is not None
+        db = interaction.client.db  # type: ignore[attr-defined]
+        if bet < MinimumBet.ROULETTE:
+            await interaction.response.send_message(
+                f"{Emojis.error} You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.ROULETTE.value)}**.",
+                ephemeral=True,
+            )
+            return
+        max_bet = GuildEconomySettings.from_record(await db.economy.get_settings(interaction.guild_id)).max_bet
+        if max_bet is not None and bet > max_bet:
+            await interaction.response.send_message(
+                f"{Emojis.error} Bets in this server are capped at {Emojis.Economy.cash} **{fnumb(max_bet)}**.",
+                ephemeral=True,
+            )
+            return
+        await db.get_user_balance(interaction.user.id, interaction.guild_id)  # creates a missing wallet
+        if await db.economy.debit_cash(interaction.user.id, interaction.guild_id, bet) is None:
+            await interaction.response.send_message(
+                f"{Emojis.error} You do not have enough **cash** to bet that amount.", ephemeral=True
+            )
+            return
+        if not self.table.open:  # the wheel closed while the modal was open
+            await (await db.get_user_balance(interaction.user.id, interaction.guild_id)).add(cash=bet)
+            await interaction.response.send_message("**Bets are closed.** *Rien ne va plus*", ephemeral=True)
+            return
+
+        self.table.place(Bet(interaction.user, space, bet))  # type: ignore[arg-type]
         await interaction.response.send_message(
             f"{Emojis.success} You have placed a bet on **{space.value}** with {Emojis.Economy.cash} **{fnumb(bet)}**.",
             ephemeral=True,

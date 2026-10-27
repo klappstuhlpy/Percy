@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import random
 import re
 from collections import namedtuple
 from typing import Literal, TypeVar
@@ -9,6 +10,8 @@ import numpy as np
 
 from app.utils import RevDict
 from config import Emojis
+
+_RNG = random.SystemRandom()
 
 DisplayCard = namedtuple("DisplayCard", ["top", "middle", "bottom"])
 
@@ -224,8 +227,8 @@ class Deck[CardT: BaseCard]:
         self.shuffle()
 
     def shuffle(self) -> None:
-        """Shuffles the deck"""
-        np.random.shuffle(self.cards)
+        """Shuffles the deck with the OS CSPRNG (cards decide real economy payouts)."""
+        self.cards = self.cards[_RNG.sample(range(len(self.cards)), len(self.cards))]
 
     def draw(self) -> np.ndarray:
         """Draws a card as a numpy array from the deck"""

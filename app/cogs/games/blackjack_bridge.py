@@ -34,6 +34,7 @@ class Blackjack:
 
     def __init__(self, ctx: Context, bet: int, decks: int = 1) -> None:
         self.ctx: Context = ctx
+        self.initial_bet: int = bet
         self.engine: BlackjackGame = BlackjackGame(bet, decks=decks)
         self.view: TableView = TableView(table=self)
         self.message: Any = None  # The Discord message showing the game
@@ -169,13 +170,9 @@ class Blackjack:
             )
             if show_insurance:
                 second_row.add_item(view.insurance)
-            # Late Surrender: only on first action (2 cards), not split, dealer doesn't have blackjack
-            show_surrender = (
-                len(active) == 2
-                and not active.splitted
-                and not active.finished
-                and not self.dealer_has_blackjack()
-            )
+            # Late Surrender: only on first action (2 cards), not split. Never gate on the hidden hole card --
+            # a missing button would tell the player the dealer has blackjack (and make insurance a sure win).
+            show_surrender = len(active) == 2 and not active.splitted and not active.finished
             if show_surrender:
                 second_row.add_item(view.surrender_btn)
             second_row.add_item(view.help)

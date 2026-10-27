@@ -263,6 +263,11 @@ class Games(Cog):
 
             if content in hangman.used:
                 hangman.tries -= 1
+                if hangman.tries <= 0:  # a repeated letter can cost the last try too
+                    hangman.finished = True
+                    await origin.edit(view=hangman.render(False))
+                    await record(GameResult.LOSS)
+                    return
                 hangman._last_input = f'`❌ "{content}" has already been used.`'
                 await origin.edit(view=hangman.render())
                 continue
@@ -336,7 +341,8 @@ class Games(Cog):
             blackjack = blackjack.wake_up(ctx, bet)
         else:
             blackjack = blackjack_bridge.Blackjack(ctx, bet=bet, decks=3)
-            self.blackjack_tables[ctx.author.id] = blackjack
+        # Track the *new* table, or the running-game guard above keeps checking the finished one.
+        self.blackjack_tables[ctx.author.id] = blackjack
 
         # Shuffle cards, just for aesthetics
         message = await ctx.send(
@@ -559,6 +565,9 @@ class Games(Cog):
 
         You can bet on a single space or a range of VALID_SPACES.
         """
+        if space is Space.SINGLE_NUMBERS__:  # a display heading, not a space -- a bet on it could never win
+            await ctx.send_error("Pick a specific number (0-36) to bet on a single number.")
+            return
         existing = self.roulette_tables.get(ctx.channel.id)
         if existing is not None and not existing.open:
             await ctx.send_error("**Bets are closed.** *Rien ne va plus*")
@@ -705,7 +714,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
         game = mines_ui.MinesGame(cast("discord.Member", ctx.author), bet, mines)
-        await ctx.send(view=game)
+        game.message = await ctx.send(view=game)
 
     @command("trivia", description="Answer a trivia question — first correct answer wins.", guild_only=True, hybrid=True)
     @cooldown(1, 8.0, commands.BucketType.channel)
@@ -726,6 +735,8 @@ class Games(Cog):
         if key in self.wordle_played:
             await ctx.send_info("You've already played today's Wordle here. Come back tomorrow!")
             return
+        # Claim today's puzzle up front: abort and timeout reveal the word, so they must use up the day too.
+        self.wordle_played.add(key)
 
         answer = words[daily_index(len(words), ctx.guild.id, today)]
         game = wordle_ui.Wordle(cast("discord.Member", ctx.author), answer)
@@ -758,7 +769,6 @@ class Games(Cog):
             game.add_guess(content)
             await origin.edit(view=game.render())
 
-        self.wordle_played.add(key)
         if game.won:
             reward = max(50, 350 - (game.tries_used - 1) * 50)
             balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)

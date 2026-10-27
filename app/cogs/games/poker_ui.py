@@ -31,6 +31,10 @@ class RaiseBetModal(discord.ui.Modal, title="Bet/Raise"):
         label="Amount", placeholder="Enter the amount you want to raise by", min_length=1, max_length=10
     )
 
+    def __init__(self) -> None:
+        # Shorter than the 120 s autoplay clock, so an abandoned modal cannot outlive the turn.
+        super().__init__(timeout=100.0)
+
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.interaction = interaction
         self.stop()
@@ -150,7 +154,10 @@ class TableView(LayoutView):
 
     async def on_timeout(self) -> None:
         """Called when the view times out."""
-        for player in self.engine.players:
+        self.session.cancel_timer()
+        # Chips already in the pot go back to their owners before everyone is cashed out.
+        self.engine.abort_hand()
+        for player in list(self.engine.players):
             await self.session.remove_player(player.member)
 
         if self.session.message is not None:
@@ -165,6 +172,8 @@ class TableView(LayoutView):
 
     def render(self, with_autoplay: bool = False) -> TableView:
         """Recompose the layout: the table card plus the state-appropriate control rows."""
+        # Anyone may press Join while the table is open; once dealt, only seated players.
+        self.members = None if self.engine.state == TableState.STOPPED else [p.member for p in self.engine.players]
         self.clear_items()
         self.add_item(self.session.build_container(with_autoplay, self._button_rows()))
         return self
@@ -224,8 +233,8 @@ class TableView(LayoutView):
         self.start_next_round.label = "Start" if engine.state == TableState.PREPARED else "Next Round"
         self.start_next_round.disabled = True
 
-        # Raise/Bet is always available (blinds can raise when action comes back to them)
-        self.raise_bet.disabled = False
+        # Raise is only offered while the action is open to the current player
+        self.raise_bet.disabled = not engine.can_raise(engine.current_player)
         self.raise_bet.label = "Bet" if all(player.bet <= engine.big_blind for player in engine.playing_players) else "Raise"
 
         is_check = engine.players[engine.player_index].bet == max(player.bet for player in engine.players)
@@ -298,16 +307,25 @@ class TableView(LayoutView):
             )
             return
 
+        # The table may have filled up, started, or seated this user (second modal) meanwhile.
+        if (
+            self.engine.state != TableState.STOPPED
+            or len(self.engine.players) >= 4
+            or interaction.user in [player.member for player in self.engine.players]
+        ):
+            await cast("Bot", interaction.client).db.users.add_cash(interaction.user.id, interaction.guild_id, amount)  # type: ignore[arg-type]
+            await interaction.response.send_message(
+                f"{Emojis.error} You can't join this table anymore; your buy-in was refunded.", ephemeral=True
+            )
+            return
+
         self.engine.add_player(cast("discord.Member", interaction.user), stack=amount)
 
-        view = self
         if len(self.engine.players) == 4:
             self.engine.start()
-            view = TableView(session=self.session)
             self.session.restart_timer()
 
-        self.members = [player.member for player in self.engine.players]
-        await interaction.response.edit_message(view=view.render())
+        await interaction.response.edit_message(view=self.render())
 
     async def _on_my_hand(self, interaction: discord.Interaction) -> None:
         """Shows the player's hand"""
@@ -364,15 +382,16 @@ class TableView(LayoutView):
             await interaction.followup.send(f"{Emojis.error} You need at least 2 players to start the game.", ephemeral=True)
             return
 
-        view = self
-        if self.start_next_round.label == "Next Round":
+        # Decide from the engine state, not the button label: a double click must not
+        # rotate the button twice. Keep this one view: a replaced view's timeout would
+        # later fire and close the table mid-game.
+        if self.engine.state == TableState.FINISHED:
             await self.session.prepare_next_game()
         else:
-            self.session.view = view = TableView(session=self.session)
             self.engine.start()
             self.session.restart_timer()
 
-        await interaction.edit_original_response(view=view.render())
+        await interaction.edit_original_response(view=self.render())
 
     async def _on_fold(self, interaction: discord.Interaction) -> None:
         """Folds the player's hand"""
@@ -418,12 +437,23 @@ class TableView(LayoutView):
         if not player:
             return
 
-        self.session.cancel_timer()
+        if not self.engine.can_raise(player):
+            await interaction.response.send_message(
+                f"{Emojis.error} The betting was not reopened to you; you can only call or fold.", ephemeral=True
+            )
+            return
 
+        # The autoplay clock keeps running while the modal is open.
         modal = RaiseBetModal()
         await interaction.response.send_modal(modal)
-        await modal.wait()
+        if await modal.wait() or not hasattr(modal, "interaction"):
+            return
         interaction = modal.interaction
+
+        # The turn may have moved on (autoplay, a second modal) while the modal was open.
+        if self.engine.state != TableState.RUNNING or self.engine.current_player is not player:
+            await interaction.response.send_message(f"{Emojis.error} It's not your turn anymore.", ephemeral=True)
+            return
 
         try:
             amount = int(modal.amount.value)
@@ -431,30 +461,16 @@ class TableView(LayoutView):
             await interaction.response.send_message(f"{Emojis.error} Invalid amount.", ephemeral=True)
             return
 
-        # Calculate minimum raise
-        current_max_bet = max(p.bet for p in self.engine.players)
-
-        is_bet = current_max_bet <= self.engine.big_blind
-        if is_bet:
-            # First bet of the round: minimum is the big blind
-            min_raise = self.engine.big_blind
-            if amount < min_raise:
-                await interaction.response.send_message(
-                    f"You have to bet at least the big blind (**{min_raise}** Chips).", ephemeral=True
-                )
-                return
-        else:
-            # Raise: minimum raise increment is the big blind (standard poker rule)
-            # The total bet must be at least current_max_bet + big_blind
-            min_total_bet = current_max_bet + self.engine.big_blind
-            min_raise_amount = min_total_bet - player.bet  # Amount player needs to add
-
-            if amount < min_raise_amount:
-                await interaction.response.send_message(
-                    f"You have to raise to at least **{min_total_bet}** Chips "
-                    f"(add at least **{min_raise_amount}** Chips).", ephemeral=True
-                )
-                return
+        # Full raise: total bet of at least the current bet plus the last raise size
+        # (the big blind when nobody has raised yet). Shoving for less is always allowed.
+        min_total_bet = self.engine.min_raise_to
+        min_raise_amount = min_total_bet - player.bet
+        if amount < min_raise_amount and amount != player.stack:
+            await interaction.response.send_message(
+                f"You have to raise to at least **{min_total_bet}** Chips "
+                f"(add at least **{min_raise_amount}** Chips).", ephemeral=True
+            )
+            return
 
         if amount > player.stack:
             await interaction.response.send_message(f"{Emojis.error} You don't have enough chips.", ephemeral=True)
@@ -477,6 +493,12 @@ class TableView(LayoutView):
         if not player:
             return
 
+        if player.stack > self.engine.max_bet - player.bet and not self.engine.can_raise(player):
+            await interaction.response.send_message(
+                f"{Emojis.error} The betting was not reopened to you; you can only call or fold.", ephemeral=True
+            )
+            return
+
         self.session.cancel_timer()
 
         self.engine.AllIn()
@@ -486,6 +508,11 @@ class TableView(LayoutView):
         await interaction.response.edit_message(view=self.render())
 
     async def get_player(self, interaction: discord.Interaction) -> Player | None:
+        # A stale click after the hand ended must not act (it would settle the pot again).
+        if self.engine.state != TableState.RUNNING:
+            await interaction.response.send_message(f"{Emojis.error} There is no hand in progress.", ephemeral=True)
+            return None
+
         player = self.engine.players[self.engine.player_index]
         if not player:
             await interaction.response.send_message(f"{Emojis.error} You are not in the game.", ephemeral=True)
@@ -909,6 +936,10 @@ class TableView(LayoutView):
             big_blind = int(modal.big_blind.value)
         except ValueError:
             await interaction.response.send_message(f"{Emojis.error} Invalid bid/small blind.", ephemeral=True)
+            return
+
+        if self.engine.state == TableState.RUNNING:
+            await interaction.response.send_message(f"{Emojis.error} A hand started meanwhile.", ephemeral=True)
             return
 
         if big_blind < min_blind or big_blind > max_blind:

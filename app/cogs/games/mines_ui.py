@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import suppress
+
 import discord
 
 from app.cogs.games.engine.mines import COLS, ROWS, TILES, Mines
@@ -147,6 +149,19 @@ class MinesGame(LayoutView):
             await interaction.response.edit_message(view=self)
             await self._record(interaction, GameResult.LOSS, -self.bet)
             self.stop()
+
+    async def on_timeout(self) -> None:
+        """Walking away cashes out at the current multiplier (x1.00 -- a refund -- before the first gem)."""
+        if self.finished:
+            return
+        self.finished = True
+        payout = self._potential()
+        await (await self.player._state._get_client().db.get_user_balance(self.player.id, self.player.guild.id)).add(cash=payout)  # type: ignore[attr-defined]
+        self._status = f"`\N{ALARM CLOCK} Timed out` — cashed out {Emojis.Economy.cash} **{fnumb(payout)}**."
+        self._compose()
+        if self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
     async def _on_cash_out(self, interaction: discord.Interaction) -> None:
         if self.finished or self.engine.safe_revealed == 0:
