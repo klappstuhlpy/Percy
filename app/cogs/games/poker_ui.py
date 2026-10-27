@@ -125,6 +125,10 @@ class TableView(LayoutView):
         self.raise_bet.callback = self._on_raise_bet
         self.all_in = discord.ui.Button(label="All In", style=discord.ButtonStyle.red)
         self.all_in.callback = self._on_all_in
+        self.half_pot = discord.ui.Button(label="1/2 Pot", style=discord.ButtonStyle.blurple)
+        self.half_pot.callback = self._on_half_pot
+        self.full_pot = discord.ui.Button(label="Pot", style=discord.ButtonStyle.blurple)
+        self.full_pot.callback = self._on_full_pot
         self.analysis_button = discord.ui.Button(
             label="Show Analysis", style=discord.ButtonStyle.blurple, emoji="\N{BAR CHART}"
         )
@@ -213,7 +217,7 @@ class TableView(LayoutView):
                 if engine.hand_history:
                     third.append(self.history_button)
             if engine.state == TableState.FINISHED:
-                if engine.odds_mode != OddsMode.NONE and engine.analysis:
+                if engine.odds_mode != OddsMode.NONE and (engine.analysis or engine.pending_odds or self.session.odds_lock.locked()):
                     second.append(self.analysis_button)
                 second.append(self.odds_mode_button)
                 second.append(self.rebuy_button)
@@ -254,6 +258,8 @@ class TableView(LayoutView):
             discord.ui.ActionRow(self.join, self.my_hand, self.start_next_round),
             discord.ui.ActionRow(self.fold, self.check_call, self.raise_bet, self.all_in),
         ]
+        self.half_pot.disabled = self.full_pot.disabled = self.raise_bet.disabled
+        rows.append(discord.ui.ActionRow(self.half_pot, self.full_pot, self.leave_button))
 
         # Add straddle button if available (only pre-flop, UTG, no community cards yet)
         if (engine.straddle_enabled and
@@ -487,6 +493,35 @@ class TableView(LayoutView):
 
         await interaction.response.edit_message(view=self.render())
 
+    async def _on_half_pot(self, interaction: discord.Interaction) -> None:
+        await self._pot_raise(interaction, 0.5)
+
+    async def _on_full_pot(self, interaction: discord.Interaction) -> None:
+        await self._pot_raise(interaction, 1.0)
+
+    async def _pot_raise(self, interaction: discord.Interaction, fraction: float) -> None:
+        """Raises by a fraction of the pot, clamped to the minimum raise and the stack (all-in if it reaches it)."""
+        player = await self.get_player(interaction)
+        if not player:
+            return
+
+        if not self.engine.can_raise(player):
+            await interaction.response.send_message(
+                f"{Emojis.error} The betting was not reopened to you; you can only call or fold.", ephemeral=True
+            )
+            return
+
+        self.session.cancel_timer()
+        amount = self.engine.bet_preset(player, fraction)
+        if amount >= player.stack:
+            self.engine.AllIn()
+        else:
+            self.engine.Raise(amount)
+
+        self.engine.switch_player(by_raise=True)
+        self.session.restart_timer()
+        await interaction.response.edit_message(view=self.render())
+
     async def _on_all_in(self, interaction: discord.Interaction) -> None:
         """Goes all in"""
         player = await self.get_player(interaction)
@@ -533,6 +568,11 @@ class TableView(LayoutView):
                 f"{Emojis.error} The table is currently running, please wait till the game is finished.", ephemeral=True
             )
             return
+
+        if self.engine.pending_odds:
+            await self.session.flush_odds()
+        async with self.session.odds_lock:  # wait for an in-flight simulation
+            pass
 
         if not self.engine.analysis:
             await interaction.followup.send(
@@ -877,14 +917,24 @@ class TableView(LayoutView):
 
     async def _on_leave(self, interaction: discord.Interaction) -> None:
         """Callback for the leave button"""
-        if self.engine.state == TableState.RUNNING:
-            await interaction.response.send_message(
-                f"{Emojis.error} The table is currently running, please wait till the game is finished.", ephemeral=True
-            )
-            return
-
         if interaction.user not in [player.member for player in self.engine.players]:
             await interaction.response.send_message(f"{Emojis.error} You are not in the game.", ephemeral=True)
+            return
+
+        if self.engine.state == TableState.RUNNING:
+            # Mid-hand: fold out and cash out the stack; chips already in the pot stay there.
+            member = cast("discord.Member", interaction.user)
+            if next(p for p in self.engine.players if p.member == member).left:
+                await interaction.response.send_message(f"{Emojis.error} You already left this hand.", ephemeral=True)
+                return
+            self.session.cancel_timer()
+            await self.session.leave_hand(member)
+            self.session.restart_timer()
+            await interaction.response.edit_message(view=self.render())
+            if self.session.message is not None:
+                await self.session.message.reply(
+                    f"🍃 {interaction.user.mention} folded and left the table.", delete_after=10
+                )
             return
 
         await self.session.remove_player(cast("discord.Member", interaction.user))

@@ -211,3 +211,64 @@ def test_current_street_property() -> None:
     # River (5 community cards)
     engine.community_arr = np.array([[2, 0], [3, 1], [4, 2], [5, 3], [6, 0]])
     assert engine.current_street == 3
+
+
+def _running(stacks: list[int]) -> TexasHoldem:
+    engine = make_engine()
+    engine.defer_odds = True
+    for i, stack in enumerate(stacks):
+        engine.add_player(f'p{i}', stack)
+    engine.start()
+    return engine
+
+
+def _total(engine: TexasHoldem, cashed: int = 0) -> int:
+    return sum(p.stack for p in engine.players) + engine.pot.amount + cashed
+
+
+def test_deferred_odds_queue_snapshots_and_do_not_mutate() -> None:
+    engine = _running([500, 500, 500])
+    assert engine.analysis == [] and len(engine.pending_odds) == 1
+    snap = engine.pending_odds[0]
+    assert snap is not engine and snap.players[0] is not engine.players[0]
+    _live, _full, strength = TexasHoldem.run_odds_snapshot(snap)
+    assert set(strength) == {1, 2, 3}
+
+
+def test_leave_mid_hand_conserves_chips_and_cashes_out_once() -> None:
+    engine = _running([500, 500, 500])
+    start_total = _total(engine)
+    leaver = engine.players[engine.player_index].member  # their turn
+    cashed = engine.leave_hand(leaver)
+    assert cashed > 0
+    assert engine.leave_hand(leaver) == 0  # second call pays nothing
+    me = next(p for p in engine.players if p.member == leaver)
+    assert me.folded and me.left and me.stack == 0
+    # play out: everyone else folds to the last player
+    while engine.state == TableState.RUNNING:
+        engine.Fold()
+        engine.switch_player()
+    assert sum(p.stack for p in engine.players) + cashed == start_total
+    removed = engine.prepare_next_game()
+    assert [p.member for p in removed] == [leaver]
+    assert all(p.member != leaver for p in engine.players)
+
+
+def test_leave_when_not_your_turn_ends_heads_up_hand() -> None:
+    engine = _running([500, 500])
+    other = engine.players[(engine.player_index + 1) % 2].member
+    start_total = _total(engine)
+    cashed = engine.leave_hand(other)
+    assert engine.state == TableState.FINISHED
+    assert sum(p.stack for p in engine.players) + cashed == start_total
+
+
+def test_bet_preset_clamps_to_min_raise_and_stack() -> None:
+    engine = _running([1000, 1000, 1000])
+    p = engine.current_player
+    call = engine.max_bet - p.bet
+    full = engine.bet_preset(p, 1.0)
+    assert full == engine.max_bet + engine.pot.amount + call - p.bet
+    assert engine.bet_preset(p, 0.0) == engine.min_raise_to - p.bet  # clamped up to a full raise
+    p.stack = 5
+    assert engine.bet_preset(p, 1.0) == 5  # clamped to the stack -> all-in

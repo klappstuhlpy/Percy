@@ -12,6 +12,7 @@ Rendering (embeds), the autoplay timer and the economy refund live in the
 
 from __future__ import annotations
 
+import copy
 import enum
 import multiprocessing
 import random
@@ -346,6 +347,8 @@ class Player:
         self.has_straddled: bool = False
         # Muck: whether this player chose to muck (not show) their losing hand
         self.mucked: bool = False
+        # Left the table mid-hand: folded, cashed out, removed when the hand is over
+        self.left: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -498,6 +501,10 @@ class TexasHoldem:
         # hand_strength: hand type distribution per player
         self.analysis: list[tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]] = []
         self.odds_mode: OddsMode = OddsMode.LIVE  # Default to live odds
+        # When set, odds are not simulated inline: a snapshot is queued in ``pending_odds`` and the
+        # caller runs :meth:`run_odds_snapshot` (e.g. in a thread) and appends the result to ``analysis``.
+        self.defer_odds: bool = False
+        self.pending_odds: list[TexasHoldem] = []
 
     def __repr__(self) -> str:
         return f"TexasHoldem(state={self.state} host={self.host} players={len(self.players)} max_players={self.max_players})"
@@ -719,7 +726,7 @@ class TexasHoldem:
                 player.folded_on_street = 0  # Folded pre-flop
 
         if self.odds_mode != OddsMode.NONE:
-            self.analysis.append(cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True)))
+            self._record_odds()
 
         # The first actor may be sitting out or all-in from a blind: hand the turn on
         # (or end/run out the hand) exactly as if the seat before them had acted.
@@ -1236,6 +1243,36 @@ class TexasHoldem:
                 all_winners += [w for w in pot_winners if w not in all_winners]
             self.winners.append((all_winners, pot))
 
+    def bet_preset(self, player: Player, fraction: float) -> int:
+        """Chips ``player`` adds for a raise of ``fraction`` of the pot (counted after calling).
+
+        Clamped up to the minimum full raise and down to the stack; a result equal to the
+        stack means the caller should go all-in.
+        """
+        call = max(0, self.max_bet - player.bet)
+        raise_to = max(self.max_bet + int(fraction * (self.pot.amount + call)), self.min_raise_to)
+        return min(player.stack, raise_to - player.bet)
+
+    def leave_hand(self, member: discord.Member) -> int:
+        """Removes a player mid-hand: auto-fold, and return their remaining stack exactly once.
+
+        Chips already in the pot stay there. The stack is zeroed so the caller's refund cannot
+        repeat; the seat is dropped by :meth:`prepare_next_game`.
+        """
+        player = next(p for p in self.players if p.member == member)
+        player.left = True
+        if self.state == TableState.RUNNING and not player.folded:
+            was_turn = self.players[self.player_index] is player
+            player.folded = True
+            player.folded_on_street = self.current_street
+            self._log_action(f"{self._get_player_name(player)} leaves the table (folds)")
+            if was_turn:
+                self.switch_player()
+            elif len(self.playing_players) <= 1:
+                self.end()
+        stack, player.stack = player.stack, 0
+        return stack
+
     def remove_player(self, member: discord.Member) -> int:
         """Removes a player from the table and returns their leftover stack.
 
@@ -1277,7 +1314,7 @@ class TexasHoldem:
         # Reset players and remove players with no chips
         removed: list[Player] = []
         for player in list(self.players):
-            if player.stack <= 0:
+            if player.stack <= 0 or player.left:
                 self.players.remove(player)
                 removed.append(player)
             else:
@@ -1305,9 +1342,7 @@ class TexasHoldem:
         while len(self.community_arr) < 5:
             if len(self.community_arr) in (3, 4) and self.odds_mode != OddsMode.NONE:
                 # add analysis data for the flop and turn
-                self.analysis.append(
-                    cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
-                )
+                self._record_odds()
 
             self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
 
@@ -1381,9 +1416,7 @@ class TexasHoldem:
 
         # Calculate odds if game is not over and odds mode is enabled
         if len(self.community_arr) != 5 and self.odds_mode != OddsMode.NONE:
-            self.analysis.append(
-                cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
-            )
+            self._record_odds()
 
     def autoplay_turn(self, player: Player) -> bool:
         """Applies the automatic action for a player who took too long.
@@ -1410,16 +1443,6 @@ class TexasHoldem:
         return True
 
     @property
-    def game_is_over(self) -> bool:
-        """Returns whether the game is over (last round, all 5 community cards dealt, and every player has checked)"""
-        return (
-            self.state == TableState.FINISHED
-            or (len(self.community_arr) == 5 and all(player.checked or player.all_in for player in self.playing_players))
-            or (len(self.playing_players) == 1)
-            or (len(self.playing_players) == 2 and any(player.all_in for player in self.playing_players))
-        )
-
-    @property
     def to_draw(self) -> int:
         """Returns how much community cards need to be dealt"""
         TO_DRAW_MAP = {0: 3, 3: 1, 4: 1, 5: 0}
@@ -1432,6 +1455,26 @@ class TexasHoldem:
                 player.hand.add(self.deck.draw())
 
     # Simulation
+
+    def _record_odds(self) -> None:
+        """Simulates the odds now, or queues an isolated snapshot when :attr:`defer_odds` is set."""
+        if self.defer_odds:
+            self.pending_odds.append(self._odds_snapshot())
+        else:
+            self.analysis.append(self.run_odds_snapshot(self))
+
+    def _odds_snapshot(self) -> TexasHoldem:
+        """A copy of everything the simulation reads, safe to simulate while the game moves on."""
+        snap = copy.copy(self)
+        snap.players = [copy.copy(p) for p in self.players]  # Hand is immutable once dealt
+        snap.deck = copy.deepcopy(self.deck)
+        snap.community_arr = self.community_arr.copy()
+        return snap
+
+    @staticmethod
+    def run_odds_snapshot(game: TexasHoldem) -> tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]:
+        """Runs the (blocking) simulation for one street; pure with respect to ``game`` when it is a snapshot."""
+        return cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", game.simulate(final_hand=True))
 
     def _simulation_preparation(self, num_scenarios: int | Literal["all"]) -> tuple[np.ndarray | None, np.ndarray]:
         """Prepares the simulation by generating the community cards and undrawn cards
@@ -1631,7 +1674,7 @@ class TexasHoldem:
 
     def simulate(
         self,
-        num_scenarios: int | Literal["all"] = 150000,
+        num_scenarios: int | Literal["all"] = 60000,
         odds_type: Literal["win_any", "tie_win", "precise"] = "tie_win",
         final_hand: bool = False,
     ) -> tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]] | dict[str, float]:

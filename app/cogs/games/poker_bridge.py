@@ -60,6 +60,9 @@ class PokerSession:
 
         self.engine: TexasHoldem = TexasHoldem(first_buy_in=first_buy_in, decks=decks, max_players=max_players)
         self.engine.host = ctx.author
+        # The Monte-Carlo odds run in a worker thread on a snapshot (see :meth:`flush_odds`).
+        self.engine.defer_odds = True
+        self.odds_lock: asyncio.Lock = asyncio.Lock()
 
         self.message: discord.Message | None = None
         self.view: TableView = TableView(session=self)
@@ -167,12 +170,30 @@ class PokerSession:
         ``FINISHED`` settles the round's win/loss stats exactly once.
         """
         self.cancel_timer()
+        if self.engine.pending_odds:
+            self.loop.create_task(self.flush_odds())
         if self.engine.state == TableState.RUNNING:
             self._round_settled = False
             self.running_autoplay_loop = self.loop.create_task(self.start_timer(self.engine.current_player))
         elif self.engine.state == TableState.FINISHED and not self._round_settled:
             self._round_settled = True
             self.loop.create_task(self.settle_round_stats())
+
+    async def flush_odds(self) -> None:
+        """|coro|
+
+        Simulates the queued odds snapshots off the event loop and appends them, in order, to the
+        hand's analysis. The lock keeps successive flushes ordered; the list captured here is the
+        hand's own, so a result that lands after the next deal cannot leak into it.
+        """
+        async with self.odds_lock:
+            snapshots, self.engine.pending_odds = self.engine.pending_odds, []
+            analysis = self.engine.analysis
+            for snap in snapshots:
+                try:
+                    analysis.append(await asyncio.to_thread(TexasHoldem.run_odds_snapshot, snap))
+                except Exception:  # odds are decoration; never break the table
+                    break
 
     async def settle_round_stats(self) -> None:
         """|coro|
@@ -231,6 +252,17 @@ class PokerSession:
             assert self.ctx.guild is not None
             await self.ctx.bot.db.users.add_cash(member.id, self.ctx.guild.id, stack_left)
 
+    async def leave_hand(self, member: discord.Member) -> None:
+        """|coro|
+
+        Folds a player out of the running hand and cashes out the stack they still hold;
+        what they already put in the pot stays there.
+        """
+        stack_left = self.engine.leave_hand(member)
+        if stack_left > 0:
+            assert self.ctx.guild is not None
+            await self.ctx.bot.db.users.add_cash(member.id, self.ctx.guild.id, stack_left)
+
     async def prepare_next_game(self) -> None:
         """|coro|
 
@@ -238,7 +270,7 @@ class PokerSession:
         """
         removed = self.engine.prepare_next_game()
         for player in removed:
-            if self.message is not None:
+            if self.message is not None and not player.left:
                 await self.message.reply(
                     f"\N{LEAF FLUTTERING IN WIND} {player.member.mention} has been removed from the game because they ran out of chips."
                 )
