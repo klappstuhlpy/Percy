@@ -67,6 +67,15 @@ class TimersRepository(BaseRepository):
         """How many timers are waiting to fire."""
         return await self.fetchval("SELECT COUNT(*) FROM timers;")
 
+    async def fetch_timer(self, timer_id: int) -> asyncpg.Record | None:
+        """Fetches a single timer by its id."""
+        return await self.fetchrow("SELECT * FROM timers WHERE id = $1;", timer_id)
+
+    async def list_pending(self, *, event: str | None = None, limit: int = 25) -> list[asyncpg.Record]:
+        """The soonest-expiring timers, optionally only those of one ``event``."""
+        query = "SELECT * FROM timers WHERE $1::text IS NULL OR event = $1 ORDER BY expires LIMIT $2;"
+        return await self.fetch(query, event, limit)
+
     async def delete_timer(self, timer_id: int) -> None:
         """Deletes a single timer by its id."""
         await self.delete_where("timers", ("id",), (timer_id,))

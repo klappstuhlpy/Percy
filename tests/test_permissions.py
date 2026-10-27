@@ -131,7 +131,7 @@ def _make_ctx(
         async def get_command_overrides(self, _guild_id: int) -> dict:
             return overrides or {}
 
-    bot = SimpleNamespace(bypass_checks=False, owner_id=owner_id, owner_ids=None, db=_DB())
+    bot = SimpleNamespace(owner_bypass=True, owner_id=owner_id, owner_ids=None, db=_DB())
     return SimpleNamespace(
         command=cmd,
         bot=bot,
@@ -219,3 +219,13 @@ async def test_native_permissions_only_gate_top_level_hybrids() -> None:
     assert by_name["grp"].app_command.default_permissions is None  # type: ignore[union-attr]
     # Prefix-only command has no slash command to gate.
     assert getattr(by_name["prefixonly"], "app_command", None) is None
+
+
+async def test_owner_bypass_toggle() -> None:
+    cmd = _make_command(user_permissions=PermissionTemplate.ban)
+    owner = _make_ctx(cmd, user_perms=discord.Permissions(send_messages=True), author_id=999)
+    assert await command_permission_check(owner) is True  # type: ignore[arg-type]
+
+    owner.bot.owner_bypass = False
+    with pytest.raises(dpy_commands.MissingPermissions):
+        await command_permission_check(owner)  # type: ignore[arg-type]

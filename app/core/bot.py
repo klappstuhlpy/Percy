@@ -98,7 +98,8 @@ class Bot(commands.Bot):
 
     log: Final[logging.Logger] = LOG
 
-    bypass_checks: bool
+    #: Whether owners skip permission checks and cooldowns. ``dev bypass off`` clears it to test as a normal user.
+    owner_bypass: bool
     bot_app_info: discord.AppInfo
     db: Database
     session: ClientSession
@@ -256,7 +257,7 @@ class Bot(commands.Bot):
         self.temp_channels = Config('temp_channels.json')
         self.doc_links = Config('doc_links.json')
 
-        self.bypass_checks = False
+        self.owner_bypass = True
         # Independent round-trips (Discord REST vs. Postgres pool + pending migrations): overlap them.
         self.bot_app_info, self.db = await asyncio.gather(
             self.application_info(), Database(self, loop=self.loop).wait()

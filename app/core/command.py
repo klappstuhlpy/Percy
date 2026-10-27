@@ -292,6 +292,12 @@ class Command(commands.Command):
             return False
         return await super().can_run(ctx)
 
+    def _prepare_cooldowns(self, ctx: Context) -> None:  # type: ignore[override]
+        """Owners skip cooldowns while ``bot.owner_bypass`` is on (``dev bypass off`` to test them)."""
+        if PermissionSpec.owner_bypasses(ctx.bot, ctx.author):
+            return
+        super()._prepare_cooldowns(ctx)
+
     @property
     def parents(self) -> list[GroupMixin[Any]]:
         """list[GroupMixin[Any]] : Returns all parent commands of this command.

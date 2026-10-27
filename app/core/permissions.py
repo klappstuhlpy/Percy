@@ -254,6 +254,11 @@ class PermissionSpec(NamedTuple):
 
         return False
 
+    @staticmethod
+    def owner_bypasses(bot: Bot, user: discord.User | discord.Member) -> bool:
+        """Whether ``user`` is an owner and owner bypass (``dev bypass``) is on."""
+        return bot.owner_bypass and PermissionSpec._is_owner(bot, user)
+
     def check_user(self, ctx: Context, required: set[str]) -> None:
         """Raise :class:`commands.MissingPermissions` if the author lacks ``required``.
 
@@ -280,7 +285,7 @@ class PermissionSpec(NamedTuple):
 
     def check(self, ctx: Context) -> bool:
         """Checks if the given context meets the required permissions (no override applied)."""
-        if ctx.bot.bypass_checks or self._is_owner(ctx.bot, ctx.author):
+        if self.owner_bypasses(ctx.bot, ctx.author):
             return True
 
         self.check_user(ctx, self.user)
@@ -331,15 +336,15 @@ async def command_permission_check(ctx: Context) -> bool:
     it is robust to command copying) and, in a guild, consults the cached per-guild
     :class:`CommandOverride` map. When an override exists it replaces the *user* requirement
     (an allow-listed role bypasses it entirely); the bot's own permissions are always enforced.
-    With no override it falls back to the command's default check. Owner/``bypass_checks`` short
-    circuit as before, and owner-only commands (guarded by ``is_owner``, not a spec) are untouched.
+    With no override it falls back to the command's default check. Owners short circuit while
+    ``bot.owner_bypass`` is on, and owner-only commands (guarded by ``is_owner``, not a spec) are untouched.
     """
     command = ctx.command
     spec: PermissionSpec | None = getattr(command, "permissions", None)
     if spec is None:  # not one of our commands (e.g. the built-in help) — nothing to enforce
         return True
 
-    if ctx.bot.bypass_checks or PermissionSpec._is_owner(ctx.bot, ctx.author):
+    if PermissionSpec.owner_bypasses(ctx.bot, ctx.author):
         return True
 
     override: CommandOverride | None = None

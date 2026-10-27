@@ -1641,10 +1641,8 @@ class Stats(Cog):
 
         return parse_lavalink_metrics(text)
 
-    @command(hidden=True, description="Shows the current log level.")
-    @commands.is_owner()
-    async def bothealth(self, ctx: Context) -> None:
-        """Various bot health monitoring tools."""
+    async def send_bot_health(self, ctx: Context) -> None:
+        """Sends the bot health report; invoked by ``dev bothealth``, which owns the owner gate."""
 
         LEVEL_COLOURS = {
             HealthLevel.HEALTHY: helpers.Colour.lime_green(),

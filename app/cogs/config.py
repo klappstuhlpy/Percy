@@ -56,7 +56,7 @@ class CommandName(commands.Converter[str]):
     async def convert(self, ctx: Context, argument: str) -> str:
         lowered = argument.lower()
 
-        valid_commands = {c.qualified_name for c in ctx.bot.walk_commands() if c.cog_name not in ("Config", "Admin")}
+        valid_commands = {c.qualified_name for c in ctx.bot.walk_commands() if c.cog_name not in ("Config", "Dev")}
 
         if lowered not in valid_commands:
             raise commands.BadArgument(f"Command {lowered!r} is not valid.")
