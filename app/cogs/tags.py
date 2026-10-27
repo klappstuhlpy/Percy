@@ -612,6 +612,7 @@ class TagTransferConfirmButton(
 
     async def callback(self, interaction: discord.Interaction) -> None:
         # The request lives in DMs, so the user is a plain ``discord.User`` here — never assert Member.
+        await interaction.client.db.tags.end_transfer(self.tag.id)  # type: ignore[attr-defined]
         await self.tag.transfer(interaction.user, only_parent=True)
         if interaction.message is not None:
             await interaction.message.delete()
@@ -664,6 +665,7 @@ class TagTransferDeclineButton(
         return True
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.client.db.tags.end_transfer(self.tag.id)  # type: ignore[attr-defined]
         await self.tag.update(owner_id=self.from_id)
         if interaction.message is not None:
             await interaction.message.delete()
@@ -839,6 +841,12 @@ class Tags(Cog):
             record = await repo.get_parent_record_via_alias(name_or_id, owner_id=owner_id, location_id=location_id)
             parent = Tag(bot=self.bot, record=record) if record else None
 
+        if parent and parent.owner_id == PENDING_OWNER:
+            # A transfer nobody answered lapses after 24h: hand the tag back on first access.
+            restored = await repo.expire_transfer(parent.id)
+            if restored is not None:
+                parent.owner_id = restored
+
         if parent and exact_match:
             return parent
 
@@ -1006,6 +1014,12 @@ class Tags(Cog):
         If you want to edit an alias, you have to delete it and create a new one.
         """
         assert ctx.guild is not None
+        original = await self.get_tag(original_tag, location_id=ctx.guild.id, only_parent=True)
+        if original is None or not isinstance(original, Tag):
+            raise BadArgument("The original tag could not be found.", "original_tag")
+        perms = getattr(ctx.author, "guild_permissions", None)
+        if original.owner_id != ctx.author.id and not (perms and perms.manage_guild):
+            raise BadArgument("You can only alias tags you own (or need Manage Server).", "original_tag")
         try:
             status = await ctx.db.tags.create_alias(new_alias, original_tag, ctx.guild.id, ctx.author.id)
         except asyncpg.UniqueViolationError:
@@ -1435,7 +1449,12 @@ class Tags(Cog):
 
         await ctx.send_success(f"Successfully removed all **{count}** tags that belong to **{member}**.")
 
-    @tag.command("transfer", description="Transfer a tag owned by you to another member.", guild_only=True)
+    @tag.group(
+        "transfer",
+        description="Transfer a tag owned by you to another member.",
+        invoke_without_command=True,
+        guild_only=True,
+    )
     @describe(member="The member to transfer the tag to.", name_or_id="The tag to transfer.")
     @app_commands.rename(name_or_id="name-or-id")
     @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
@@ -1464,8 +1483,24 @@ class Tags(Cog):
         except discord.Forbidden:
             await ctx.send_error(f"I can't DM **{member}**, so they can't accept the transfer.")
             return
-        await tag.update(owner_id=PENDING_OWNER)
+        await self.bot.db.tags.start_transfer(tag.id, ctx.author.id)
         await ctx.send_info(f"Transfer request for tag **{tag.name}** has been sent to **{member}**.")
+
+    @tag_transfer.command("cancel", description="Cancel a pending tag transfer you started.", guild_only=True)
+    @describe(name_or_id="The tag whose transfer to cancel.")
+    @app_commands.rename(name_or_id="name-or-id")
+    async def tag_transfer_cancel(
+        self, ctx: Context, *, name_or_id: Annotated[str, TagNameOrID(with_id=True)]
+    ) -> None:
+        """Cancel a pending transfer; the tag returns to you."""
+        assert ctx.guild is not None
+        tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, only_parent=True)
+        if not isinstance(tag, Tag) or tag.owner_id != PENDING_OWNER:
+            raise BadArgument("That tag has no pending transfer.", "name_or_id")
+        if await self.bot.db.tags.end_transfer(tag.id) != ctx.author.id:
+            raise BadArgument("Only the member who started the transfer can cancel it.", "name_or_id")
+        await tag.update(owner_id=ctx.author.id)
+        await ctx.send_success(f"Transfer of tag **{tag.name}** cancelled.")
 
     @tag.command(
         "claim",

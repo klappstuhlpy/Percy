@@ -315,6 +315,8 @@ class Polls(Cog):
         image_url: str | None = None,
         image_bytes: tuple[bytes, str] | None = None,
         thread_question: str | None = None,
+        hide_results: bool = False,
+        role_id: int | None = None,
     ) -> Poll:
         """Creates a poll initiated from the web dashboard.
 
@@ -356,6 +358,8 @@ class Polls(Cog):
             # ``thread`` is the canonical kwarg read by the poll card + edit modal.
             thread=thread_question or None,
             with_reason=False,
+            hide_results=hide_results,
+            role_id=role_id,
             image=image_url,
             color=color or str(helpers.Colour.white()),
             votes=0,
@@ -1014,6 +1018,9 @@ class Polls(Cog):
             return
 
         member = member or ctx.author
+        if member.id != ctx.author.id and not ctx.author.guild_permissions.manage_messages:
+            await ctx.send_error("You need the Manage Messages permission to view another member's poll history.")
+            return
         user_polls = [poll for poll in polls if poll.get_entry(member.id) is not None]
         if not user_polls:
             await ctx.send_error(f"{member} hasn't voted on any poll here.")
@@ -1038,6 +1045,27 @@ class Polls(Cog):
                 return embed
 
         await FieldPaginator.start(ctx, entries=user_polls, per_page=12)
+
+    @polls.command("voters", description="Shows who voted for what on a poll.", guild_only=True)
+    @describe(poll_id="5-digit ID of the poll.")
+    @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
+    @cooldown(1, 5, commands.BucketType.user)
+    async def polls_voters(self, ctx: Context, poll_id: int) -> None:
+        """Lists each option's voters (needs Manage Messages)."""
+        assert ctx.guild is not None
+        if not ctx.author.guild_permissions.manage_messages:  # type: ignore[union-attr]
+            await ctx.send_error("You need the Manage Messages permission to view the voters list.")
+            return
+        poll = await self.get_guild_poll(ctx.guild.id, poll_id)
+        if poll is None:
+            await ctx.send_error("Poll not found.")
+            return
+        embed = discord.Embed(title=f"Voters: {poll.question}"[:256], colour=poll.color)
+        for option in poll.options:
+            ids = [uid for uid, idx in poll.entries if idx == option["index"]]
+            text = " ".join(f"<@{uid}>" for uid in ids) or "-"
+            embed.add_field(name=f"{poll.to_emoji(option['index'])} {option['content']}"[:256], value=text[:1024], inline=False)
+        await ctx.send(embed=embed, ephemeral=True)
 
     @polls.command(
         "debug",

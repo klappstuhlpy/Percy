@@ -165,13 +165,14 @@ class GiveawaysRepository(BaseRepository):
         await self.execute("UPDATE giveaways SET entries = $1 WHERE id = $2;", entries, giveaway_id)
 
     async def add_entry(self, giveaway_id: int, user_id: int) -> bool:
-        """Atomically adds one entrant; ``False`` when they had already entered (or the giveaway is gone).
+        """Atomically adds one entrant; ``False`` when they had already entered (or the giveaway is gone or already ended).
 
         One conditional append, so concurrent clicks never overwrite each other's entries.
         """
         added = await self.fetchval(
             "UPDATE giveaways SET entries = array_append(entries, $2::bigint) "
-            "WHERE id = $1 AND NOT ($2::bigint = ANY(entries)) RETURNING 1;",
+            "WHERE id = $1 AND NOT ($2::bigint = ANY(entries)) "
+            "AND NOT COALESCE((metadata #>> '{kwargs,ended}')::boolean, false) RETURNING 1;",
             giveaway_id, user_id,
         )
         return added is not None
@@ -277,6 +278,36 @@ class TagsRepository(BaseRepository):
     async def delete_alias(self, alias_id: int) -> None:
         """Deletes a single alias row."""
         await self.delete_where("tag_lookup", ("id",), (alias_id,))
+
+    async def start_transfer(self, tag_id: int, from_id: int, ttl_hours: int = 24) -> None:
+        """Marks a tag as pending transfer, remembering the sender and when the request lapses."""
+        await self.execute(
+            "INSERT INTO tag_transfers (tag_id, from_id, expires_at) "
+            "VALUES ($1, $2, (now() at time zone 'utc') + make_interval(hours => $3)) "
+            "ON CONFLICT (tag_id) DO UPDATE SET from_id = $2, expires_at = EXCLUDED.expires_at;",
+            tag_id, from_id, ttl_hours,
+        )
+        await self.execute("UPDATE tags SET owner_id = -1 WHERE id = $1;", tag_id)
+
+    async def end_transfer(self, tag_id: int) -> int | None:
+        """Drops the pending-transfer row and returns the sender's id (``None`` if there was none)."""
+        return await self.fetchval("DELETE FROM tag_transfers WHERE tag_id = $1 RETURNING from_id;", tag_id)
+
+    async def expire_transfer(self, tag_id: int) -> int | None:
+        """Hands a lapsed pending tag back to its sender; returns the restored owner id, else ``None``."""
+        return await self.fetchval(
+            """
+            WITH gone AS (
+                DELETE FROM tag_transfers
+                WHERE tag_id = $1 AND expires_at < (now() at time zone 'utc')
+                RETURNING from_id
+            )
+            UPDATE tags SET owner_id = (SELECT from_id FROM gone)
+            WHERE id = $1 AND EXISTS (SELECT 1 FROM gone)
+            RETURNING owner_id;
+            """,
+            tag_id,
+        )
 
     async def transfer_aliases(
             self, tag_id: int, owner_id: int, *, connection: asyncpg.Connection | None = None

@@ -133,3 +133,24 @@ async def test_submit_vote_refuses_ended_and_forbidden(monkeypatch: pytest.Monke
     assert (await cog.submit_vote(30, 1, outsider, None))[1] == "novote"
     row["running"] = False
     assert (await cog.submit_vote(30, 1, outsider, 0))[1] == "ended"
+
+
+async def test_history_of_others_needs_manage_messages() -> None:
+    sent: list[str] = []
+
+    async def send_error(msg: str) -> None:
+        sent.append(msg)
+
+    perms = types.SimpleNamespace(manage_messages=False)
+    ctx = types.SimpleNamespace(
+        guild=types.SimpleNamespace(id=1),
+        author=types.SimpleNamespace(id=1, guild_permissions=perms),
+        send_error=send_error,
+    )
+
+    async def get_guild_polls(_gid: int) -> list[Poll]:
+        return [_poll(), ]
+
+    cog = types.SimpleNamespace(get_guild_polls=get_guild_polls)
+    await Polls.polls_history.callback(cog, ctx, types.SimpleNamespace(id=2))  # type: ignore[arg-type]
+    assert sent and "Manage Messages" in sent[0]

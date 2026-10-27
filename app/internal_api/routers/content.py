@@ -50,6 +50,8 @@ class PatchPollBody(BaseModel):
     image_url: str | None = None
     color: str | None = None
     options: list[str] | None = None
+    hide_results: bool | None = None
+    role_id: int | str | None = None  # 0 / "" clears
 
 
 class CreateGiveawayBody(BaseModel):
@@ -58,6 +60,9 @@ class CreateGiveawayBody(BaseModel):
     channel_id: int | str
     winners: int = 1
     description: str | None = None
+    required_role_id: int | str | None = None
+    min_account_days: int = 0
+    min_join_days: int = 0
 
 
 class ToggleCommandBody(BaseModel):
@@ -169,6 +174,8 @@ async def get_polls(
             'expires': record['expires'].isoformat() if record.get('expires') else None,
             'ended': _kwargs.get('running', False) is False,
             'total_votes': _kwargs.get('votes', 0),
+            'hide_results': bool(_kwargs.get('hide_results')),
+            'role_id': str(_kwargs['role_id']) if _kwargs.get('role_id') else None,
         })
 
     total = len(polls)
@@ -188,6 +195,8 @@ async def create_poll(
     color: str | None = fastapi.Form(None),
     image_url: str | None = fastapi.Form(None),
     thread_question: str | None = fastapi.Form(None),
+    hide_results: bool = fastapi.Form(False),
+    role_id: str | None = fastapi.Form(None),
     file: fastapi.UploadFile | None = fastapi.File(None),
 ) -> dict:
     """Create a poll. Accepts JSON fields as form params; ``file`` uploads an image inline.
@@ -219,6 +228,15 @@ async def create_poll(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be between 1 second and 365 days')
 
     config = await bot.db.get_guild_config(guild_id=guild.id)
+
+    vote_role_id: int | None = None
+    if role_id and role_id.strip() not in ('', '0'):
+        try:
+            vote_role_id = int(role_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid role_id')
+        if guild.get_role(vote_role_id) is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='role not found')
 
     if channel_id:
         try:
@@ -268,6 +286,8 @@ async def create_poll(
         image_url=resolved_image_url,
         image_bytes=image_bytes,
         thread_question=thread_question.strip() if thread_question else None,
+        hide_results=hide_results,
+        role_id=vote_role_id,
     )
 
     return {'ok': True, 'id': poll.id}
@@ -314,6 +334,18 @@ async def _patch_poll(guild: discord.Guild, bot: Any, poll_id: int, body: PatchP
 
     if body.color is not None:
         kwargs['color'] = body.color if body.color else None
+
+    if body.hide_results is not None:
+        kwargs['hide_results'] = body.hide_results
+
+    if body.role_id is not None:
+        try:
+            new_role = int(body.role_id) if str(body.role_id).strip() else 0
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid role_id')
+        if new_role and guild.get_role(new_role) is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='role not found')
+        kwargs['role_id'] = new_role or None
 
     values: dict[str, Any] = {}
     if body.options is not None:
@@ -438,9 +470,21 @@ async def create_giveaway(guild: GuildDep, bot: BotDep, body: CreateGiveawayBody
     if not isinstance(channel, discord.TextChannel):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='a valid text channel is required')
 
+    role_id: int | None = None
+    if body.required_role_id not in (None, '', 0, '0'):
+        try:
+            role_id = int(body.required_role_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid required_role_id')
+        if guild.get_role(role_id) is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='required role not found')
+    if not (0 <= body.min_account_days <= 3650 and 0 <= body.min_join_days <= 3650):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='age requirements must be 0-3650 days')
+
     expires = discord.utils.utcnow() + datetime.timedelta(seconds=duration)
     giveaway, _ = await cog.start_giveaway(
         channel, guild.id, bot.user.id, prize=prize, description=description, winners=winners, expires=expires,
+        required_role_id=role_id, min_account_days=body.min_account_days, min_join_days=body.min_join_days,
     )
     return {'ok': True, 'id': giveaway.id}
 

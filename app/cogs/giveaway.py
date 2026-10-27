@@ -46,7 +46,17 @@ def _mention_list(winners: list[discord.Member]) -> str:
     return f"{shown} and {hidden} more" if hidden > 0 else shown
 
 
-class GiveawayCreateFlags(Flags):
+class GiveawayRequirementFlags(Flags):
+    role: discord.Role = flag(aliases=("req_role", "required_role"), description="Role needed to enter.")
+    min_account_days: commands.Range[int, 1, 3650] = flag(
+        aliases=("account_age",), description="Minimum Discord account age in days."
+    )
+    min_join_days: commands.Range[int, 1, 3650] = flag(
+        aliases=("join_age",), description="Minimum days on this server."
+    )
+
+
+class GiveawayCreateFlags(GiveawayRequirementFlags):
     winners: commands.Range[int, 1, 100] = flag(aliases=("winner", "win"), short="w", default=1)
     description: str = flag(aliases=("msg", "description", "desc", "comment"), short="d")
     channel: discord.TextChannel = flag(aliases=("chan", "c"), short="ch")
@@ -141,7 +151,7 @@ class GiveawayEnterButton(discord.ui.DynamicItem[discord.ui.Button], template=r"
             await interaction.response.send_message(f"{Emojis.error} This giveaway no longer exists.", ephemeral=True)
             return False
 
-        error = entry_error(giveaway, interaction.user.id)
+        error = entry_error(giveaway, interaction.user.id, interaction.user)
         if error is not None:
             await interaction.response.send_message(f"{Emojis.error} {error}", ephemeral=True)
             return False
@@ -163,7 +173,36 @@ class GiveawayEnterButton(discord.ui.DynamicItem[discord.ui.Button], template=r"
         await interaction.followup.send(f"{Emojis.success} You have successfully entered this giveaway.", ephemeral=True)
 
 
-def entry_error(giveaway: Giveaway, user_id: int) -> str | None:
+def requirement_error(kwargs: dict[str, Any], member: Any, now: datetime.datetime | None = None) -> str | None:
+    """Why ``member`` fails the giveaway's role / account-age / join-age requirements, or ``None``."""
+    now = now or discord.utils.utcnow()
+    role_id = kwargs.get("required_role_id")
+    if role_id and not any(r.id == role_id for r in getattr(member, "roles", ())):
+        return f"You need the <@&{role_id}> role to enter this giveaway."
+    days = kwargs.get("min_account_days")
+    created = getattr(member, "created_at", None)
+    if days and created and now - created < datetime.timedelta(days=days):
+        return f"Your Discord account must be at least {days} day(s) old to enter this giveaway."
+    days = kwargs.get("min_join_days")
+    joined = getattr(member, "joined_at", None)
+    if days and (joined is None or now - joined < datetime.timedelta(days=days)):
+        return f"You must have been in this server for at least {days} day(s) to enter this giveaway."
+    return None
+
+
+def requirement_lines(kwargs: dict[str, Any]) -> list[str]:
+    """Human-readable requirement list for the giveaway card."""
+    out = []
+    if kwargs.get("required_role_id"):
+        out.append(f"Role <@&{kwargs['required_role_id']}>")
+    if kwargs.get("min_account_days"):
+        out.append(f"Account older than {kwargs['min_account_days']}d")
+    if kwargs.get("min_join_days"):
+        out.append(f"In server for {kwargs['min_join_days']}d+")
+    return out
+
+
+def entry_error(giveaway: Giveaway, user_id: int, member: Any = None) -> str | None:
     """Why ``user_id`` may not enter, or ``None`` when they may."""
     if giveaway.ended:
         return "This giveaway has already ended."
@@ -171,6 +210,8 @@ def entry_error(giveaway: Giveaway, user_id: int) -> str | None:
         return "You cannot enter your own giveaway."
     if user_id in giveaway.entries:
         return "You have already entered this giveaway."
+    if member is not None:
+        return requirement_error(giveaway.kwargs, member)
     return None
 
 
@@ -300,6 +341,8 @@ class Giveaway(BaseRecord, table="giveaways", pk="id"):
         if state == "running":
             lines.insert(0, f"**Ends** {when}")
             lines.append(f"**Winners** {self.winner_count}")
+            if reqs := requirement_lines(self.kwargs):
+                lines.append(f"**Requires** {', '.join(reqs)}")
         elif state == "ended":
             lines.insert(0, f"**Ended** {when}")
             lines.append(f"**Winners** {_mention_list(winners) if winners else 'No valid entrants'}")
@@ -440,10 +483,22 @@ class Giveaways(Cog):
         winners: int,
         expires: datetime.datetime,
         timezone: str = "UTC",
+        required_role_id: int | None = None,
+        min_account_days: int = 0,
+        min_join_days: int = 0,
     ) -> tuple[Giveaway, discord.Message]:
         """|coro| Posts the giveaway card, stores the row and schedules the end timer. Shared by commands and the API."""
         message = await channel.send(embed=discord.Embed(description="*Preparing Giveaway...*"))
         now = discord.utils.utcnow()
+        requirements = {
+            k: v
+            for k, v in (
+                ("required_role_id", required_role_id),
+                ("min_account_days", min_account_days),
+                ("min_join_days", min_join_days),
+            )
+            if v
+        }
         giveaway = await self.create_giveaway(
             message.channel.id,
             message.id,
@@ -454,6 +509,7 @@ class Giveaways(Cog):
             winner_count=winners,
             created=now.isoformat(),
             expires=expires.isoformat(),
+            **requirements,
         )
         await self.bot.timers.create(expires, "giveaway", giveaway_id=giveaway.id, created=now, timezone=timezone)
         giveaway.message = message
@@ -488,6 +544,8 @@ class Giveaways(Cog):
         giveaway, message = await self.start_giveaway(
             channel, ctx.guild.id, ctx.author.id, prize=prize, description=flags.description,
             winners=flags.winners, expires=when.dt, timezone=zone or "UTC",
+            required_role_id=flags.role.id if flags.role else None,
+            min_account_days=flags.min_account_days or 0, min_join_days=flags.min_join_days or 0,
         )
         await ctx.send_success(f"Giveaway [`{giveaway.id}`] successfully created. {message.jump_url}", ephemeral=True)
 
@@ -495,7 +553,9 @@ class Giveaways(Cog):
                       guild_only=True, user_permissions=PermissionTemplate.mod)
     @checks.requires_timer()
     @describe(description="Describe the giveaway: the prize, how many winners, and how long it runs.")
-    async def giveaway_quick(self, ctx: Context, *, description: str) -> None:
+    async def giveaway_quick(
+        self, ctx: Context, *, description: str, flags: GiveawayRequirementFlags
+    ) -> None:
         """Create a giveaway by describing it in plain language — the AI fills in the details.
 
         e.g. "give away a Nitro classic to 2 winners for 1 day". Falls back to
@@ -534,6 +594,8 @@ class Giveaways(Cog):
         giveaway, message = await self.start_giveaway(
             channel, ctx.guild.id, ctx.author.id, prize=request.prize, description=request.description,
             winners=winners, expires=when.dt, timezone=zone or "UTC",
+            required_role_id=flags.role.id if flags.role else None,
+            min_account_days=flags.min_account_days or 0, min_join_days=flags.min_join_days or 0,
         )
 
         winners_label = f"{winners} winner{'s' if winners != 1 else ''}"

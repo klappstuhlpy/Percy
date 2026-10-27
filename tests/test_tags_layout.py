@@ -28,3 +28,19 @@ def test_content_never_pings() -> None:
     assert not TAG_MENTIONS.everyone and not TAG_MENTIONS.roles and not TAG_MENTIONS.users
     long = content_payload("x" * 2500)
     assert "content" not in long and isinstance(long["file"], discord.File)
+
+
+async def test_expire_transfer_sql_guards_on_expiry() -> None:
+    from app.database.repositories.community import TagsRepository
+
+    seen: list[str] = []
+
+    class R(TagsRepository):
+        def __init__(self) -> None: ...
+
+        async def fetchval(self, query: str, *a: object) -> int | None:
+            seen.append(query)
+            return 7
+
+    assert await R().expire_transfer(1) == 7
+    assert "expires_at <" in seen[0] and "DELETE FROM tag_transfers" in seen[0]

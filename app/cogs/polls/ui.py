@@ -46,7 +46,8 @@ class PollReasonModal(discord.ui.Modal, title="The Reason for you choice."):
         max_length=200,
     )
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
+    async def post_reason(self, interaction: discord.Interaction) -> None:
+        """Post the reason to the guild's reason channel; call only once the vote was saved."""
         embed = discord.Embed(title="New Poll Reason", color=helpers.Colour.white())
         guild = interaction.guild
         embed.set_thumbnail(url=get_asset_url(guild) if guild else None)
@@ -60,14 +61,14 @@ class PollReasonModal(discord.ui.Modal, title="The Reason for you choice."):
         )
         embed.set_footer(text=f"#{self.poll.kwargs.get('index')} • [{self.poll.id}]")
 
-        await interaction.response.send_message("Thank you for submitting your response.", ephemeral=True)
-
         with suppress(discord.HTTPException):
             assert interaction.guild is not None
             config = await self.bot.db.get_guild_config(guild_id=interaction.guild.id)
             if channel := config.poll_reason_channel:
                 await channel.send(embed=embed)
 
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message("Thank you for submitting your response.", ephemeral=True)
         self.stop()
 
 
@@ -167,6 +168,7 @@ async def _submit_vote(poll: Poll, interaction: discord.Interaction, index: int)
         return
 
     responded = False
+    modal: PollReasonModal | None = None
     if poll.kwargs.get("with_reason"):
         modal = PollReasonModal(poll, option, interaction.client)  # type: ignore[arg-type]
         await interaction.response.send_modal(modal)
@@ -184,6 +186,9 @@ async def _submit_vote(poll: Poll, interaction: discord.Interaction, index: int)
         send = interaction.followup.send if responded else interaction.response.send_message
         await send(_OUTCOME_ERRORS.get(outcome, _OUTCOME_ERRORS["missing"]), ephemeral=True)
         return
+
+    if modal is not None:
+        await modal.post_reason(interaction)
 
     view = create_view(fresh)
     if responded:

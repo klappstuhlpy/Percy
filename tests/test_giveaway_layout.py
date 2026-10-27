@@ -94,3 +94,33 @@ async def test_fewer_winners_than_slots_and_reroll_pool() -> None:
     assert rest == {1, 2, 3} - first and not rest & first
     assert await g.get_winners() == []
     _limits(winners_layout(g, [], rerolled=True))
+
+
+def test_requirement_error() -> None:
+    from app.cogs.giveaway import requirement_error
+
+    now = datetime.datetime(2026, 1, 31, tzinfo=datetime.UTC)
+    day = datetime.timedelta(days=1)
+    member = SimpleNamespace(roles=[SimpleNamespace(id=5)], created_at=now - 10 * day, joined_at=now - 2 * day)
+    assert requirement_error({}, member, now) is None
+    assert requirement_error({"required_role_id": 5}, member, now) is None
+    assert "role" in requirement_error({"required_role_id": 6}, member, now)
+    assert "account" in requirement_error({"min_account_days": 30}, member, now)
+    assert "server" in requirement_error({"min_join_days": 7}, member, now)
+    assert requirement_error({"min_join_days": 1}, member, now) is None
+
+
+async def test_add_entry_sql_refuses_ended() -> None:
+    from app.database.repositories.community import GiveawaysRepository
+
+    seen: list[str] = []
+
+    class R(GiveawaysRepository):
+        def __init__(self) -> None: ...
+
+        async def fetchval(self, query: str, *a: object) -> int | None:
+            seen.append(query)
+            return None
+
+    assert await R().add_entry(1, 2) is False
+    assert "ended" in seen[0]
