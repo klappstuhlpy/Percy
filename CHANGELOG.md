@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.20.0] - 2026-10-27
+
+### Added
+- Polls: click another option to move your vote; `hide_results` keeps counts hidden until the poll ends; `role` limits voting to one role.
+- Modlog cases, warn DMs, Discord status posts, starboard posts, giveaways, tag info/lists and stats now use Components V2 cards.
+
+### Fixed
+- Poker: kicker and wheel ranking, side pots and odd chips, minimum raises, all-in crashes, deck running out, button rotation, table-timeout refunds, raise/join races.
+- Games: roulette Place Bet never charged, free blackjack replays, blackjack natural paid 1.5× total, Tower player edge, Wordle daily replay, Minesweeper numbers, Russian roulette reload, Higher/Lower multiplier reset, tic-tac-toe result text.
+- Tags: edit/delete by name could reach other servers' tags; tag content could ping @everyone.
+- Polls: simultaneous votes were lost, a vote for the first option counted as none, removing an option moved votes.
+- Giveaways crashed on end and skipped uncached winners; dashboard cancel left the Enter button.
+- Discord status overwrote the previous incident's post; starboard settings panel crashed.
+- Case history stopped at 25 entries; failed warn DMs are now reported.
+- Snoozing a saved reminder crashed; named poll colours all came out blurple.
+- Fixed a bug where the `dev cache` command would not display cache information correctly.
+
 ## [2.19.0] - 2026-10-27
 
 ### Added
