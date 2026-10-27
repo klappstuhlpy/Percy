@@ -47,7 +47,7 @@ def _iter_caches() -> Iterator[tuple[str, CacheProtocol]]:
             if isinstance(value, type) and value.__module__ == module_name:
                 candidates = [(f"{name}.{attr}", v) for attr, v in vars(value).items()]
             for qualname, obj in candidates:
-                if hasattr(obj, "cache_info") and id(obj) not in seen:
+                if hasattr(obj, "invalidate") and hasattr(obj, "get_key") and id(obj) not in seen:
                     seen.add(id(obj))
                     yield f"{module_name}.{qualname}", obj
 
