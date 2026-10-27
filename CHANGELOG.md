@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.21.0] - 2026-10-27
+
+### Added
+- Games: `plinko` and `keno` (text commands; the global slash budget is full).
+- Poker: ½ Pot and Pot bet buttons; leaving mid-hand folds and cashes out your stack.
+- Warn policy: `warnpolicy show|set|remove|expiry` for expiring warns and automatic punishments at N active warns; `pardon` and `clearwarns` keep the record; `warnings` lists warns only. Case cards show stored expiry.
+- Giveaways: required role and minimum account/server age (`--role`, `--min_account_days`, `--min_join_days`).
+- Tags: `tag transfer cancel`; pending transfers expire after 24 hours.
+- Polls: `polls voters` for moderators; `hide_results` and `role_id` on the dashboard API.
+- Stats: `stats failures`, `stats heatmap`, `stats activity`, `stats hours`.
+
+### Changed
+- Slots: 🆒 is wild and every winning line pays.
+- Minesweeper, tic-tac-toe and trivia pay the first 10 wins per user per day.
+- Blackjack: split aces get one card each; at most 3 hands.
+- Viewing another member's `polls history` needs Manage Messages.
+- `tag alias` requires owning the tag or Manage Server.
+- Timed-out buttons are disabled on the message itself.
+
+### Fixed
+- Higher/Lower, Tower and Slots lost the player's money on timeout.
+- Roulette and horse-race stakes were lost on restart; they are now refunded.
+- Poker odds froze the bot for over a second each street.
+- Slash commands with failed permission checks showed "Something went wrong".
+- Empty lists crashed several paginators.
+
+### Migrations
+- V62 warn policy, V63 tag transfers, V64 open game bets (applied on next start).
+
 ## [2.20.0] - 2026-10-27
 
 ### Added
