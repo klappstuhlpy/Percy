@@ -2,7 +2,7 @@
 
 Covers three surfaces:
 
-* the mirrored post (content line + rich embed + a jump-link button),
+* the mirrored post (a Components V2 card with a jump-link button),
 * the read-only configuration embed shown by ``starboard show``, and
 * the manager-only :class:`StarboardConfigView` interactive settings panel.
 """
@@ -15,6 +15,7 @@ import discord
 
 from app.cogs.starboard.engine import color_for_stars, star_emoji_for
 from app.cogs.starboard.models import DEFAULT_EMOJI, DEFAULT_THRESHOLD
+from app.core.components_v2 import NoticeView
 from app.core.views import View
 from app.utils import helpers
 
@@ -26,21 +27,31 @@ if TYPE_CHECKING:
     from app.core import Context
 
 __all__ = (
+    'POST_MENTIONS',
     'StarboardConfigView',
     'build_config_embed',
     'build_starboard_content',
-    'build_starboard_embed',
+    'build_starboard_view',
 )
 
-#: File extensions treated as previewable images for the embed thumbnail.
+#: File extensions treated as previewable media for the gallery.
 _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.webp')
+_VIDEO_EXTENSIONS = ('.mp4', '.mov', '.webm')
 
-#: How much of a replied-to message / overflow to keep before truncating.
+#: How much of a replied-to message to keep before truncating.
 _REPLY_SNIPPET_LEN = 100
+
+#: Discord's limits for one Components V2 message / one media gallery.
+_TEXT_BUDGET = 4000
+_GALLERY_LIMIT = 10
+
+#: Starred content is mirrored verbatim, and in a CV2 text display (unlike an embed) a mention
+#: would ping. Every send/edit of a starboard post must pass this.
+POST_MENTIONS = discord.AllowedMentions.none()
 
 
 def build_starboard_content(emoji: str, star_count: int, channel: discord.abc.GuildChannel | discord.Thread) -> str:
-    """The one-line header shown above the mirrored embed.
+    """The one-line star header of a starboard post.
 
     Uses the configured emoji when it's customized; otherwise escalates the default
     star through its popularity tiers.
@@ -54,14 +65,33 @@ def _truncate(text: str, length: int = _REPLY_SNIPPET_LEN) -> str:
     return text if len(text) <= length else text[: length - 1].rstrip() + '…'
 
 
-def _first_image(attachments: Sequence[discord.Attachment]) -> discord.Attachment | None:
-    """The first previewable, non-spoiler image attachment, if any."""
-    for attachment in attachments:
-        if attachment.is_spoiler():
-            continue
-        if attachment.filename.lower().endswith(_IMAGE_EXTENSIONS):
-            return attachment
-    return None
+def _clip(text: str, length: int) -> str:
+    """Truncate keeping line breaks (for the message body)."""
+    if length <= 0:
+        return ''
+    return text if len(text) <= length else text[: length - 1].rstrip() + '…'
+
+
+def _is_media(attachment: discord.Attachment) -> bool:
+    content_type = attachment.content_type or ''
+    name = attachment.filename.lower()
+    return (
+        content_type.startswith(('image/', 'video/'))
+        or name.endswith(_IMAGE_EXTENSIONS)
+        or name.endswith(_VIDEO_EXTENSIONS)
+    )
+
+
+def _gallery_items(message: discord.Message) -> list[discord.MediaGalleryItem]:
+    """Media attachments (spoilers stay spoilered) followed by image/GIF embed previews."""
+    items = [
+        discord.MediaGalleryItem(a.url, spoiler=a.is_spoiler()) for a in message.attachments if _is_media(a)
+    ]
+    for embed in message.embeds:
+        url = embed.image.url or (embed.thumbnail.url if embed.type in ('image', 'gifv') else None)
+        if url:
+            items.append(discord.MediaGalleryItem(url))
+    return items[:_GALLERY_LIMIT]
 
 
 def _reply_line(message: discord.Message) -> str | None:
@@ -74,66 +104,71 @@ def _reply_line(message: discord.Message) -> str | None:
         return None
 
     snippet = _truncate(resolved.content) if resolved.content else '*[no text]*'
-    return f"\N{LEFTWARDS ARROW WITH HOOK} Replying to {resolved.author.mention}: {snippet}"
+    return f"-# \N{LEFTWARDS ARROW WITH HOOK} Replying to **{resolved.author.display_name}**: {snippet}"
 
 
-def _describe_attachments(
-    attachments: Sequence[discord.Attachment], previewed: discord.Attachment | None
-) -> str | None:
-    """A human summary of attachments that aren't shown as the embed image."""
-    extras = [a for a in attachments if a is not previewed]
+def _describe_attachments(attachments: Sequence[discord.Attachment]) -> str | None:
+    """A summary of attachments that the gallery can't show (files, audio, ...)."""
+    extras = [a for a in attachments if not _is_media(a)]
     if not extras:
         return None
 
-    lines: list[str] = []
-    for attachment in extras[:5]:
-        marker = '\N{WARNING SIGN} ' if attachment.is_spoiler() else ''
-        lines.append(f"{marker}[{attachment.filename}]({attachment.url})")
+    lines = [
+        f"{'\N{WARNING SIGN} ' if a.is_spoiler() else ''}\N{PAPERCLIP} [{_truncate(a.filename, 80)}]({a.url})"
+        for a in extras[:5]
+    ]
     if len(extras) > 5:
         lines.append(f"…and {len(extras) - 5} more")
     return '\n'.join(lines)
 
 
-def build_starboard_embed(message: discord.Message, *, star_count: int, threshold: int) -> tuple[discord.Embed, View]:
-    """Builds the embed and jump-link view mirroring an original message.
+def build_starboard_view(
+    message: discord.Message, *, emoji: str, star_count: int, threshold: int
+) -> discord.ui.LayoutView:
+    """Builds the Components V2 card mirroring ``message`` on the starboard.
 
-    The embed colour warms as ``star_count`` climbs past ``threshold``. Returns a
-    ``(embed, view)`` pair; the view holds a single link button to the source message.
+    The rail colour warms as ``star_count`` climbs past ``threshold``. Send/edit it with
+    ``allowed_mentions=POST_MENTIONS`` and no content/embeds.
     """
-    description_parts: list[str] = []
+    container = discord.ui.Container(accent_colour=discord.Colour(color_for_stars(star_count, threshold)))
+
+    header = (
+        f"{build_starboard_content(emoji, star_count, message.channel)}\n"  # type: ignore[arg-type]
+        f"**{message.author.display_name}**"
+    )
+    container.add_item(
+        discord.ui.Section(header, accessory=discord.ui.Thumbnail(message.author.display_avatar.url))
+    )
+
     reply = _reply_line(message)
-    if reply is not None:
-        description_parts.append(reply)
+    attachments = _describe_attachments(message.attachments)
+    stickers = ', '.join(s.name for s in message.stickers)
+    stickers_line = f"-# Stickers: {stickers}" if stickers else None
+    footer = f"-# {discord.utils.format_dt(message.created_at, 'f')} · ID: {message.id}"
+
+    fixed = [header, reply, attachments, stickers_line, footer]
+    budget = _TEXT_BUDGET - sum(len(t) for t in fixed if t) - 50
+
+    if reply:
+        container.add_item(discord.ui.TextDisplay(reply))
     if message.content:
-        description_parts.append(message.content)
+        container.add_item(discord.ui.TextDisplay(_clip(message.content, budget)))
 
-    embed = discord.Embed(
-        description='\n\n'.join(description_parts) or None,
-        colour=discord.Colour(color_for_stars(star_count, threshold)),
-        timestamp=message.created_at,
-    )
-    embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
+    gallery = _gallery_items(message)
+    if gallery:
+        container.add_item(discord.ui.MediaGallery(*gallery))
+    for extra in (attachments, stickers_line):
+        if extra:
+            container.add_item(discord.ui.TextDisplay(extra))
 
-    image = _first_image(message.attachments)
-    if image is not None:
-        embed.set_image(url=image.url)
-    elif message.embeds and message.embeds[0].type in ('image', 'gifv') and message.embeds[0].thumbnail.url:
-        embed.set_image(url=message.embeds[0].thumbnail.url)
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(footer))
 
-    attachment_summary = _describe_attachments(message.attachments, image)
-    if attachment_summary is not None:
-        embed.add_field(name='Attachments', value=attachment_summary, inline=False)
-
-    if message.stickers:
-        embed.add_field(name='Stickers', value=', '.join(s.name for s in message.stickers), inline=False)
-
-    embed.set_footer(text=f"ID: {message.id}")
-
-    view = View(timeout=None)
-    view.add_item(
-        discord.ui.Button(style=discord.ButtonStyle.link, label='Jump to message', url=message.jump_url)
-    )
-    return embed, view
+    view = NoticeView(container)
+    row = discord.ui.ActionRow()
+    row.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label='Jump to message', url=message.jump_url))
+    view.add_item(row)
+    return view
 
 
 # -- configuration display -------------------------------------------------
@@ -261,7 +296,7 @@ class StarboardConfigView(View):
     async def apply(self, interaction: discord.Interaction, **columns: object) -> None:
         """Persist a config change, refresh the panel, and acknowledge the interaction."""
         assert self.guild is not None
-        self.config = await self.cog._update_config(self.guild.id, **columns)
+        self.config = await self.cog.update_config(self.guild.id, **columns)
         self._sync_labels()
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=self.embed(), view=self)

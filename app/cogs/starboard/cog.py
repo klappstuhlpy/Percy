@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import weakref
 from typing import TYPE_CHECKING
 
 import discord
@@ -29,7 +30,8 @@ class Starboard(Cog):
         # invalidate on writes rather than hitting the database each time.
         self._config_cache: dict[int, StarboardConfig | None] = {}
         # Serialize processing per message so concurrent reactions can't double-post.
-        self._locks: dict[int, asyncio.Lock] = {}
+        # Weak values: a lock disappears once no task holds or awaits it, so the map can't grow forever.
+        self._locks: weakref.WeakValueDictionary[int, asyncio.Lock] = weakref.WeakValueDictionary()
 
     # -- config access ----------------------------------------------------
 
@@ -127,10 +129,9 @@ class Starboard(Cog):
         if action is StarboardAction.CREATE:
             if not self._eligible_to_create(message, config, starboard):
                 return
-            content = ui.build_starboard_content(config.emoji, star_count, message.channel)
-            embed, view = ui.build_starboard_embed(message, star_count=star_count, threshold=config.threshold)
+            view = self._render(message, config, star_count)
             try:
-                posted = await starboard.send(content, embed=embed, view=view)
+                posted = await starboard.send(view=view, allowed_mentions=ui.POST_MENTIONS)
             except discord.Forbidden:
                 # Reaction-driven, so there is no invoking user — tell admins the board is unreachable.
                 guild_config = await self.bot.db.get_guild_config(config.guild_id)
@@ -150,13 +151,7 @@ class Starboard(Cog):
         if action is StarboardAction.UPDATE:
             await self.bot.db.starboard.update_star_count(message.id, star_count)
             if star_message is not None:
-                content = ui.build_starboard_content(config.emoji, star_count, message.channel)
-                embed, _ = ui.build_starboard_embed(message, star_count=star_count, threshold=config.threshold)
-                try:
-                    # Re-send the embed too so its colour warms with the rising star count.
-                    await star_message.edit(content=content, embed=embed)
-                except discord.HTTPException:
-                    pass
+                await self._refresh_post(starboard, star_message, message, config, star_count)
         elif action is StarboardAction.DELETE:
             await self.bot.db.starboard.delete_entry(message.id)
             if star_message is not None:
@@ -164,6 +159,44 @@ class Starboard(Cog):
                     await star_message.delete()
                 except discord.HTTPException:
                     pass
+
+    @staticmethod
+    def _render(message: discord.Message, config: StarboardConfig, star_count: int) -> discord.ui.LayoutView:
+        return ui.build_starboard_view(
+            message, emoji=config.emoji, star_count=star_count, threshold=config.threshold
+        )
+
+    async def _refresh_post(
+        self,
+        starboard: discord.TextChannel | discord.Thread,
+        star_message: discord.Message,
+        message: discord.Message,
+        config: StarboardConfig,
+        star_count: int,
+    ) -> None:
+        """Re-render a starboard post with the new count (its rail colour warms as stars rise).
+
+        Legacy embed posts are converted in place by clearing their content/embeds. If Discord
+        refuses the edit, the card is reposted and the entry re-pointed *before* the old post is
+        deleted, so the orphan cleanup in :meth:`on_raw_message_delete` can't drop the entry.
+        """
+        view = self._render(message, config, star_count)
+        try:
+            await star_message.edit(content=None, embeds=[], view=view, allowed_mentions=ui.POST_MENTIONS)
+            return
+        except discord.HTTPException:
+            pass
+        try:
+            posted = await starboard.send(view=view, allowed_mentions=ui.POST_MENTIONS)
+        except discord.HTTPException:
+            return
+        await self.bot.db.starboard.create_entry(
+            message.id, config.guild_id, message.channel.id, message.author.id, posted.id, star_count
+        )
+        try:
+            await star_message.delete()
+        except discord.HTTPException:
+            pass
 
     @staticmethod
     async def _fetch_starboard_message(
@@ -217,13 +250,28 @@ class Starboard(Cog):
     @Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
         """Tidy up entries when either the source message or its starboard post is deleted."""
+        if payload.guild_id is not None:
+            await self._handle_deleted(payload.guild_id, payload.message_id)
+
+    @Cog.listener()
+    async def on_raw_bulk_message_delete(self, payload: discord.RawBulkMessageDeleteEvent) -> None:
+        """A purge deletes sources/posts in bulk; without this their entries and posts were orphaned."""
         if payload.guild_id is None:
             return
+        # ponytail: two lookups per purged message; a batched repo query if purges get hot.
+        for message_id in payload.message_ids:
+            await self._handle_deleted(payload.guild_id, message_id)
 
-        entry = await self.bot.db.starboard.get_entry(payload.message_id)
+    async def _handle_deleted(self, guild_id: int, message_id: int) -> None:
+        # Same per-message lock as _process, so a reaction mid-create can't resurrect the entry.
+        async with self._lock_for(message_id):
+            await self._handle_deleted_locked(guild_id, message_id)
+
+    async def _handle_deleted_locked(self, guild_id: int, message_id: int) -> None:
+        entry = await self.bot.db.starboard.get_entry(message_id)
         if entry is not None:
-            await self.bot.db.starboard.delete_entry(payload.message_id)
-            config = await self.get_config(payload.guild_id)
+            await self.bot.db.starboard.delete_entry(message_id)
+            config = await self.get_config(guild_id)
             if config is not None and config.channel_id is not None:
                 starboard = self.bot.get_channel(config.channel_id)
                 if isinstance(starboard, (discord.TextChannel, discord.Thread)):
@@ -236,7 +284,7 @@ class Starboard(Cog):
             return
 
         # The deleted message might itself be a starboard post — drop the orphaned entry.
-        orphan = await self.bot.db.starboard.get_entry_by_starboard_message(payload.message_id)
+        orphan = await self.bot.db.starboard.get_entry_by_starboard_message(message_id)
         if orphan is not None:
             await self.bot.db.starboard.delete_entry(orphan['message_id'])
 
