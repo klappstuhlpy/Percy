@@ -90,12 +90,17 @@ class View(discord.ui.View):
 
         The method that is called when the view times out.
         """
+        if self._delete_on_timeout and self.message:
+            with suppress(discord.HTTPException):
+                await self.message.delete()
+            return
         if self._clear_on_timeout:
             self.clear_items()
-            return
-        if self._delete_on_timeout and self.message:
-            return await self.message.delete()
-        self.disable_all()
+        else:
+            self.disable_all()
+        if self.message:
+            with suppress(discord.HTTPException):  # NotFound is an HTTPException
+                await self.message.edit(view=self)
 
     async def on_error(self, interaction: Interaction, error: Exception, item: discord.ui.Item, /) -> None:
         await interaction.client.handle_interaction_error(interaction, error)  # type: ignore[attr-defined]
@@ -242,8 +247,10 @@ class TrashView(View):
             await interaction.message.delete()
 
     async def on_timeout(self) -> None:
-        for child in self.children:
-            child.disabled = True
+        self.disable_all()
+        if self.message:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
 
 class CommandSuggestionView(LayoutView):

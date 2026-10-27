@@ -571,7 +571,6 @@ class Comics(Cog):
         await ctx.send_success(f'Successfully modified **{brand.name}** feed configuration.')
 
     @Cog.listener()
-    @lock_from(publish_to_feed, wait=True)
     async def on_comic_schedule(self, feed: ComicFeed) -> None:
         if feed:
             await self.publish_to_feed(feed)

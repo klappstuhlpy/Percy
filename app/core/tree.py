@@ -21,6 +21,22 @@ __all__ = ("CommandTree",)
 log = logging.getLogger(__name__)
 
 
+def check_failure_message(error: Exception) -> str | None:
+    """User-facing text for an expected app-command check failure, or ``None`` if it is a real error.
+
+    A bare :class:`~discord.app_commands.CheckFailure` is what :meth:`CommandTree.interaction_check`
+    raises for blacklisted users (and after it already replied for disabled commands), so it stays
+    silent; subclasses carry their own explanation.
+    """
+    if isinstance(error, app_commands.CommandOnCooldown):
+        return f"{Emojis.error} You are on cooldown. Try again in {error.retry_after:.1f}s."
+    if isinstance(error, app_commands.MissingPermissions | app_commands.BotMissingPermissions):
+        return f"{Emojis.error} {error}"
+    if isinstance(error, app_commands.CheckFailure):
+        return None if type(error) is app_commands.CheckFailure else f"{Emojis.error} {error}"
+    return None
+
+
 class CommandTree(app_commands.CommandTree):
     """A custom command tree that implements a custom error handler."""
 
@@ -78,6 +94,13 @@ class CommandTree(app_commands.CommandTree):
         if isinstance(error, blacklist):
             return None
 
+        if isinstance(error, app_commands.CheckFailure | app_commands.CommandOnCooldown):
+            text = check_failure_message(error)
+            if text and not interaction.response.is_done():
+                with suppress(discord.HTTPException):
+                    await interaction.response.send_message(text, ephemeral=True)
+            return None
+
         embed = discord.Embed(
             title=f"{Emojis.warning} App Command Error", timestamp=interaction.created_at, colour=helpers.Colour.burgundy()
         )
@@ -90,11 +113,9 @@ class CommandTree(app_commands.CommandTree):
             embed.add_field(name="Name", value=command.qualified_name)
 
         handle_elsewhere = (
-            app_commands.CommandOnCooldown,
             app_commands.CommandInvokeError,
             app_commands.TransformerError,
             LockedResourceError,
-            app_commands.BotMissingPermissions,
             AppBadArgument,
         )
         if isinstance(error, handle_elsewhere):

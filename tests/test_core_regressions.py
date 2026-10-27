@@ -114,3 +114,25 @@ def test_slugify() -> None:
     assert slugify("Marvel's Daredevil") == "marvels-daredevil"
     assert slugify("  --Hello__World--  ") == "hello-world"
     assert slugify("東京") == ""
+
+
+async def test_empty_paginators_send_notice_instead_of_crashing() -> None:
+    from app.core.pagination import EmbedPaginator, FilePaginator, TextPaginator
+
+    for cls in (EmbedPaginator, TextPaginator, FilePaginator):
+        ctx = MagicMock(spec=Context)
+        ctx.send = AsyncMock()
+        await cls.start(ctx, entries=[])
+        ctx.send.assert_awaited_once()
+
+
+def test_check_failure_message() -> None:
+    from discord import app_commands
+
+    from app.core.tree import check_failure_message
+
+    assert "cooldown" in check_failure_message(app_commands.CommandOnCooldown(app_commands.Cooldown(1, 1), 2.0))
+    assert check_failure_message(app_commands.MissingPermissions(["ban_members"])) is not None
+    assert check_failure_message(app_commands.BotMissingPermissions(["ban_members"])) is not None
+    assert check_failure_message(app_commands.CheckFailure()) is None  # blacklist path stays silent
+    assert check_failure_message(RuntimeError()) is None

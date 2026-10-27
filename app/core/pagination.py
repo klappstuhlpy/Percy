@@ -485,6 +485,10 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         self.ctx = context
         self.extras.update(kwargs)
 
+        if not self.pages:
+            await cls._send(context, ephemeral, content=f"{Emojis.error} No entries to paginate currently.")
+            return self
+
         page = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(page)
 
@@ -555,6 +559,10 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
     ) -> EmbedPaginator:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
+
+        if not self.pages:
+            await cls._send(context, ephemeral, content=f"{Emojis.error} No entries to paginate currently.")
+            return self
 
         pages = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(pages)
@@ -660,6 +668,10 @@ class TextPaginator(BasePaginator[str]):
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
+        if not self.pages:
+            await cls._send(context, ephemeral, content=f"{Emojis.error} No entries to paginate currently.")
+            return self
+
         page = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(page)  # type: ignore  # lying
         if self.total_pages <= 1:
@@ -694,6 +706,10 @@ class FilePaginator(BasePaginator[discord.File]):
     ) -> FilePaginator:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
+
+        if not self.pages:
+            await cls._send(context, ephemeral, content=f"{Emojis.error} No entries to paginate currently.")
+            return self
 
         page = await self.format_page(self.pages[0])
         object_kwargs = {"files": page, "view": self}
