@@ -7,9 +7,12 @@ cached because the same patterns are checked against every message in a guild.
 
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 from typing import Literal
+
+# ``regex`` rather than ``re``: it takes a match timeout, and a trigger is a pattern any server
+# manager can write, evaluated on the event loop against every message.
+import regex
 
 __all__ = ('MATCH_TYPES', 'MatchType', 'is_valid_regex', 'matches')
 
@@ -18,13 +21,17 @@ MatchType = Literal['exact', 'contains', 'startswith', 'regex']
 #: The supported match strategies, surfaced for command choices/validation.
 MATCH_TYPES: tuple[MatchType, ...] = ('exact', 'contains', 'startswith', 'regex')
 
+#: Seconds a regex trigger may spend on one message before it counts as "no match", so a
+#: catastrophic-backtracking pattern like ``(a+)+$`` cannot freeze the whole bot.
+REGEX_TIMEOUT = 0.05
+
 
 @lru_cache(maxsize=512)
-def _compile(pattern: str, ignore_case: bool) -> re.Pattern[str] | None:
-    flags = re.IGNORECASE if ignore_case else 0
+def _compile(pattern: str, ignore_case: bool) -> regex.Pattern[str] | None:
+    flags = regex.IGNORECASE if ignore_case else 0
     try:
-        return re.compile(pattern, flags)
-    except re.error:
+        return regex.compile(pattern, flags)
+    except regex.error:
         return None
 
 
@@ -45,7 +52,12 @@ def matches(content: str, trigger: str, match_type: MatchType, *, ignore_case: b
 
     if match_type == 'regex':
         pattern = _compile(trigger, ignore_case)
-        return pattern is not None and pattern.search(content) is not None
+        if pattern is None:
+            return False
+        try:
+            return pattern.search(content, timeout=REGEX_TIMEOUT) is not None
+        except TimeoutError:
+            return False
 
     haystack = content.casefold() if ignore_case else content
     needle = trigger.casefold() if ignore_case else trigger

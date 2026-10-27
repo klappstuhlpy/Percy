@@ -12,7 +12,7 @@ from discord.ext import tasks
 from app.core import Bot, Cog, Context, describe, group
 from app.core.pagination import LinePaginator
 from app.database import BaseRecord
-from app.utils import helpers
+from app.utils import helpers, truncate
 from app.utils.lock import lock
 
 if TYPE_CHECKING:
@@ -75,38 +75,45 @@ class Highlights(Cog):
         if not self._highlight_data_batch:
             return
 
-        for user_id, highlights in self._highlight_data_batch.items():
+        # Swap the batch out first: on_message keeps appending while we await below, which
+        # would otherwise mutate the dict mid-iteration and drop entries on ``clear()``.
+        batch, self._highlight_data_batch = self._highlight_data_batch, defaultdict(list)
+        for user_id, highlights in batch.items():
             user = self.bot.get_user(user_id)
             if user is None or not highlights:
                 continue
 
+            highlights.sort(key=lambda x: x.trigger)  # groupby only groups adjacent items
             grouped_highlights = itertools.groupby(highlights, key=lambda x: x.trigger)
-            for trigger, grouped in grouped_highlights:
+            for _trigger, grouped in grouped_highlights:
                 # transform back to list
                 grouped_list: list[MessagedHighlight] = list(grouped)
 
                 latest_triggered = max(grouped_list, key=lambda x: x.message.created_at)
                 message = latest_triggered.message
 
-                previous = [
-                    f"[{utils.format_dt(m.created_at, 'T')}] @{m.author}: {m.content}"
-                    async for m in message.channel.history(limit=3, before=message)
-                ]
+                # One closed DM or unreadable channel must not kill the loop for everyone.
+                try:
+                    previous = [
+                        f"[{utils.format_dt(m.created_at, 'T')}] @{m.author}: {m.content}"
+                        async for m in message.channel.history(limit=3, before=message)
+                    ]
 
-                embed = discord.Embed(
-                    title=f'Highlight triggered for "{latest_triggered.trigger}"',
-                    description=(
-                        "\n".join(previous) + f"\n"
-                        f"[**{utils.format_dt(message.created_at, 'T')}**] @{message.author}: {message.content}"
-                    ),
-                    color=helpers.Colour.white(),
-                    timestamp=message.created_at,
-                )
-                embed.add_field(name="Destination", value=message.jump_url, inline=False)
-                embed.set_footer(text=f"From {message.guild.name}")  # type: ignore[union-attr]
-                await user.send(embed=embed)
-
-        self._highlight_data_batch.clear()
+                    embed = discord.Embed(
+                        title=f'Highlight triggered for "{latest_triggered.trigger}"',
+                        description=truncate(
+                            "\n".join(previous) + f"\n"
+                            f"[**{utils.format_dt(message.created_at, 'T')}**] @{message.author}: {message.content}",
+                            4000,
+                        ),
+                        color=helpers.Colour.white(),
+                        timestamp=message.created_at,
+                    )
+                    embed.add_field(name="Destination", value=message.jump_url, inline=False)
+                    embed.set_footer(text=f"From {message.guild.name}")  # type: ignore[union-attr]
+                    await user.send(embed=embed)
+                except discord.HTTPException:
+                    continue
 
     @tasks.loop(seconds=15.0)
     async def bulk_send_loop(self) -> None:
@@ -177,6 +184,7 @@ class Highlights(Cog):
             The highlight if found, else None.
         """
         content = message.clean_content.casefold()
+        guild = message.guild
         for highlight in highlights:
             if (
                 (match := highlight.match(content))
@@ -184,6 +192,13 @@ class Highlights(Cog):
                 and message.author.id not in highlight.blocked
                 and message.channel.id not in highlight.blocked
             ):
+                # Never DM content (or its history) from a channel the user cannot read.
+                member = guild.get_member(highlight.user_id) if guild else None
+                if member is None:
+                    continue
+                perms = message.channel.permissions_for(member)  # type: ignore[union-attr]
+                if not (perms.read_messages and perms.read_message_history):
+                    continue
                 yield MessagedHighlight(highlight, message, match)
 
     @group("highlight", description="Manage highlight related commands.", guild_only=True)

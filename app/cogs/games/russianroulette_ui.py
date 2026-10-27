@@ -155,15 +155,18 @@ class RussianRoulette(LayoutView):
             return
 
         assert interaction.guild is not None
-        balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
-        if balance.cash < self.ante:
+        # Take the seat before the first await so a double-click can't join (and pay) twice.
+        seat = RRPlayer(interaction.user)  # type: ignore[arg-type]
+        self.players.append(seat)
+        if await interaction.client.db.economy.debit_cash(interaction.user.id, interaction.guild.id, self.ante) is None:  # type: ignore[attr-defined]
+            self.players.remove(seat)
+            if seat in self.order:
+                self.order.remove(seat)
             await interaction.response.send_message(
                 f"{Emojis.error} You need {Emojis.Economy.cash} **{fnumb(self.ante)}** to join.", ephemeral=True
             )
             return
 
-        await balance.remove(cash=self.ante)
-        self.players.append(RRPlayer(interaction.user))  # type: ignore[arg-type]
         await self._refresh(interaction)
 
     async def _on_leave(self, interaction: discord.Interaction) -> None:
@@ -176,16 +179,19 @@ class RussianRoulette(LayoutView):
             return
 
         assert interaction.guild is not None
+        # Drop the seat before the first await so a double-click can't refund the ante twice.
+        self.players.remove(player)
+        is_host = interaction.user.id == self.host.id
+        if is_host:
+            self.phase = Phase.ENDED
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
         await balance.add(cash=self.ante)
 
-        if interaction.user.id == self.host.id:
+        if is_host:
             # Host left — refund everyone else and close the table.
-            for other in self.players:
-                if other.member.id != self.host.id:
-                    other_balance = await interaction.client.db.get_user_balance(other.member.id, interaction.guild.id)
-                    await other_balance.add(cash=self.ante)
-            self.phase = Phase.ENDED
+            for other in list(self.players):
+                other_balance = await interaction.client.db.get_user_balance(other.member.id, interaction.guild.id)
+                await other_balance.add(cash=self.ante)
             self._status = "`\N{CROSS MARK}` The host left — antes refunded."
             self.cog.russian_tables.pop(self.ctx.channel.id, None)
             self._compose()
@@ -193,12 +199,14 @@ class RussianRoulette(LayoutView):
             self.stop()
             return
 
-        self.players.remove(player)
         await self._refresh(interaction)
 
     async def _on_start(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.host.id:
             await interaction.response.send_message(f"{Emojis.error} Only the host can start.", ephemeral=True)
+            return
+        if self.phase is not Phase.LOBBY:
+            await interaction.response.defer()
             return
         if len(self.players) < 2:
             await interaction.response.send_message(f"{Emojis.error} Need at least 2 players.", ephemeral=True)

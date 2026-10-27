@@ -11,9 +11,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import resolve_channel
+from ..helpers import invalidate_cog_cache, parse_id, resolve_channel
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Content"], dependencies=[Depends(verify_token)])
+
+
+def _guild_channel_id(guild: discord.Guild, value: object, name: str = 'channel_id') -> int:
+    """A client channel id that must name a channel of *this* guild (400 otherwise).
+
+    Feeds resolve their channel with ``bot.get_channel``, so an unchecked id would let one
+    server's dashboard point Percy at another server's channel.
+    """
+    channel_id = parse_id(value, name)
+    if guild.get_channel(channel_id) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'{name} is not a channel in this server')
+    return channel_id
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +146,7 @@ class ImportTagsBody(BaseModel):
 async def get_polls(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=50, le=100),
+    limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     records = await bot.db.polls.get_for_guild(guild.id)
@@ -202,8 +214,8 @@ async def create_poll(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='a poll can have at most 8 options')
 
     duration = duration_seconds
-    if duration <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be a positive number of seconds')
+    if not 0 < duration <= 365 * 86400:  # unbounded, timedelta() overflows into a 500
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be between 1 second and 365 days')
 
     config = await bot.db.get_guild_config(guild_id=guild.id)
 
@@ -305,6 +317,7 @@ async def patch_poll(guild: GuildDep, bot: BotDep, poll_id: int, body: PatchPoll
 
     metadata['kwargs'] = kwargs
     await bot.db.polls.update(poll_id, {'metadata': metadata})
+    invalidate_cog_cache(bot, 'Polls', 'get_guild_polls', guild.id)
 
     return {'ok': True}
 
@@ -336,7 +349,7 @@ async def end_poll(guild: GuildDep, bot: BotDep, poll_id: int) -> dict:
 async def get_giveaways(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=50, le=100),
+    limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     records = await bot.db.giveaways.get_guild_giveaways(guild.id)
@@ -381,8 +394,8 @@ async def create_giveaway(guild: GuildDep, bot: BotDep, body: CreateGiveawayBody
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='prize must be 256 characters or less')
 
     duration = body.duration_seconds
-    if duration <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be a positive number of seconds')
+    if not 0 < duration <= 365 * 86400:  # unbounded, timedelta() overflows into a 500
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be between 1 second and 365 days')
 
     winners = body.winners
     if winners < 1 or winners > 100:
@@ -760,7 +773,7 @@ async def toggle_command(guild: GuildDep, bot: BotDep, body: ToggleCommandBody) 
     if body.enabled:
         # Re-enable: remove the relevant disable entries for this command.
         if body.channel_id:
-            await bot.db.guilds.clear_command_config_channel(guild.id, body.name, int(body.channel_id))
+            await bot.db.guilds.clear_command_config_channel(guild.id, body.name, parse_id(body.channel_id, 'channel_id'))
         else:
             # Clears both the guild-wide row and every per-channel row.
             await bot.db.guilds.clear_command_config(guild.id, body.name)
@@ -768,7 +781,7 @@ async def toggle_command(guild: GuildDep, bot: BotDep, body: ToggleCommandBody) 
         # Disable: a channel_id targets a single channel; a NULL channel_id
         # disables the command server-wide via one row (not one row per channel).
         await bot.db.guilds.set_command_config(
-            guild.id, int(body.channel_id) if body.channel_id else None, body.name, whitelist=False)
+            guild.id, _guild_channel_id(guild, body.channel_id) if body.channel_id else None, body.name, whitelist=False)
 
     # Keep the Config cog's resolved-permissions cache in sync with the write.
     config_cog = bot.get_cog('Config')
@@ -783,7 +796,7 @@ async def manage_plonk(guild: GuildDep, bot: BotDep, body: ManagePlonkBody) -> d
     if body.action not in ('add', 'remove'):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='action must be add or remove')
 
-    entity_id = int(body.entity_id)
+    entity_id = parse_id(body.entity_id, 'entity_id')
 
     if body.action == 'add':
         await bot.db.guilds.add_plonk(guild.id, entity_id)
@@ -856,7 +869,7 @@ async def delete_command_permissions(guild: GuildDep, bot: BotDep, command: str)
 async def get_autoresponders(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=50, le=100),
+    limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     search: str = Query(default=''),
 ) -> dict:
@@ -898,6 +911,7 @@ async def create_autoresponder(guild: GuildDep, bot: BotDep, body: CreateAutores
     )
     if result is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='an autoresponder with that trigger already exists')
+    invalidate_cog_cache(bot, 'Automation', 'get_responders', guild.id)
     return {'ok': True}
 
 
@@ -906,6 +920,7 @@ async def delete_autoresponder(guild: GuildDep, bot: BotDep, trigger: str) -> di
     result = await bot.db.autoresponders.delete(guild.id, trigger)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='autoresponder not found')
+    invalidate_cog_cache(bot, 'Automation', 'get_responders', guild.id)
     return {'ok': True}
 
 
@@ -914,6 +929,7 @@ async def patch_autoresponder(guild: GuildDep, bot: BotDep, trigger: str, body: 
     result = await bot.db.autoresponders.set_enabled(guild.id, trigger, body.enabled)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='autoresponder not found')
+    invalidate_cog_cache(bot, 'Automation', 'get_responders', guild.id)
     return {'ok': True}
 
 
@@ -952,15 +968,16 @@ async def create_comic(guild: GuildDep, bot: BotDep, body: CreateComicBody) -> d
 
     config_dict = {
         'guild_id': guild.id,
-        'channel_id': int(body.channel_id),
+        'channel_id': _guild_channel_id(guild, body.channel_id),
         'brand': body.brand,
         'format': body.format,
         'day': body.day,
-        'ping': int(body.ping) if body.ping else None,
+        'ping': parse_id(body.ping, 'ping') if body.ping else None,
         'pin': body.pin,
         'next_pull': None,
     }
     await bot.db.comics.create_config(config_dict)
+    invalidate_cog_cache(bot, 'Comics', 'get_comic_config', guild.id, containing=True)
     return {'ok': True}
 
 
@@ -976,25 +993,27 @@ async def patch_comic(guild: GuildDep, bot: BotDep, brand: str, body: PatchComic
 
     updates: dict[str, object] = {}
     if body.channel_id is not None:
-        updates['channel_id'] = int(body.channel_id)
+        updates['channel_id'] = _guild_channel_id(guild, body.channel_id)
     if body.format is not None:
         updates['format'] = body.format
     if body.day is not None:
         updates['day'] = body.day
         updates['next_pull'] = config.next_scheduled(body.day)
     if body.ping is not None:
-        updates['ping'] = int(body.ping) if body.ping else None
+        updates['ping'] = parse_id(body.ping, 'ping') if body.ping else None
     if body.pin is not None:
         updates['pin'] = body.pin
 
     if updates:
         await bot.db.comics.update_config(config.id, updates)
+        invalidate_cog_cache(bot, 'Comics', 'get_comic_config', guild.id, containing=True)
     return {'ok': True}
 
 
 @router.delete("/comics/{brand}")
 async def delete_comic(guild: GuildDep, bot: BotDep, brand: str) -> dict:
     await bot.db.comics.delete_config(guild.id, brand)
+    invalidate_cog_cache(bot, 'Comics', 'get_comic_config', guild.id, containing=True)
     return {'ok': True}
 
 
@@ -1058,7 +1077,7 @@ async def create_temp_channel(guild: GuildDep, bot: BotDep, body: CreateTempChan
     if not body.channel_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_id is required')
 
-    await bot.db.temp_channels.create_channel(guild.id, int(body.channel_id), body.format)
+    await bot.db.temp_channels.create_channel(guild.id, _guild_channel_id(guild, body.channel_id), body.format)
     return {'ok': True}
 
 
@@ -1107,11 +1126,12 @@ async def post_status_feed(guild: GuildDep, bot: BotDep, body: PostStatusFeedBod
     if cog is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Misc cog not loaded')
 
+    channel_id = _guild_channel_id(guild, body.channel_id)
     existing = await cog.get_subscriber(guild.id)
     if existing:
-        await bot.db.incidents.update_channel(guild.id, int(body.channel_id))
+        await bot.db.incidents.update_channel(guild.id, channel_id)
     else:
-        await bot.db.incidents.create_subscription(guild.id, int(body.channel_id))
+        await bot.db.incidents.create_subscription(guild.id, channel_id)
     cog.get_subscriber.invalidate(guild.id)
     cog.get_subscribers.invalidate()
     return {'ok': True}
@@ -1194,7 +1214,7 @@ async def unlock_channels(guild: GuildDep, bot: BotDep, body: UnlockChannelsBody
 async def get_highlights(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=50, le=100),
+    limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     records = await bot.db.highlights.get_guild_configs(guild.id)
@@ -1233,7 +1253,7 @@ async def delete_highlight(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
 async def get_emoji_stats(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     summary = await bot.db.emoji_stats.get_guild_summary(guild.id)

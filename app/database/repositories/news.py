@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import asyncpg
 
-from app.database.repositories.base import BaseRepository
+from app.database.repositories.base import BaseRepository, escape_like
 from app.services.releases import normalise
 
 if TYPE_CHECKING:
@@ -263,7 +263,7 @@ class NewsRepository(BaseRepository):
         if since is not None:
             clauses.append(f'published_at >= {placeholder(since)}')
         if search:
-            clauses.append(f'headline ILIKE {placeholder(f"%{search}%")}')
+            clauses.append(f'headline ILIKE {placeholder(f"%{escape_like(search)}%")}')
 
         # The tag filters are one EXISTS over ``news_subjects`` rather than a join, so a story
         # tagged with the subject twice cannot come back twice and break the page count.

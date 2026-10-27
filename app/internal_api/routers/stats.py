@@ -195,7 +195,7 @@ async def get_bot_metrics(bot: BotDep) -> dict:
 
 
 @router.get("/bot/changelog")
-async def get_changelog(limit: int = Query(default=20, le=50)) -> dict:
+async def get_changelog(limit: int = Query(default=20, ge=1, le=50)) -> dict:
     """Parsed CHANGELOG.md releases with categorized sections."""
     from ..changelog import RELEASES
 

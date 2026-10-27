@@ -204,10 +204,8 @@ class Bot(commands.Bot):
         prefixes = sorted(config.prefixes, key=len, reverse=True)
         return commands.when_mentioned_or(*prefixes)(self, message)
 
-    async def _load_extensions(self) -> None:
-        """Loads all command extensions, including Jishaku."""
-        await self.load_extension('jishaku')
-
+    async def _load_extensions(self, extensions: list[str]) -> None:
+        """Loads the given extensions; a failing one is logged and skipped, never fatal."""
         # avoid excessive api requests and reduce load for testing purposes
         # can still be manually loaded after bot start using jishaku
         DoNotLoadOnBeta = (
@@ -215,7 +213,7 @@ class Bot(commands.Bot):
             'app.cogs.comic',
             'app.cogs.anilist',
         )
-        for extension in self.initial_extensions:
+        for extension in extensions:
             if beta and extension in DoNotLoadOnBeta:
                 continue
             try:
@@ -254,14 +252,15 @@ class Bot(commands.Bot):
         """Prepares the bot for startup."""
         self.prepare_jishaku_flags()
 
-        self.bot_app_info = await self.application_info()
-
         self.blacklist = Config('blacklist')
         self.temp_channels = Config('temp_channels.json')
         self.doc_links = Config('doc_links.json')
 
         self.bypass_checks = False
-        self.db = await Database(self, loop=self.loop).wait()
+        # Independent round-trips (Discord REST vs. Postgres pool + pending migrations): overlap them.
+        self.bot_app_info, self.db = await asyncio.gather(
+            self.application_info(), Database(self, loop=self.loop).wait()
+        )
         self.session = ClientSession()
 
         self.klappstuhlme_client = KlappstuhlClient(
@@ -332,7 +331,7 @@ class Bot(commands.Bot):
                 self._ollama_host, report.error or 'no further detail',
             )
 
-    async def _setup_hook_task(self) -> None:
+    async def _connect_lavalink(self) -> None:
         try:
             await wavelink.Pool.connect(
                 nodes=[
@@ -355,23 +354,38 @@ class Bot(commands.Bot):
         except Exception as exc:
             self.log.error('Failed to connect to Lavalink:', exc_info=exc)
 
+    async def _start_internal_api(self) -> None:
         try:
             self.internal_api = InternalAPI(self)
             await self.internal_api.start()
         except Exception as exc:
             self.log.error('Failed to start internal API:', exc_info=exc)
 
-        await self._check_ai_health()
+    async def _setup_hook_task(self) -> None:
+        # Only the music cog needs Lavalink (its setup() checks Pool.get_node()), so a Lavalink
+        # that is down -- wavelink retries 5x with backoff up to 30s each -- no longer holds
+        # every other cog, the internal API and the AI probe hostage. Music loads last.
+        music = 'app.cogs.music'
+        try:
+            lavalink = asyncio.create_task(self._connect_lavalink())
+            await asyncio.gather(
+                self._start_internal_api(),
+                self._check_ai_health(),
+                self._load_extensions(['jishaku', *(e for e in self.initial_extensions if e != music)]),
+            )
+            await lavalink
+            await self._load_extensions([music] if music in self.initial_extensions else [])
 
-        await self._load_extensions()
+            gated = self.apply_native_permissions()
+            self.log.info('Applied native slash-command permissions to %d command(s).', gated)
 
-        gated = self.apply_native_permissions()
-        self.log.info('Applied native slash-command permissions to %d command(s).', gated)
-
-        if test_guild_id is not None:
-            self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
-
-        self._setup_finished.set()
+            if test_guild_id is not None:
+                self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
+        except Exception as exc:
+            self.log.critical('Setup task failed:', exc_info=exc)
+        finally:
+            # Always release waiters (e.g. the startup card), or a setup failure hangs them forever.
+            self._setup_finished.set()
 
     async def wait_until_setup_finished(self) -> None:
         """|coro|
@@ -517,8 +531,7 @@ class Bot(commands.Bot):
             await guild.leave()
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
-        if await self.db.get_guild_config(guild_id=guild.id):
-            await self.db.guilds.delete_config(guild.id)
+        await self.db.guilds.delete_config(guild.id)
 
     async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
         (exc_type, exc, tb) = sys.exc_info()
@@ -746,7 +759,13 @@ class Bot(commands.Bot):
         error: Exception
             The error that was raised.
         """
-        error = getattr(error, 'original', error)
+        # Unwrap every layer: a hybrid command invoked as a slash command arrives as
+        # HybridCommandError -> app_commands.CommandInvokeError -> the real error, so a single
+        # unwrap left e.g. a discord.Forbidden disguised and it fell through to the panic path.
+        for _ in range(5):
+            if (inner := getattr(error, 'original', None)) is None:
+                break
+            error = inner
 
         if ctx is MISSING:  # currently for user installed app commands cause ctx is not passed here
             self.log.critical('`ctx` is MISSING: Uncaught error when invoking a command: %s', error, exc_info=error)
@@ -803,8 +822,9 @@ class Bot(commands.Bot):
                 await ctx.send(message, reference=ctx.message, ephemeral=True)
                 return
 
-            if permissions.administrator or permissions.add_reactions:
-                await ctx.message.add_reaction('\U000026a0')
+            if ctx.interaction is None and (permissions.administrator or permissions.add_reactions):
+                with suppress(discord.HTTPException):
+                    await ctx.message.add_reaction('\U000026a0')
 
             with suppress(discord.HTTPException):
                 await ctx.author.send(message)
@@ -882,7 +902,9 @@ class Bot(commands.Bot):
                 self.log.critical('Uncaught error when invoking %s: %s', command.name, error, exc_info=error)
 
                 builder = AnsiStringBuilder()
-                builder.append(f'panic!({error})', color=AnsiColor.red, bold=True)
+                # Only the type: str() of an arbitrary exception can carry SQL, paths or tokenised
+                # URLs. The full error is in the log line above.
+                builder.append(f'panic!({type(error).__name__})', color=AnsiColor.red, bold=True)
                 ansi = builder.ensure_codeblock().dynamic(ctx)
                 await ctx.send(ansi, reference=ctx.message)
             raise error

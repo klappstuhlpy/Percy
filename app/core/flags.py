@@ -284,6 +284,28 @@ def store_true(
     )
 
 
+def _split_parts(flags: FlagMeta[Any], text: str) -> Iterator[tuple[str, bool]]:
+    """Split ``text`` on whitespace into ``(part, is_flag)`` pairs, keeping each part's leading whitespace.
+
+    A flag-like word inside a double-quoted value (``--reason "see --amount"``) is text, not a flag.
+    """
+    in_quote = False
+    for part in WS_SPLIT_REGEX.split(text):
+        if not part:
+            continue
+        is_flag = not in_quote and flags.is_flag_starter(part)
+        if not is_flag and part.count('"') % 2:
+            in_quote = not in_quote
+        yield part, is_flag
+
+
+def _strip_quotes(value: str) -> str:
+    """Drop one pair of double quotes wrapping the whole value (used to protect flag-like text)."""
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1]
+    return value
+
+
 class ConsumeUntilFlag(Converter[T]):
     """A converter that consumes all arguments until a flag is found.
 
@@ -309,19 +331,20 @@ class ConsumeUntilFlag(Converter[T]):
             raise MissingRequiredArgument(ctx.current_parameter)  # type: ignore[arg-type]
 
         ctx.view.undo()
+        start = ctx.view.index
         rest = ctx.view.read_rest()
-        parts = WS_SPLIT_REGEX.split(rest)
 
         valid = []
-        for part in parts:
-            if not part:
-                continue
-            if ctx.command.custom_flags.is_flag_starter(part):
+        for part, is_flag in _split_parts(ctx.command.custom_flags, rest):
+            if is_flag:
                 break
             valid.append(part)
 
-        argument = "".join(valid).strip()
-        ctx.view.index = ctx.view.buffer.rfind(argument) + len(argument)
+        consumed = "".join(valid)
+        argument = consumed.strip()
+        # Positional, not ``buffer.rfind(argument)``: that jumped past a flag value repeating the
+        # text (``cmd spam --reason spam``), so the flags were never parsed.
+        ctx.view.index = start + len(consumed)
 
         if not self.converter:
             return argument  # type: ignore[return-value]
@@ -579,7 +602,8 @@ class FlagMeta[T](type):
 
         for part in sample.split():
             # Check for combined short flag syntax, e.g. -a -b can become -ab
-            if part.startswith("--") or not part.startswith("-"):
+            # A lone "-" (e.g. "a - b") is text: all() over zero letters would be True.
+            if part.startswith("--") or not part.startswith("-") or len(part) < 2:
                 continue
 
             # splits an "-ab" flag into [a, b] for comparison
@@ -734,19 +758,21 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
         except Exception as exc:
             raise TypeError(f"bad flag annotation: {exc}")
 
-        splitted = WS_SPLIT_REGEX.split(argument)
         buffer: list[str] = []
         args: list[str] = []
 
-        for part in splitted:
-            if not part:
-                continue
-
-            if flags.is_flag_starter(part):
+        for part, is_flag in _split_parts(flags, argument):
+            if is_flag:
                 if joined := "".join(buffer):
                     args.append(joined)
 
-                args.append(part.lstrip().replace("\u2014", "--"))
+                token, eq, value = part.lstrip().replace("\u2014", "--").partition("=")
+                if token.startswith("--"):
+                    token = token.casefold()  # long names are casefolded at definition; argparse is not
+                args.append(token)
+                if eq:
+                    # "--name=value more" -> one value; argparse rejected " more" as unrecognized.
+                    args.append(" " + value)
                 buffer = []
                 continue
 
@@ -763,6 +789,8 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
                 v = "".join(v)
             if isinstance(v, str):
                 v = v.strip()
+                if getattr(flag.converter, "__origin__", None) is not list:
+                    v = _strip_quotes(v)
 
             converter = flag.converter
             if converter and v is not None and not flag.store_true:

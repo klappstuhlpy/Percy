@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 import asyncpg
 
 from app.database.repositories.base import BaseRepository
+from app.database.repositories.users import WALLET_LOCK_SQL
 from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
@@ -221,6 +222,33 @@ class EconomyRepository(BaseRepository):
             user_id, guild_id, item_id, quantity,
         )
 
+    async def debit_cash(self, user_id: int, guild_id: int, amount: int) -> int | None:
+        """Atomically takes ``amount`` cash; returns the cash left, or ``None`` when the member cannot afford it.
+
+        The ``cash >= $3`` guard is the check, so two concurrent spends can never both pass a stale read.
+        """
+        return await self.fetchval(
+            'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
+            user_id, guild_id, amount,
+        )
+
+    async def transfer_cash(self, from_user_id: int, to_user_id: int, guild_id: int, amount: int) -> int | None:
+        """Atomically moves ``amount`` cash between members; returns the giver's cash left, or ``None`` if short.
+
+        Both wallets are created if missing and locked in id order, then debit and credit commit together.
+        """
+        async with self.acquire() as conn, conn.transaction():
+            await self._lock_wallets(conn, guild_id, [from_user_id, to_user_id])
+            left = await conn.fetchval(
+                'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
+                from_user_id, guild_id, amount,
+            )
+            if left is None:
+                return None
+            await conn.execute(
+                'UPDATE economy SET cash = cash + $3 WHERE user_id = $1 AND guild_id = $2;', to_user_id, guild_id, amount)
+            return left
+
     async def wipe_cash(self, user_id: int, guild_id: int) -> int:
         """Zeroes a member's cash (bank untouched) and returns how much was lost."""
         return await self.fetchval(
@@ -333,6 +361,8 @@ class EconomyRepository(BaseRepository):
             )
             if left is None:
                 return None
+            # A member who was only ever *given* items may have no wallet; without one the payout would vanish.
+            await self._lock_wallets(conn, guild_id, [user_id])
             await conn.execute(
                 'UPDATE economy SET cash = cash + $3 WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id, payout)
             return left
@@ -739,10 +769,8 @@ class EconomyRepository(BaseRepository):
         gives = ((a_id, b_id, a_items, a_cash), (b_id, a_id, b_items, b_cash))
         try:
             async with self.acquire() as conn, conn.transaction():
-                await conn.fetch(
-                    'SELECT 1 FROM economy WHERE guild_id = $1 AND user_id = ANY($2::bigint[]) ORDER BY user_id FOR UPDATE;',
-                    guild_id, [a_id, b_id],
-                )
+                # Creates missing wallets too: crediting a receiver with no row would update nothing and burn the cash.
+                await self._lock_wallets(conn, guild_id, [a_id, b_id])
                 for giver, _, _, cash in gives:
                     if cash and await conn.fetchval(
                         'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
@@ -788,7 +816,8 @@ class EconomyRepository(BaseRepository):
     @staticmethod
     async def _lock_wallets(conn: asyncpg.Connection, guild_id: int, user_ids: list[int]) -> None:
         """Makes sure each member has a wallet row, then locks them in id order (no deadlock between opposite buys)."""
-        for user_id in user_ids:
+        for user_id in sorted(user_ids):
+            await conn.execute(WALLET_LOCK_SQL, user_id, guild_id)  # same gate as UsersRepository.get_balance_record
             await conn.execute(
                 'INSERT INTO economy (user_id, guild_id, cash, bank) SELECT $1, $2, 0, 0 '
                 'WHERE NOT EXISTS (SELECT 1 FROM economy WHERE user_id = $1 AND guild_id = $2);',
@@ -1059,8 +1088,11 @@ class LevelingRepository(BaseRepository):
         """Fetches a member's level row, inserting a default one if absent."""
         record = await self.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
         if not record:
+            # A new member's first two messages race here; the upsert keeps the loser from a UniqueViolation.
             record = await self.fetchrow(
-                "INSERT INTO levels (user_id, guild_id) VALUES ($1, $2) RETURNING *;", user_id, guild_id)
+                "INSERT INTO levels (user_id, guild_id) VALUES ($1, $2) "
+                "ON CONFLICT (guild_id, user_id) DO UPDATE SET user_id = EXCLUDED.user_id RETURNING *;",
+                user_id, guild_id)
         return record
 
     async def get_user_level(self, user_id: int, guild_id: int) -> asyncpg.Record | None:

@@ -135,7 +135,7 @@ async def patch_user_settings(discord_id: int, bot: BotDep, body: PatchUserSetti
 async def get_user_history(
     discord_id: int,
     bot: BotDep,
-    avatar_limit: int = Query(default=24, le=50),
+    avatar_limit: int = Query(default=24, ge=1, le=50),
 ) -> dict:
     """Consent-tracked history: usernames, nicknames, avatars (base64), presence over 30 days."""
     usernames = await bot.db.stats.get_item_history(discord_id, "name")

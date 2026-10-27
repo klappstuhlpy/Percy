@@ -490,8 +490,10 @@ class Economy(Cog):
                 return
             value = min(value, room)
 
-        await balance.remove(cash=value)
-        await balance.add(bank=value)
+        # ponytail: the bank cap is checked against the read above; two racing deposits can overshoot it once.
+        if await ctx.db.users.adjust_balance(ctx.author.id, ctx.guild.id, cash=-value, bank=value) is None:  # type: ignore[union-attr]
+            await ctx.send_error("Cannot deposit more than your balance.")
+            return
         await ctx.send_success(f"Successfully deposited {Emojis.Economy.cash} **{fnumb(value)}** into your bank.")
         await self._bump_quests(ctx, "deposit", value)
 
@@ -508,8 +510,9 @@ class Economy(Cog):
             await ctx.send_error("Cannot withdraw more than your bank balance.")
             return
 
-        await balance.remove(bank=value)
-        await balance.add(cash=value)
+        if await ctx.db.users.adjust_balance(ctx.author.id, ctx.guild.id, cash=value, bank=-value) is None:  # type: ignore[union-attr]
+            await ctx.send_error("Cannot withdraw more than your bank balance.")
+            return
         await ctx.send_success(f"Successfully withdrew {Emojis.Economy.cash} **{fnumb(value)}** from your bank.")
 
     @command("transfer", description="Transfers money to another user.", guild_only=True, hybrid=True)
@@ -522,14 +525,9 @@ class Economy(Cog):
             await ctx.send_error("Cannot transfer to a bot.")
             return
 
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
-        if balance.cash < amount:
+        if await self.bot.db.economy.transfer_cash(ctx.author.id, member.id, ctx.guild.id, amount) is None:  # type: ignore[union-attr]
             await ctx.send_error("Cannot transfer more than your balance.")
             return
-
-        await balance.remove(cash=amount)
-        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
-        await balance.add(cash=amount)
         await ctx.send_success(
             f"Successfully transferred {Emojis.Economy.cash} **{fnumb(amount)}** to **{member.display_name}**."
         )
@@ -1749,13 +1747,12 @@ class Economy(Cog):
 
         cost = record["ticket_price"] * amount
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        if balance.cash < cost:
+        if await self.bot.db.economy.debit_cash(ctx.author.id, ctx.guild.id, cost) is None:
             await ctx.send_error(
                 f"You need {Emojis.Economy.cash} **{fnumb(cost)}** but only have **{fnumb(balance.cash)}**."
             )
             return
 
-        await balance.remove(cash=cost)
         total = await self.bot.db.economy.add_lottery_tickets(ctx.guild.id, ctx.author.id, amount, cost)
         await ctx.send_success(
             f"Bought **{pluralize(amount):ticket}** for {Emojis.Economy.cash} **{fnumb(cost)}**. "
@@ -2119,7 +2116,7 @@ class Economy(Cog):
 
         pet_name = (name or spec.name).strip()[:32]
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        if balance.cash < spec.cost:
+        if await self.bot.db.economy.debit_cash(ctx.author.id, ctx.guild.id, spec.cost) is None:
             await ctx.send_error(
                 f"Adopting a {spec.name} costs {Emojis.Economy.cash} **{fnumb(spec.cost)}** — "
                 f"you only have **{fnumb(balance.cash)}** in cash."
@@ -2128,10 +2125,10 @@ class Economy(Cog):
 
         record = await self.bot.db.economy.create_pet(ctx.author.id, ctx.guild.id, spec.id, pet_name)
         if record is None:
+            await balance.add(cash=spec.cost)  # refund: the debit above already went through
             await ctx.send_error("You already have a pet. Abandon it first with `pet abandon` (how could you?).")
             return
 
-        await balance.remove(cash=spec.cost)
         await ctx.send_success(
             f"{spec.emoji} You adopted **{pet_name}** the {spec.name}! "
             f"They earn {Emojis.Economy.cash} **{fnumb(spec.hourly_rate)}/h** while fed — collect with `pet claim`."
@@ -2148,13 +2145,12 @@ class Economy(Cog):
             return False, "Your pet's species no longer exists."
 
         balance = await self.bot.db.get_user_balance(member.id, member.guild.id)
-        if balance.cash < species.feed_cost:
+        if await self.bot.db.economy.debit_cash(member.id, member.guild.id, species.feed_cost) is None:
             return False, (
                 f"Feeding **{row['name']}** costs {Emojis.Economy.cash} **{fnumb(species.feed_cost)}** — "
                 f"you only have **{fnumb(balance.cash)}** in cash."
             )
 
-        await balance.remove(cash=species.feed_cost)
         await self.bot.db.economy.update_pet(
             member.id, member.guild.id, {"last_fed": discord.utils.utcnow().replace(tzinfo=None)})
         return True, f"{species.emoji} **{row['name']}** happily munches away. Fully fed!"

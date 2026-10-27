@@ -7,6 +7,7 @@ from typing import Any
 
 import discord
 from discord import app_commands
+from discord.ext import commands
 
 from app.core.command import assign_native_permissions
 from app.core.models import AppBadArgument
@@ -44,6 +45,31 @@ class CommandTree(app_commands.CommandTree):
         gated = assign_native_permissions(self.client.walk_commands())
         log.info("Applied native slash-command permissions to %d command(s) before sync.", gated)
         return super()._get_all_commands(guild=guild)
+
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+        """Apply the gates ``Bot.process_commands`` applies to prefix invocations to slash ones.
+
+        Without this a blacklisted (or spam-auto-blocked) user or guild kept full access to
+        every hybrid/app command simply by using its slash form, and a runtime-disabled
+        command stayed usable as a slash command.
+        """
+        bot: Any = interaction.client
+        blacklist = getattr(bot, "blacklist", None)
+        if blacklist is not None and (
+            interaction.user.id in blacklist or (interaction.guild_id is not None and interaction.guild_id in blacklist)
+        ):
+            return False
+
+        flags = getattr(bot, "feature_flags", None)
+        command = interaction.command
+        if flags is not None and command is not None:
+            cog = getattr(command, "binding", None)
+            cog_name = cog.qualified_name if isinstance(cog, commands.Cog) else None
+            if flags.is_disabled(command.qualified_name, cog_name):
+                with suppress(discord.HTTPException):
+                    await interaction.response.send_message("This command is temporarily disabled.", ephemeral=True)
+                return False
+        return True
 
     async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         error = getattr(error, "original", error)
@@ -97,3 +123,8 @@ class CommandTree(app_commands.CommandTree):
 
         with suppress(discord.HTTPException, ValueError):
             await send_webhook(interaction.client.stats_webhook, embed=embed)  # type: ignore[attr-defined]
+
+        # Without a reply the user only sees Discord's generic "The application did not respond".
+        with suppress(discord.HTTPException):
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"{Emojis.error} Something went wrong.", ephemeral=True)

@@ -162,6 +162,35 @@ class GiveawaysRepository(BaseRepository):
         """Replaces the entrant set of a giveaway."""
         await self.execute("UPDATE giveaways SET entries = $1 WHERE id = $2;", entries, giveaway_id)
 
+    async def add_entry(self, giveaway_id: int, user_id: int) -> bool:
+        """Atomically adds one entrant; ``False`` when they had already entered (or the giveaway is gone).
+
+        One conditional append, so concurrent clicks never overwrite each other's entries.
+        """
+        added = await self.fetchval(
+            "UPDATE giveaways SET entries = array_append(entries, $2::bigint) "
+            "WHERE id = $1 AND NOT ($2::bigint = ANY(entries)) RETURNING 1;",
+            giveaway_id, user_id,
+        )
+        return added is not None
+
+    async def mark_ended(self, giveaway_id: int, ended_at: str) -> bool:
+        """Stamps a giveaway as ended (``kwargs.ended`` + the real ``kwargs.expires``); ``True`` only for the first caller.
+
+        The row is kept so the Reroll button can still draw from the remaining entries; the dashboard reads
+        ``expires`` to report it as ended.
+        """
+        won = await self.fetchval(
+            """
+            UPDATE giveaways
+            SET metadata = jsonb_set(jsonb_set(metadata, '{kwargs,expires}', to_jsonb($2::text)), '{kwargs,ended}', 'true')
+            WHERE id = $1 AND NOT COALESCE((metadata #>> '{kwargs,ended}')::boolean, false)
+            RETURNING 1;
+            """,
+            giveaway_id, ended_at,
+        )
+        return won is not None
+
     async def delete_giveaway(self, giveaway_id: int) -> None:
         """Deletes a giveaway."""
         await self.delete_where("giveaways", ("id",), (giveaway_id,))

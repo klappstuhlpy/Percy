@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -24,6 +25,8 @@ router = APIRouter(prefix="/api/webhooks", tags=["Webhooks"])
 #: XP multiplier and window granted (or renewed) per vote.
 VOTE_MULTIPLIER = 1.10
 VOTE_DURATION_HOURS = 12
+#: How old a signed top.gg delivery may be before it is refused as a replay.
+SIGNATURE_TOLERANCE_SECONDS = 300
 
 
 # ---------------------------------------------------------------------------
@@ -41,11 +44,35 @@ def _verify_topgg_signature(secret: str, raw_body: bytes, signature: str) -> boo
     timestamp, received = parts.get("t"), parts.get("v1")
     if not timestamp or not received:
         return False
+    # Without a freshness check a captured delivery could be replayed forever.
+    try:
+        sent = int(timestamp)
+    except ValueError:
+        return False
+    if sent > 10**11:  # tolerate a millisecond timestamp rather than refusing every vote
+        sent //= 1000
+    if abs(time.time() - sent) > SIGNATURE_TOLERANCE_SECONDS:
+        return False
 
-    expected = hmac.new(
-        secret.encode(), f"{timestamp}.{raw_body.decode('utf-8')}".encode(), hashlib.sha256
-    ).hexdigest()
+    # Sign the raw bytes: decoding first would turn a non-UTF-8 body into a 500.
+    expected = hmac.new(secret.encode(), timestamp.encode() + b"." + raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, received)
+
+
+def _secret_matches(secret: str, header: str | None) -> bool:
+    """Constant-time comparison of a shared-secret ``Authorization`` header."""
+    return header is not None and hmac.compare_digest(header.encode(), secret.encode())
+
+
+def _user_id(value: object) -> int:
+    """A vote's Discord user id; anything else is a 400, not a 500 from ``int()``."""
+    try:
+        user_id = int(value)  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        user_id = 0
+    if isinstance(value, bool) or not 0 < user_id < 2**63:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing or invalid user id")
+    return user_id
 
 
 # ---------------------------------------------------------------------------
@@ -67,13 +94,15 @@ async def vote_topgg(request: Request, bot: BotDep) -> dict:
     if signature is not None:
         if not _verify_topgg_signature(secret, raw_body, signature):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook signature")
-    elif request.headers.get("authorization") != secret:  # legacy v0 fallback
+    elif not _secret_matches(secret, request.headers.get("authorization")):  # legacy v0 fallback
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook secret")
 
     try:
         body = json.loads(raw_body)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="JSON body must be an object")
 
     # v1 wraps the vote in an envelope ({"type": "vote.create", "data": {...}}); the
     # user's Discord id is data.user.platform_id (data.user.id is the top.gg id).
@@ -84,7 +113,8 @@ async def vote_topgg(request: Request, bot: BotDep) -> dict:
         if event_type != "vote.create":
             log.info("Received top.gg v1 webhook event %r (ignored)", event_type)
             return {"ok": True}
-        user_id = (data.get("user") or {}).get("platform_id")
+        user = data.get("user")
+        user_id = user.get("platform_id") if isinstance(user, dict) else None
     else:
         # top.gg sends {"type": "test"} when you press "Test" in the v0 dashboard.
         if body.get("type") == "test":
@@ -92,10 +122,7 @@ async def vote_topgg(request: Request, bot: BotDep) -> dict:
             return {"ok": True}
         user_id = body.get("user")
 
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing user")
-
-    await bot.db.votes.record_vote(int(user_id), "top.gg", multiplier=VOTE_MULTIPLIER, duration_hours=VOTE_DURATION_HOURS)
+    await bot.db.votes.record_vote(_user_id(user_id), "top.gg", multiplier=VOTE_MULTIPLIER, duration_hours=VOTE_DURATION_HOURS)
     log.info("Recorded top.gg vote from user %s", user_id)
     return {"ok": True}
 
@@ -104,20 +131,19 @@ async def vote_topgg(request: Request, bot: BotDep) -> dict:
 async def vote_discordbotlist(request: Request, bot: BotDep) -> dict:
     """discordbotlist.com webhook: body ``{"id", "username", "admin", ...}``."""
     secret = config.discordbotlist_webhook_secret
-    if not secret or request.headers.get("authorization") != secret:
+    if not secret or not _secret_matches(secret, request.headers.get("authorization")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook secret")
 
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="JSON body must be an object")
 
-    user_id = body.get("id")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing id")
-
+    user_id = _user_id(body.get("id"))
     await bot.db.votes.record_vote(
-        int(user_id), "discordbotlist.com", multiplier=VOTE_MULTIPLIER, duration_hours=VOTE_DURATION_HOURS
+        user_id, "discordbotlist.com", multiplier=VOTE_MULTIPLIER, duration_hours=VOTE_DURATION_HOURS
     )
     log.info("Recorded discordbotlist.com vote from user %s", user_id)
     return {"ok": True}

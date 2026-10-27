@@ -95,7 +95,7 @@ class TagContent(commands.clean_content):
         converted = await super().convert(ctx, argument)
 
         if len(converted) > 2000:
-            raise BadArgument("Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)")
+            raise BadArgument(f"Tag content must be 2000 characters or less. (You have *{len(converted)}* characters)")
 
         return converted
 

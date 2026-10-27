@@ -93,6 +93,9 @@ class HigherLowerGame(LayoutView):
         )
 
     async def _resolve_guess(self, interaction: discord.Interaction, higher: bool) -> None:
+        if self.finished:
+            await interaction.response.defer()
+            return
         _, correct = self.engine.guess(higher)
         if correct:
             self._status = "`\N{WHITE HEAVY CHECK MARK} Correct!` Keep going or cash out."
@@ -113,6 +116,10 @@ class HigherLowerGame(LayoutView):
         await self._resolve_guess(interaction, False)
 
     async def _on_cash_out(self, interaction: discord.Interaction) -> None:
+        # ``finished`` flips before the first await, so a double-click can't pay out twice.
+        if self.finished:
+            await interaction.response.defer()
+            return
         if self.engine.rounds == 0:
             await interaction.response.send_message(
                 f"{Emojis.error} Make at least one call before cashing out.", ephemeral=True

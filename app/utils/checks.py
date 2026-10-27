@@ -15,6 +15,9 @@ else:
 T = TypeVar("T")
 PY3: bool = sys.version_info[0] == 3
 
+#: ``DJMode.dj_only`` (app/cogs/music/models.py imports this module, so it cannot be imported here).
+DJ_MODE_DJ_ONLY = 1
+
 
 # Fuzzy matching
 
@@ -218,13 +221,21 @@ def is_author_connected() -> Callable[[T], T]:
         if ctx.guild is None:
             return False
 
+        has_dj = is_dj(ctx.user) or ctx.user.guild_permissions.manage_guild
+        # DJ-only mode is otherwise enforced only by the player panel and the dashboard, so any
+        # listener could still `skip`/`stop` through a command.
+        config = await ctx.bot.db.get_guild_config(guild_id=ctx.guild.id)
+        if not has_dj and getattr(config, "music_dj_mode", 0) == DJ_MODE_DJ_ONLY:
+            await ctx.send_error("Only members with the **DJ** role can control the player.")
+            return False
+
         if ctx.guild.me.voice is None:
             return True
 
         author_vc = ctx.user.voice and ctx.user.voice.channel
         bot_vc = ctx.guild.me.voice and ctx.guild.me.voice.channel
 
-        if is_dj(ctx.user) and bot_vc and (not author_vc):
+        if has_dj and bot_vc and (not author_vc):
             return True
         if (author_vc and bot_vc) and (author_vc == bot_vc):
             if ctx.user.voice.deaf or ctx.user.voice.self_deaf:

@@ -1,11 +1,14 @@
+import logging
 from contextlib import suppress
 from typing import Any
 
 import discord
 
 from app.core import Cog
-from app.utils import get_asset_url
+from app.utils import get_asset_url, truncate
 from app.utils.webhooks import send_webhook
+
+log = logging.getLogger(__name__)
 
 PossibleTarget = (
     discord.TextChannel
@@ -150,7 +153,7 @@ class AuditLog(Cog):
 
         embed = discord.Embed(
             title=f"{emoji} {action_event_type}",
-            description="## Changes\n\n" + "\n".join(message),
+            description=truncate("## Changes\n\n" + "\n".join(message), 4000),
             colour=color,
             timestamp=entry.created_at,
         )
@@ -159,13 +162,16 @@ class AuditLog(Cog):
         embed.add_field(name="Reason", value=entry.reason, inline=False)
         embed.add_field(name="Category", value=f"{action_name} (Type: {target_type})", inline=False)
         embed.set_thumbnail(url=get_asset_url(entry.guild))
-        assert entry.user is not None
-        embed.set_footer(text=f"Log: [{entry.id}]", icon_url=get_asset_url(entry.user))
+        embed.set_footer(text=f"Log: [{entry.id}]", icon_url=get_asset_url(entry.user) if entry.user else None)
 
         if config.audit_log_webhook is None:
             return
 
-        await send_webhook(config.audit_log_webhook, embed=embed)
+        # A deleted webhook or an oversized field must not raise on every audit-log event.
+        try:
+            await send_webhook(config.audit_log_webhook, embed=embed)
+        except discord.HTTPException as exc:
+            log.warning("Audit log delivery failed for guild %s: %s", entry.guild.id, exc)
 
 
 async def setup(bot) -> None:

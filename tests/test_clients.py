@@ -283,3 +283,37 @@ async def test_ollama_version_probe_hits_version_endpoint() -> None:
     assert await client.version() == '0.3.0'
     _method, url, _kwargs = session.calls[0]
     assert url.endswith('/api/version')
+
+
+def test_retry_after_is_capped_and_rejects_nan() -> None:
+    client = make_client([])
+    huge = FakeResponse(status=429, headers={'Retry-After': '86400'})
+    nan = FakeResponse(status=429, headers={'Retry-After': 'nan'})
+
+    assert client._retry_after(huge, 1) == Client.MAX_BACKOFF  # type: ignore[arg-type]
+    assert client._retry_after(nan, 1) == client._backoff(1)  # type: ignore[arg-type]
+
+
+async def test_stale_result_is_keyed_on_params() -> None:
+    session = FakeSession([
+        FakeResponse(json_data={'q': 'a'}),
+        *[FakeResponse(status=500, json_data={}) for _ in range(Client.BREAKER_THRESHOLD)],
+    ])
+    client = Client(session)  # type: ignore[arg-type]
+    await client.fetch('GET', 'search', params={'q': 'a'})
+    for _ in range(Client.BREAKER_THRESHOLD):
+        with pytest.raises(HTTPClientError):
+            await client.fetch('GET', 'other')
+
+    # Breaker open: the cached 'a' answer must never be served for 'b'.
+    with pytest.raises(CircuitBreakerOpen):
+        await client.fetch('GET', 'search', params={'q': 'b'})
+
+
+async def test_timeouts_count_towards_the_breaker() -> None:
+    session = FakeSession([FakeResponse(raise_on_enter=TimeoutError()) for _ in range(Client.BREAKER_THRESHOLD)])
+    client = Client(session)  # type: ignore[arg-type]
+    for _ in range(Client.BREAKER_THRESHOLD):
+        with pytest.raises(TimeoutError):
+            await client.fetch('GET', 'comics')
+    assert client.breaker_open

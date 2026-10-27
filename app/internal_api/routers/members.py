@@ -74,7 +74,7 @@ def _message_payload(message: discord.Message) -> dict:
 @router.get("/members")
 async def get_guild_members(
     guild: GuildDep,
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=100, ge=1, le=1000),
     after: int = Query(default=0),
     search: str = Query(default=""),
 ) -> dict:
@@ -361,8 +361,8 @@ async def member_action(
 async def get_member_messages(
     user_id: int,
     guild: GuildDep,
-    limit: int = Query(default=25, le=100),
-    per_channel: int = Query(default=100, le=200),
+    limit: int = Query(default=25, ge=1, le=100),
+    per_channel: int = Query(default=100, ge=1, le=200),
 ) -> dict:
     """A member's most recent messages, read live from channel history.
 
@@ -427,7 +427,7 @@ async def member_roles(
 async def get_member_avatars(
     user_id: int,
     bot: BotDep,
-    limit: int = Query(default=20, le=50),
+    limit: int = Query(default=20, ge=1, le=50),
 ) -> dict:
     records = await bot.db.stats.get_avatar_history(user_id, limit=limit)
     avatars = [

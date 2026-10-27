@@ -115,6 +115,8 @@ class BaseHTTPClient:
 
     #: Whether to serve stale cached responses when the circuit breaker is open.
     SERVE_STALE: ClassVar[bool] = True
+    #: Most stale responses kept; keyed per URL+params, so unbounded it grows with every query.
+    STALE_CACHE_SIZE: ClassVar[int] = 256
 
     def __init__(self, session: aiohttp.ClientSession, *, name: str | None = None) -> None:
         self.session: aiohttp.ClientSession = session
@@ -158,9 +160,14 @@ class BaseHTTPClient:
         header = response.headers.get('Retry-After')
         if header:
             try:
-                return float(header)
+                delay = float(header)
             except ValueError:
                 pass
+            else:
+                # Capped: an upstream sending ``Retry-After: 86400`` (or ``nan``) must not park
+                # the caller -- often a user's command -- for a day.
+                if delay >= 0:  # False for nan
+                    return min(delay, self.MAX_BACKOFF)
         return self._backoff(attempt)
 
     def _backoff(self, attempt: int) -> float:
@@ -210,7 +217,9 @@ class BaseHTTPClient:
         (never a raw :class:`aiohttp.ClientError` — every failure mode is an
         :class:`HTTPClientError`).
         """
-        cache_key = f'{method}:{url}'
+        # ``params`` is part of the identity: ``GET search?q=a`` and ``GET search?q=b`` share a
+        # URL, and a stale hit keyed on the URL alone would answer one query with the other.
+        cache_key = f'{method}:{url}:{sorted((params or {}).items())!r}'
 
         if self.breaker_open:
             if self.SERVE_STALE and cache_key in self._response_cache:
@@ -247,7 +256,11 @@ class BaseHTTPClient:
                         # responses; otherwise the cache is dead weight (never read) and
                         # would grow unbounded for the lifetime of the client.
                         if self.SERVE_STALE and method.upper() == 'GET':
+                            self._response_cache.pop(cache_key, None)
                             self._response_cache[cache_key] = (payload, self._now())
+                            # ponytail: FIFO cap, an LRU if stale hit rates ever matter.
+                            while len(self._response_cache) > self.STALE_CACHE_SIZE:
+                                self._response_cache.pop(next(iter(self._response_cache)))
                         return payload
 
                     self._record_failure()
@@ -264,6 +277,11 @@ class BaseHTTPClient:
                     method, full_url, exc, attempt, self.MAX_RETRIES, delay,
                 )
                 await asyncio.sleep(delay)
+            except TimeoutError:
+                # Not an ``aiohttp.ClientError``, so without this a hanging upstream never trips
+                # the breaker. Re-raised as-is: callers (e.g. ``NewsClient``) report timeouts.
+                self._record_failure()
+                raise
 
         # Unreachable: the loop either returns, raises, or sleeps and continues.
         raise RuntimeError('unreachable: fetch retry loop exited without a result')

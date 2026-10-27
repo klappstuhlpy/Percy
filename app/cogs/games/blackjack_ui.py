@@ -272,10 +272,17 @@ class TableView(LayoutView):
         if not await self.check_for_winner(interaction):
             await interaction.response.edit_message(view=self.render())
 
+    async def _pay(self, interaction: discord.Interaction, amount: int) -> bool:
+        """Atomically debits ``amount`` cash; on a shortfall answers the click and returns ``False``."""
+        if await interaction.client.db.economy.debit_cash(interaction.user.id, interaction.guild_id, amount) is not None:  # type: ignore[attr-defined]
+            return True
+        await interaction.response.send_message(f"{Emojis.error} You do not have enough **cash** for that.", ephemeral=True)
+        return False
+
     async def _on_double_down(self, interaction: discord.Interaction) -> None:
         """Doubles the bet and hits the player"""
-        user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
-        await user_balance.remove(cash=self.table.active_hand.bet)
+        if not await self._pay(interaction, self.table.active_hand.bet):
+            return
 
         self.table.active_hand.bet *= 2
 
@@ -287,10 +294,9 @@ class TableView(LayoutView):
 
     async def _on_split(self, interaction: discord.Interaction) -> None:
         """Splits the hand"""
+        if not await self._pay(interaction, self.table.active_hand.bet):
+            return
         self.table.split()
-
-        user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
-        await user_balance.remove(cash=self.table.active_hand.bet)
 
         if not await self.check_for_winner(interaction):
             await interaction.response.edit_message(view=self.render())
@@ -299,8 +305,8 @@ class TableView(LayoutView):
         """Takes insurance (half the original bet) against dealer blackjack."""
         insurance_cost = self.table.active_hand.bet // 2
 
-        user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
-        await user_balance.remove(cash=insurance_cost)
+        if not await self._pay(interaction, insurance_cost):
+            return
 
         self.table.take_insurance(insurance_cost)
         self.insurance.disabled = True

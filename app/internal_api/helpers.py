@@ -91,6 +91,22 @@ def role_error(role: discord.Role, moderator: discord.Member | None) -> str | No
     return None
 
 
+def invalidate_cog_cache(bot: object, cog_name: str, attr: str, guild_id: int, *, containing: bool = False) -> None:
+    """Bust a cog-level ``@cache.cache()`` entry after the API wrote the rows behind it.
+
+    ``containing`` drops every entry for the guild, for getters keyed on more than the guild id.
+    The cog may be unloaded (beta skips some), in which case there is nothing to bust.
+    """
+    cog = bot.get_cog(cog_name)  # type: ignore[attr-defined]
+    if cog is None:
+        return
+    cached = getattr(cog, attr)
+    if containing:
+        cached.invalidate_containing(str(guild_id))
+    else:
+        cached.invalidate(guild_id)
+
+
 def naive_utc(value: datetime.datetime | None) -> datetime.datetime:
     """Coerces a client timestamp to naive UTC, defaulting to now.
 

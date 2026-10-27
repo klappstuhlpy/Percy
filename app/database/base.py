@@ -360,6 +360,8 @@ class Database(_Database):
         """Wire up cache invalidation signals so repositories can fire them on mutation."""
         s = self.signals
         s.register("guild_config_changed").connect(self.get_guild_config, None)
+        # get_guild_ai_config is derived from the guild config row, so it goes stale with it.
+        s.register("guild_config_changed").connect(self.get_guild_ai_config, None)
         s.register("user_config_changed").connect(self.get_user_config, None)
         s.register("sentinel_changed").connect(self.get_guild_sentinel, None)
         s.register("ai_config_changed").connect(self.get_guild_ai_config, None)
@@ -833,11 +835,6 @@ class BaseRecord(ABC):
             self._hydrate(record)
         return self
 
-    @classmethod
-    def __subclasshook__(cls, subclass: type[Any]) -> bool:
-        """Returns whether the subclass has a record attribute."""
-        return hasattr(subclass, "__record")
-
     def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         """An iterator over the record's keys (excluding private ones)."""
         return iter(k for k in self.__record if not k.startswith("_"))
@@ -849,7 +846,8 @@ class BaseRecord(ABC):
     def __eq__(self, other: object) -> bool:
         """Returns whether the items base record is equal to the other item's base record."""
         if isinstance(other, self.__class__):
-            return getattr(self, "__record", None) == getattr(other, "__record", None)
+            # ``self.__record`` (name-mangled), not ``getattr(self, "__record")``, which is always None.
+            return self.__record == other.__record
         return False
 
     def __getitem__(self, item: str) -> Any:

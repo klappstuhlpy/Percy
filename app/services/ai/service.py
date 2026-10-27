@@ -55,6 +55,10 @@ T = TypeVar('T', bound='Parsable')
 DEGRADED_LATENCY_MS = 2500.0
 
 
+def _reject_constant(name: str) -> object:
+    raise ValueError(f'non-finite JSON constant {name!r}')
+
+
 def _describe_probe_error(exc: Exception) -> str:
     """Turn a health-probe failure into a short, actionable reason string.
 
@@ -269,11 +273,13 @@ class AIService:
     def _parse_raw(self, raw: str, schema: type[T]) -> T | None:
         """Decode + validate one raw model response, or ``None`` if it is unusable."""
         try:
-            payload = json.loads(raw)
+            # ``NaN``/``Infinity`` are rejected: ``max(0.0, min(1.0, nan))`` is 1.0, so a NaN
+            # confidence would otherwise clear every threshold.
+            payload = json.loads(raw, parse_constant=_reject_constant)
             if not isinstance(payload, dict):
                 raise SchemaError(f'expected a JSON object, got {type(payload).__name__}')
             return schema.from_payload(payload)
-        except (json.JSONDecodeError, SchemaError, KeyError, TypeError, ValueError) as exc:
+        except (json.JSONDecodeError, SchemaError, KeyError, TypeError, ValueError, OverflowError) as exc:
             log.warning('AI parse: invalid structured output for %s: %r', schema.__name__, exc)
             return None
 

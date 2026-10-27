@@ -17,6 +17,7 @@ from app.services.music_access import MusicViewer, resolve_viewer
 from app.services.music_audio import EFFECTS, EQ_PRESETS, audio_state
 
 from ..dependencies import BotDep, GuildDep, verify_token
+from ..helpers import parse_id
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -336,28 +337,37 @@ async def post_music_setup(guild: GuildDep, bot: BotDep, body: SetupBody) -> dic
     channel: discord.TextChannel | None = None
 
     if body.channel_id:
-        channel = guild.get_channel(int(body.channel_id))  # type: ignore[assignment]
+        channel = guild.get_channel(parse_id(body.channel_id, 'channel_id'))  # type: ignore[assignment]
         if channel is None or not isinstance(channel, discord.TextChannel):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid channel')
     else:
         category = guild.text_channels[0].category if guild.text_channels else None
         parent = category or guild
-        channel = await parent.create_text_channel(name="\U0001f3b6percy-music")
+        try:
+            channel = await parent.create_text_channel(name="\U0001f3b6percy-music")
+        except discord.HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail='I could not create the music channel (Manage Channels?)'
+            ) from None
 
     assert bot.user is not None
-    await channel.edit(
-        slowmode_delay=3,
-        topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=bot.user.mention),
-    )
-
     from app.cogs.music.player import Player
 
-    view = LayoutView()
-    view.add_item(Player.preview_container(guild))
-    message = await channel.send(view=view)
-
-    await message.pin()
-    await channel.purge(limit=5, check=lambda msg: not msg.pinned)
+    try:
+        await channel.edit(
+            slowmode_delay=3,
+            topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=bot.user.mention),
+        )
+        view = LayoutView()
+        view.add_item(Player.preview_container(guild))
+        message = await channel.send(view=view)
+        await message.pin()
+        await channel.purge(limit=5, check=lambda msg: not msg.pinned)
+    except discord.HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'I need Manage Channels, Send Messages, Manage Messages and Pin Messages in #{channel.name}',
+        ) from None
 
     await config.update(
         music_panel_channel_id=channel.id,
@@ -568,7 +578,7 @@ async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> di
 
     channel: discord.VoiceChannel | discord.StageChannel | None = None
     if body.voice_channel_id:
-        resolved = guild.get_channel(int(body.voice_channel_id))
+        resolved = guild.get_channel(parse_id(body.voice_channel_id, 'voice_channel_id'))
         if isinstance(resolved, discord.VoiceChannel | discord.StageChannel):
             channel = resolved
     elif isinstance(player := guild.voice_client, wavelink.Player):

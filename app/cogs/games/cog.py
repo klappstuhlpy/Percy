@@ -149,16 +149,20 @@ class Games(Cog):
             return False
         if not await self._check_max_bet(ctx, bet):
             return False
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-        if bet > balance.cash:
+        # The conditional debit is the check: two commands fired together can never both spend one stake.
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # also creates a missing wallet
+        if await self.bot.db.economy.debit_cash(ctx.author.id, ctx.guild.id, bet) is None:
             await ctx.send_error(
                 f"You do not have enough money to bet that amount.\n"
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
             )
             return False
-        await balance.remove(cash=bet)
         return True
+
+    async def _refund(self, ctx: Context, amount: int) -> None:
+        """Credits back a stake taken by :meth:`_take_bet` when the game could not start after all."""
+        assert ctx.guild is not None
+        await (await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)).add(cash=amount)
 
     @command(
         "games", aliases=["arcade"], description="Browse every game and your personal records.",
@@ -294,25 +298,8 @@ class Games(Cog):
     @describe(bet="The amount of coins to bet.")
     async def tower(self, ctx: Context, bet: int = 100) -> None:
         """Play a round of Tower game."""
-        if bet < 0:
-            await ctx.send_error("You cannot bet negative coins.")
+        if not await self._take_bet(ctx, bet):
             return
-
-        if not await self._check_max_bet(ctx, bet):
-            return
-
-        assert ctx.guild is not None
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-
-        if bet > balance.cash:
-            await ctx.send_error(
-                f"You do not have enough money to bet that amount.\n"
-                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
-            )
-            return
-
-        await balance.remove(cash=bet)
 
         tower = tower_ui.Tower(cast("discord.Member", ctx.author), bet)
         await ctx.send(view=tower)
@@ -321,29 +308,8 @@ class Games(Cog):
     @describe(bet="The amount of coins to bet.")
     async def slots(self, ctx: Context, bet: int) -> None:
         """Play a game of slots."""
-        if bet < 0:
-            await ctx.send_error("You cannot bet negative coins.")
+        if not await self._take_bet(ctx, bet, minimum=MinimumBet.BLACKJACK.value):
             return
-
-        if bet < MinimumBet.BLACKJACK.value:
-            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.")
-            return
-
-        if not await self._check_max_bet(ctx, bet):
-            return
-
-        assert ctx.guild is not None
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-
-        if bet > balance.cash:
-            await ctx.send_error(
-                f"You do not have enough money to bet that amount.\n"
-                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
-            )
-            return
-
-        await balance.remove(cash=bet)
 
         slots = slot_ui.SlotMachine(cast("discord.Member", ctx.author), bet)
         await ctx.send(view=slots)
@@ -351,33 +317,19 @@ class Games(Cog):
     @command("blackjack", description="Play a Blackjack game.", alias="bj", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")
     async def blackjack(self, ctx: Context, bet: int) -> None:
-        if bet < 0:
-            await ctx.send_error("You cannot bet negative coins.")
+        # Check for a running table *before* taking the stake, or the bet is debited and never played.
+        existing = self.blackjack_tables.get(ctx.author.id)
+        if existing is not None and existing.is_running:
+            await ctx.send_error("You are already playing a game of Blackjack.")
             return
 
-        if bet < MinimumBet.BLACKJACK.value:
-            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.")
+        if not await self._take_bet(ctx, bet, minimum=MinimumBet.BLACKJACK.value):
             return
-
-        if not await self._check_max_bet(ctx, bet):
-            return
-
-        assert ctx.guild is not None
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-
-        if bet > balance.cash:
-            await ctx.send_error(
-                f"You do not have enough money to bet that amount.\n"
-                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
-            )
-            return
-
-        await balance.remove(cash=bet)
 
         if ctx.author.id in self.blackjack_tables:
             blackjack = self.blackjack_tables[ctx.author.id]
-            if blackjack.is_running:
+            if blackjack.is_running:  # a second command won the race while we awaited the debit
+                await self._refund(ctx, bet)
                 await ctx.send_error("You are already playing a game of Blackjack.")
                 return
 
@@ -584,8 +536,10 @@ class Games(Cog):
 
         rate = random.uniform(0, 1)
         if rate > ROB_FAIL_RATE:
-            await robber_balance.add(cash=amount)
-            await robbed_balance.remove(cash=amount)
+            # One transaction, conditional on the victim still holding it: two robbers can't both take the same cash.
+            if await self.bot.db.economy.transfer_cash(user.id, ctx.author.id, ctx.guild.id, amount) is None:
+                await ctx.send_error(f"**{user.display_name}** moved their cash before you got to it.")
+                return
             await ctx.send_success(
                 f"You were able to rob {Emojis.Economy.cash} **{fnumb(amount)}** from **{user.display_name}**."
             )
@@ -605,34 +559,19 @@ class Games(Cog):
 
         You can bet on a single space or a range of VALID_SPACES.
         """
-        if bet < 0:
-            await ctx.send_error("You cannot bet negative coins.")
+        existing = self.roulette_tables.get(ctx.channel.id)
+        if existing is not None and not existing.open:
+            await ctx.send_error("**Bets are closed.** *Rien ne va plus*")
             return
 
-        if bet < MinimumBet.ROULETTE.value:
-            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.ROULETTE.value)}**.")
+        if not await self._take_bet(ctx, bet, minimum=MinimumBet.ROULETTE.value):
             return
-
-        if not await self._check_max_bet(ctx, bet):
-            return
-
-        assert ctx.guild is not None
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-
-        if bet > balance.cash:
-            await ctx.send_error(
-                f"You do not have enough money to bet that amount.\n"
-                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
-            )
-            return
-
-        await balance.remove(cash=bet)
 
         if ctx.channel.id in self.roulette_tables:
             roulette = self.roulette_tables[ctx.channel.id]
 
-            if not roulette.open:
+            if not roulette.open:  # the wheel closed while we awaited the debit
+                await self._refund(ctx, bet)
                 await ctx.send_error("**Bets are closed.** *Rien ne va plus*")
                 return
 
@@ -662,48 +601,39 @@ class Games(Cog):
     @describe(stack="The amount of coins to play with.")
     async def poker(self, ctx: Context, stack: int) -> None:
         """Play a game of Texas Hold'em Poker."""
-        if stack < 0:
-            await ctx.send_error("You cannot bet negative coins.")
+
+        def join_error() -> str | None:
+            poker = self.poker_tables.get(ctx.channel.id)
+            if poker is None:
+                return None
+            if len(poker.players) == 4:
+                return "The table is full."
+            if poker.state != poker_bridge.TableState.STOPPED:
+                return "The game is already running.\nPlease wait for the next round or open a new game in a different channel."
+            if any(player.member == ctx.author for player in poker.players):
+                return "You are already playing."
+            if stack < poker.min_buy_in or stack > poker.max_buy_in:
+                return (
+                    f"The buy-in range for this table is {Emojis.Economy.cash} "
+                    f"**{fnumb(poker.min_buy_in)}** - **{fnumb(poker.max_buy_in)}**."
+                )
+            return None
+
+        # Validate the seat before taking the buy-in, and again after (the table can change during the await).
+        if error := join_error():
+            await ctx.send_error(error)
             return
 
-        if not await self._check_max_bet(ctx, stack):
+        if not await self._take_bet(ctx, stack):
             return
 
-        assert ctx.guild is not None
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-
-        if stack > balance.cash:
-            await ctx.send_error(
-                f"You do not have enough money to bet that amount.\n"
-                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
-            )
+        if error := join_error():
+            await self._refund(ctx, stack)
+            await ctx.send_error(error)
             return
-
-        await balance.remove(cash=stack)
 
         if ctx.channel.id in self.poker_tables:
             poker = self.poker_tables[ctx.channel.id]
-            if len(poker.players) == 4:
-                await ctx.send_error("The table is full.")
-                return
-
-            if poker.state != poker_bridge.TableState.STOPPED:
-                await ctx.send_error(
-                    "The game is already running.\nPlease wait for the next round or open a new game in a different channel."
-                )
-                return
-
-            if any(player.member == ctx.author for player in poker.players):
-                await ctx.send_error("You are already playing.")
-                return
-
-            if stack < poker.min_buy_in or stack > poker.max_buy_in:
-                await ctx.send_error(
-                    f"The buy-in range for this table is {Emojis.Economy.cash} **{fnumb(poker.min_buy_in)}** - **{fnumb(poker.max_buy_in)}**."
-                )
-                return
-
             poker.add_player(cast("discord.Member", ctx.author), stack)
             await ctx.maybe_edit(poker.message, view=poker.view.render())
         else:

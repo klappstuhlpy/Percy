@@ -103,8 +103,8 @@ def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> dict:
 async def get_cases(
     bot: BotDep,
     guild: GuildDep,
-    limit: int = Query(default=50, le=100),
-    offset: int = Query(default=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     action: str | None = Query(default=None),
     moderator_id: int | None = Query(default=None),
     target_id: int | None = Query(default=None),
@@ -172,12 +172,8 @@ async def create_case(
         valid = ', '.join(case_type.value for case_type in CaseType)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'action must be one of: {valid}')
 
-    try:
-        target_id = int(body.target_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='target_id must be a user id')
-    if not target_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='target_id is required')
+    # parse_id also refuses ids past BIGINT, which asyncpg would otherwise answer with a 500.
+    target_id = parse_id(body.target_id, 'target_id')
 
     moderator_id = parse_id(body.moderator_id, 'moderator_id') if body.moderator_id else None
     reason = body.reason or None
@@ -349,7 +345,7 @@ async def get_member_activity(
     user_id: int,
     bot: BotDep,
     guild: GuildDep,
-    days: int = Query(default=365, le=365),
+    days: int = Query(default=365, ge=1, le=365),
 ) -> dict:
     """Daily command counts for a member (activity heatmap data)."""
     records = await bot.db.stats.get_member_daily_activity(guild.id, user_id, days=days)

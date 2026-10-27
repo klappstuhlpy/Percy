@@ -119,7 +119,9 @@ class SpamControl:
         retry_after = bucket and bucket.update_rate_limit(message.created_at.timestamp())
         author_id = message.author.id
 
-        if retry_after and author_id != self.bot.owner_id:
+        # owner_id is None when config.owners is a collection (owner_ids is set instead).
+        is_owner = author_id == self.bot.owner_id or author_id in (self.bot.owner_ids or ())
+        if retry_after and not is_owner:
             self._record_offense(author_id, message.created_at.timestamp())
             self._auto_spam_count[author_id] += 1
             if self._auto_spam_count[author_id] >= 5:

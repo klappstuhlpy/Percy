@@ -445,7 +445,10 @@ class Reminder(Cog):
             msg = await channel.send(
                 to_send,
                 view=view,
-                allowed_mentions=discord.AllowedMentions(users=True, everyone=False, roles=False),
+                # Only the recipients: the text (or a replied-to message) may carry other <@id> mentions.
+                allowed_mentions=discord.AllowedMentions(
+                    users=[discord.Object(uid) for uid in recipients], everyone=False, roles=False
+                ),
             )
         except discord.HTTPException:
             return

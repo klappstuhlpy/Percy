@@ -6,7 +6,9 @@ used to sign deliveries is generated server-side and returned exactly once, on c
 """
 from __future__ import annotations
 
+import ipaddress
 import secrets
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -47,6 +49,21 @@ def _validate_url(url: str) -> str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="url must be an http(s) URL")
     if len(url) > 2000:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="url is too long")
+    # Percy POSTs here from inside its own network: refuse loopback/private/link-local literals
+    # (the internal API itself, cloud metadata at 169.254.169.254, the LAN).
+    # ponytail: literal hosts only; a public name resolving to a private address needs a check at delivery.
+    try:
+        host = urlsplit(url).hostname or ""
+    except ValueError:
+        host = ""
+    if not host:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="url must include a host")
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    if host.lower() == "localhost" or host.lower().endswith(".localhost") or (address is not None and not address.is_global):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="url must point at a public host")
     return url
 
 
@@ -158,7 +175,7 @@ async def get_deliveries(
     guild: GuildDep,
     bot: BotDep,
     sub_id: int,
-    limit: int = Query(default=25, le=100),
+    limit: int = Query(default=25, ge=1, le=100),
 ) -> dict:
     """Recent delivery attempts for a subscription (its health log)."""
     record = await bot.db.event_webhooks.get(sub_id, guild.id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 import discord
@@ -16,6 +17,8 @@ from app.rendering.card_style import CardStyle, resolve_style
 from app.rendering.models import ActiveBoost
 from app.utils import cache, fnumb, get_asset_url, helpers, humanize_duration, medal_emoji, truncate
 from config import Emojis
+
+log = logging.getLogger(__name__)
 
 
 class LevelSetFlags(Flags):
@@ -85,28 +88,35 @@ class Leveling(Cog):
         AFK, server- or self-deafened, or blacklisted — mirroring the message-XP rules.
         """
         for guild in self.bot.guilds:
-            config: GuildLevelConfig | None = await self.get_guild_level_config(guild.id)  # type: ignore[misc]
-            if config is None or not config.enabled or not config.voice_enabled:
+            # One guild's failure (DB hiccup, odd member state) must not kill the loop for every guild.
+            try:
+                await self._award_guild_voice_xp(guild)
+            except Exception:
+                log.exception('Voice XP award failed for guild %s', guild.id)
+
+    async def _award_guild_voice_xp(self, guild: discord.Guild) -> None:
+        config: GuildLevelConfig | None = await self.get_guild_level_config(guild.id)  # type: ignore[misc]
+        if config is None or not config.enabled or not config.voice_enabled:
+            return
+
+        for channel in (*guild.voice_channels, *guild.stage_channels):
+            humans = [m for m in channel.members if not m.bot]
+            if len(humans) < 2:
                 continue
 
-            for channel in (*guild.voice_channels, *guild.stage_channels):
-                humans = [m for m in channel.members if not m.bot]
-                if len(humans) < 2:
+            for member in humans:
+                voice = member.voice
+                if voice is None or voice.afk or voice.self_deaf or voice.deaf:
                     continue
 
-                for member in humans:
-                    voice = member.voice
-                    if voice is None or voice.afk or voice.self_deaf or voice.deaf:
-                        continue
+                level_config = await self.get_level_config(member.id, guild.id)
+                if level_config is None or not level_config.can_gain_voice(channel):
+                    continue
 
-                    level_config = await self.get_level_config(member.id, guild.id)
-                    if level_config is None or not level_config.can_gain_voice(channel):
-                        continue
-
-                    boost = await self.bot.db.economy.get_boost_multiplier(member.id, guild.id, 'xp')
-                    # Bot-list vote rewards stack on top (global, renewable 12h boost).
-                    boost *= await self.bot.db.votes.get_active_multiplier(member.id)
-                    await level_config.add_voice_xp(round(config.voice_xp * boost), channel=channel)
+                boost = await self.bot.db.economy.get_boost_multiplier(member.id, guild.id, 'xp')
+                # Bot-list vote rewards stack on top (global, renewable 12h boost).
+                boost *= await self.bot.db.votes.get_active_multiplier(member.id)
+                await level_config.add_voice_xp(round(config.voice_xp * boost), channel=channel)
 
     @award_voice_xp.before_loop
     async def _before_award_voice_xp(self) -> None:

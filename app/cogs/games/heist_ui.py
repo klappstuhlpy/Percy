@@ -32,6 +32,7 @@ class HeistView(LayoutView):
         self.crew: list[discord.Member] = [leader]
         self._result_text: str | None = None
         self._success: bool | None = None
+        self._resolved = False
         self._compose()
 
     def _compose(self) -> None:
@@ -76,6 +77,8 @@ class HeistView(LayoutView):
             error = "You're in passive mode — turn it off with `passive off` to join heists."
         elif (await db.get_user_balance(member.id, member.guild.id)).cash < ENTRY_CASH:
             error = f"You need {Emojis.Economy.cash} **{fnumb(ENTRY_CASH)}** in cash to join a heist."
+        if not error and (any(m.id == member.id for m in self.crew) or len(self.crew) >= MAX_CREW or self._resolved):
+            error = "You can't join this heist right now."  # state moved while we awaited (e.g. a double-click)
         if error:
             await interaction.response.send_message(error, ephemeral=True)
             return
@@ -95,6 +98,10 @@ class HeistView(LayoutView):
         await interaction.edit_original_response(view=self)
 
     async def _resolve(self) -> None:
+        # Start button, a double-click and the join-window timeout can all land here; pay out once.
+        if self._resolved:
+            return
+        self._resolved = True
         self.stop()
         guild_id = self.target.guild.id
         db = self.client.db  # type: ignore[attr-defined]

@@ -1,6 +1,7 @@
 """FastAPI dependencies: authentication, guild resolution, bot access."""
 from __future__ import annotations
 
+import hmac
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, Path, Request, status
@@ -20,7 +21,9 @@ def get_bot(request: Request) -> Bot:
 
 
 async def verify_token(authorization: Annotated[str | None, Header()] = None) -> None:
-    if not authorization or authorization != f'Bearer {config.internal_api_token}':
+    # Constant-time, and never satisfied by an empty token (``Bearer `` would otherwise match it).
+    token = config.internal_api_token
+    if not token or not authorization or not hmac.compare_digest(authorization.encode(), f'Bearer {token}'.encode()):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='invalid or missing token')
 
 

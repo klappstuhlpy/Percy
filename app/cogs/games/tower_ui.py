@@ -126,9 +126,15 @@ class Tower(LayoutView):
         return True
 
     async def _on_restart(self, interaction: discord.Interaction) -> None:
+        # Claim the restart before the first await so a double-click can't stake twice.
+        if not self.finished:
+            await interaction.response.defer()
+            return
+        self.finished = False
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
 
-        if self.bet > balance.cash:
+        if await interaction.client.db.economy.debit_cash(interaction.user.id, interaction.guild.id, self.bet) is None:  # type: ignore[attr-defined]
+            self.finished = True
             await interaction.response.send_message(
                 f"{Emojis.error} You do not have enough money to bet that amount.\n"
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
@@ -136,13 +142,14 @@ class Tower(LayoutView):
             )
             return
 
-        await balance.remove(cash=self.bet)
-
         self.reset()
         self._compose()
         await interaction.response.edit_message(view=self)
 
     async def _on_stack(self, interaction: discord.Interaction) -> None:
+        if self.finished:
+            await interaction.response.defer()
+            return
         # Now calculate the probability of the tower crashing or not
         rate = random.uniform(0, 1)
         if rate > 0.7:
@@ -163,6 +170,10 @@ class Tower(LayoutView):
         )
 
     async def _on_cash_out(self, interaction: discord.Interaction) -> None:
+        # ``finished`` flips before the first await, so a double-click can't pay out twice.
+        if self.finished:
+            await interaction.response.defer()
+            return
         self.finished = True
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
         amount = round(self.bet * self.multiplier)

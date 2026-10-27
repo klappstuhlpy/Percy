@@ -13,9 +13,11 @@ To emit a domain event from elsewhere::
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import time
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -37,6 +39,24 @@ _MAX_ATTEMPTS = 3
 _FAILURE_LIMIT = 15
 #: How long the "which guilds have a webhook" set is cached before a refresh.
 _ACTIVE_TTL = 60.0
+
+
+async def _is_public_url(url: str) -> bool:
+    """Whether every address ``url``'s host resolves to is publicly routable.
+
+    A subscription URL is typed by any server manager, and Percy POSTs to it from inside its own
+    network, so loopback/private/link-local targets (the internal API, Lavalink, Ollama, cloud
+    metadata) are refused. ponytail: resolved once per delivery, so DNS rebinding between this
+    check and the connect is not covered; pin the resolved IP in a custom connector if that matters.
+    """
+    host = urlsplit(url).hostname
+    if not host:
+        return False
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None)
+    except OSError:
+        return False
+    return bool(infos) and all(ipaddress.ip_address(info[4][0].split('%', 1)[0]).is_global for info in infos)
 
 
 class WebhookDispatcher(Cog, name="Webhooks"):
@@ -161,11 +181,15 @@ class WebhookDispatcher(Cog, name="Webhooks"):
         success = False
         attempts = 0
 
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
+        public = await _is_public_url(sub["url"])
+        if not public:
+            error = "refused: the URL does not resolve to a public address"
+        for attempt in range(1, _MAX_ATTEMPTS + 1 if public else 1):
             attempts = attempt
             try:
+                # No redirects: a public URL could otherwise bounce the POST to an internal one.
                 async with self.bot.session.post(
-                    sub["url"], data=body, headers=headers,
+                    sub["url"], data=body, headers=headers, allow_redirects=False,
                     timeout=aiohttp.ClientTimeout(total=_DELIVERY_TIMEOUT),
                 ) as resp:
                     status_code = resp.status

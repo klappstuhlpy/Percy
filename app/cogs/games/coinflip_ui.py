@@ -77,8 +77,23 @@ class DuelPrompt(LayoutView):
                 ))
                 return
 
-        await challenger_balance.remove(cash=self.bet)
-        await opponent_balance.remove(cash=self.bet)
+        # Conditional debits: a stake spent elsewhere since the check above cancels the duel instead of going negative.
+        economy = self.cog.bot.db.economy
+        if await economy.debit_cash(challenger.id, guild_id, self.bet) is None:
+            await interaction.response.edit_message(view=make_notice(
+                f'{COIN} Coinflip Duel',
+                f'**{challenger.display_name}** cannot cover the stake anymore — duel cancelled.',
+                accent=Accent.error,
+            ))
+            return
+        if await economy.debit_cash(self.opponent.id, guild_id, self.bet) is None:
+            await challenger_balance.add(cash=self.bet)
+            await interaction.response.edit_message(view=make_notice(
+                f'{COIN} Coinflip Duel',
+                f'**{self.opponent.display_name}** cannot cover the stake anymore — duel cancelled.',
+                accent=Accent.error,
+            ))
+            return
 
         result = random.choice(SIDES)
         challenger_won = result == self.side

@@ -20,6 +20,13 @@ __all__ = (
 
 # -- Users (settings, balance, personal data) ------------------------------
 
+#: Serialises wallet creation for one (user_id, guild_id). Session and transaction advisory locks on the
+#: same key block each other, so the xact form (inside transactions) and the session pair below share one gate.
+_WALLET_KEY = "hashtextextended($1::text || ':' || $2::text, 0)"
+WALLET_LOCK_SQL = f"SELECT pg_advisory_xact_lock({_WALLET_KEY});"
+_WALLET_SESSION_LOCK = f"SELECT pg_advisory_lock({_WALLET_KEY});"
+_WALLET_SESSION_UNLOCK = f"SELECT pg_advisory_unlock({_WALLET_KEY});"
+
 
 class UsersRepository(BaseRepository):
     """Data access for the ``user_settings`` and ``economy`` tables.
@@ -35,7 +42,9 @@ class UsersRepository(BaseRepository):
         """Fetches the settings row for a user, inserting a default row if absent."""
         record = await self.fetchrow("SELECT * FROM user_settings WHERE id = $1;", user_id)
         if record is None:
-            record = await self.fetchrow("INSERT INTO user_settings (id) VALUES ($1) RETURNING *;", user_id)
+            record = await self.fetchrow(
+                "INSERT INTO user_settings (id) VALUES ($1) ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id RETURNING *;",
+                user_id)
         return record
 
     async def get_timezone(self, user_id: int) -> str:
@@ -241,10 +250,22 @@ class UsersRepository(BaseRepository):
         """Fetches a user's balance row for a guild, inserting an empty one if absent."""
         record = await self.fetchrow(
             "SELECT * FROM economy WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
-        if not record:
-            record = await self.fetchrow(
-                "INSERT INTO economy (user_id, guild_id, cash, bank) VALUES ($1, $2, 0, 0) RETURNING *;",
-                user_id, guild_id)
+        if record:
+            return record
+        # ``economy`` has no UNIQUE (user_id, guild_id), so two concurrent first calls would both insert and the
+        # member would own two wallets that every ``WHERE user_id AND guild_id`` update then credits twice.
+        # ponytail: advisory lock stands in for the missing unique index; swap for ON CONFLICT once a migration adds it
+        async with self.acquire() as conn:
+            await conn.execute(_WALLET_SESSION_LOCK, user_id, guild_id)
+            try:
+                record = await conn.fetchrow(
+                    "SELECT * FROM economy WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
+                if record is None:
+                    record = await conn.fetchrow(
+                        "INSERT INTO economy (user_id, guild_id, cash, bank) VALUES ($1, $2, 0, 0) RETURNING *;",
+                        user_id, guild_id)
+            finally:
+                await conn.execute(_WALLET_SESSION_UNLOCK, user_id, guild_id)
         return record
 
     async def find_balance_record(self, user_id: int, guild_id: int) -> asyncpg.Record | None:

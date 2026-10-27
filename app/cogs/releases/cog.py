@@ -464,11 +464,17 @@ class Releases(Cog):
         repo = self.bot.db.releases
         now = discord.utils.utcnow().replace(tzinfo=None)
 
-        releasables = await self.gather_releasables(now)
-        stories = await self.gather_news(now)
-        subjects = sorted({(subject.media, subject.type, subject.value)
-                           for item in (*releasables, *stories) for subject in item.subjects})
-        subscriptions = await repo.subscribers_for_subjects(subjects)
+        # Wrapped like the other two loops: only PostgresConnectionError is a registered retry
+        # type, so anything else raised here (a missing table, a bad row) would stop the loop.
+        try:
+            releasables = await self.gather_releasables(now)
+            stories = await self.gather_news(now)
+            subjects = sorted({(subject.media, subject.type, subject.value)
+                               for item in (*releasables, *stories) for subject in item.subjects})
+            subscriptions = await repo.subscribers_for_subjects(subjects)
+        except Exception:
+            log.exception('The release dispatch run failed while gathering.')
+            return
 
         by_user = match(releasables, subscriptions)
         news_by_user = match(stories, subscriptions, stream='news')
@@ -487,7 +493,10 @@ class Releases(Cog):
                 # One user's database blip must not cost everyone else their digest.
                 log.exception('Release dispatch failed for %s.', user_id)
 
-        await repo.prune_deliveries(now - DELIVERY_RETENTION)
+        try:
+            await repo.prune_deliveries(now - DELIVERY_RETENTION)
+        except Exception:
+            log.exception('Pruning old release delivery claims failed.')
 
     @dispatch_releases.before_loop
     async def _before_dispatch_releases(self) -> None:

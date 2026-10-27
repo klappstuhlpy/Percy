@@ -228,6 +228,10 @@ class SlotMachine(LayoutView):
 
     async def _on_start(self, interaction: discord.Interaction) -> None:
         """Spins the slot machine, revealing one row at a time."""
+        # One spin per stake: a second click racing the first edit must not spin (and pay) again.
+        if self._start.disabled:
+            await interaction.response.defer()
+            return
         self._start.disabled = True
         self._reset.disabled = False
 
@@ -262,13 +266,15 @@ class SlotMachine(LayoutView):
 
     async def _on_reset(self, interaction: discord.Interaction) -> None:
         """Reset and re-bet for another spin."""
-        self.reset()
-
-        self._start.disabled = False
+        # Only re-arm after the new stake is taken, and only once per finished spin.
+        if self._reset.disabled:
+            await interaction.response.defer()
+            return
         self._reset.disabled = True
 
         balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
-        if self.bet > balance.cash:
+        if await interaction.client.db.economy.debit_cash(self.player.id, interaction.guild_id, self.bet) is None:  # type: ignore[attr-defined]
+            self._reset.disabled = False
             await interaction.response.send_message(
                 f"{Emojis.error} You do not have enough money to bet that amount.\n"
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
@@ -276,7 +282,8 @@ class SlotMachine(LayoutView):
             )
             return
 
-        await balance.remove(cash=self.bet)
+        self.reset()
+        self._start.disabled = False
 
         self._compose()
         await interaction.response.edit_message(view=self)

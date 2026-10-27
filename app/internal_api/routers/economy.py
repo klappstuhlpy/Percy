@@ -288,7 +288,7 @@ async def delete_economy_item(guild: GuildDep, bot: BotDep, name: str) -> dict:
 async def get_economy_balances(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=25, le=100),
+    limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     records = await bot.db.users.get_top_balance_records(guild.id, limit + offset)
@@ -313,6 +313,10 @@ async def patch_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, body
     if body.cash is None and body.bank is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify cash or bank')
 
+    # A negative wallet breaks every spend check; past BIGINT asyncpg answers with a 500.
+    if any(v is not None and not 0 <= v <= _MAX_DELTA for v in (body.cash, body.bank)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'cash and bank must be between 0 and {_MAX_DELTA}')
+
     balance = await bot.db.get_user_balance(user_id, guild.id)
     if balance is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='user balance not found')
@@ -328,16 +332,27 @@ async def patch_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, body
 
 @router.post("/economy/lottery")
 async def create_lottery(guild: GuildDep, bot: BotDep, body: CreateLotteryBody) -> dict:
+    # Same limits as `lottery start`, checked before the row exists so a refusal leaves no lottery behind.
+    if body.ticket_price < 1 or body.ticket_price > _MAX_DELTA:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'ticket_price must be between 1 and {_MAX_DELTA}')
+    if not 5 <= body.duration_minutes <= 30 * 24 * 60:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be between 5 minutes and 30 days')
+    # Guild-scoped: bot.get_channel would accept another server's channel.
+    channel = guild.get_channel(body.channel_id)
+    if not isinstance(channel, discord.abc.Messageable):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='channel not found')
+
     # economy_lottery.ends_at is a naive TIMESTAMP (UTC); match the bot's own
     # lottery command, which stores when.replace(tzinfo=None).
-    ends_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
-        minutes=body.duration_minutes
-    )
+    when = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=body.duration_minutes)
+    ends_at = when.replace(tzinfo=None)
     result = await bot.db.economy.create_lottery(
-        guild.id, body.channel_id, body.ticket_price, body.ticket_price, ends_at
+        guild.id, channel.id, body.ticket_price, body.ticket_price, ends_at
     )
     if result is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='a lottery is already active')
+    # The draw is timer-driven (on_lottery_timer_complete); without this the lottery never ends.
+    await bot.timers.create(when, "lottery", guild.id)
 
     # Deferred import: app.core pulls in Bot -> InternalAPI, so importing it at
     # module load time would create a circular import during startup.
@@ -358,10 +373,6 @@ async def create_lottery(guild: GuildDep, bot: BotDep, body: CreateLotteryBody) 
             ("Drawing", discord.utils.format_dt(ends_at, "R")),
         ],
     )
-    channel = bot.get_channel(body.channel_id)
-    if channel is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='channel not found')
-
     try:
         await channel.send(view=view)
     except discord.HTTPException as e:

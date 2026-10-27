@@ -22,6 +22,31 @@ __all__ = ('RoleMenuButton', 'build_menu_view')
 
 BUTTONS_PER_ROW = 5
 
+#: Permissions a self-assignable role must never carry: anyone who can see the menu could
+#: click their way into moderating or administering the server.
+ELEVATED_PERMISSIONS = discord.Permissions(
+    administrator=True,
+    manage_guild=True,
+    manage_roles=True,
+    manage_channels=True,
+    manage_webhooks=True,
+    manage_messages=True,
+    manage_nicknames=True,
+    manage_expressions=True,
+    manage_events=True,
+    manage_threads=True,
+    kick_members=True,
+    ban_members=True,
+    moderate_members=True,
+    mention_everyone=True,
+    view_audit_log=True,
+)
+
+
+def is_elevated(role: discord.Role) -> bool:
+    """Whether ``role`` grants a moderation/administration permission."""
+    return bool(role.permissions.value & ELEVATED_PERMISSIONS.value)
+
 
 class RoleMenuButton(discord.ui.DynamicItem[discord.ui.Button], template=r'rolemenu:(?P<menu>[0-9]+):(?P<role>[0-9]+)'):
     """A persistent button that toggles a single role from a menu."""
@@ -70,12 +95,23 @@ class RoleMenuButton(discord.ui.DynamicItem[discord.ui.Button], template=r'rolem
             )
             return
 
+        # The role's permissions may have been raised since it was added to the menu.
+        if is_elevated(role):
+            await interaction.response.send_message(
+                f'{Emojis.error} {role.mention} has moderation or admin permissions, so it is not self-assignable.',
+                ephemeral=True,
+            )
+            return
+
         menu = await interaction.client.db.rolemenu.get_menu(self.menu_id)
-        unique = bool(menu['unique_roles']) if menu else False
-        menu_role_ids: list[int] = []
-        if unique:
-            entries = await interaction.client.db.rolemenu.get_entries(self.menu_id)
-            menu_role_ids = [entry['role_id'] for entry in entries]
+        entries = await interaction.client.db.rolemenu.get_entries(self.menu_id) if menu else []
+        # A stale message (its re-render failed) can still carry a button for a removed role.
+        if menu is None or self.role_id not in {entry['role_id'] for entry in entries}:
+            await interaction.response.send_message(
+                f'{Emojis.error} That role is no longer offered by this menu.', ephemeral=True)
+            return
+        unique = bool(menu['unique_roles'])
+        menu_role_ids: list[int] = [entry['role_id'] for entry in entries] if unique else []
 
         update = resolve_toggle(
             clicked_role=self.role_id,

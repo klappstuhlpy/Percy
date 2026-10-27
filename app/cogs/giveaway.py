@@ -87,6 +87,8 @@ class GiveawayRerollButton(discord.ui.DynamicItem[discord.ui.Button], template=r
         await interaction.response.edit_message(
             content=content, allowed_mentions=discord.AllowedMentions(users=True), view=None
         )
+        if self.giveaway.message is MISSING:
+            await self.giveaway.fetch_message()
         await self.giveaway.message.edit(embed=self.giveaway.to_embed(winners), view=None)
 
 
@@ -140,8 +142,13 @@ class GiveawayEnterButton(discord.ui.DynamicItem[discord.ui.Button], template=r"
 
     async def callback(self, interaction: Interaction) -> None:
         assert self.giveaway is not None
+        # Atomic append: concurrent clicks each land instead of the last full-set write winning.
+        if not await interaction.client.db.giveaways.add_entry(self.giveaway.id, interaction.user.id):
+            await interaction.response.send_message(
+                f"{Emojis.error} You have already entered this giveaway.", ephemeral=True
+            )
+            return
         self.giveaway.entries.add(interaction.user.id)
-        await interaction.client.db.giveaways.set_entries(self.giveaway.id, self.giveaway.entries)
 
         if self.giveaway.message is MISSING:
             await self.giveaway.fetch_message()
@@ -428,8 +435,11 @@ class Giveaways(Cog):
             The giveaway id to delete.
         """
         timer = await self.bot.timers.fetch("giveaway", giveaway_id=str(giveaway_id))
-        self.bot.dispatch("giveaway_timer_complete", timer)
+        if timer is None:  # already fired (or never scheduled): the listener would crash on ``None``
+            return
+        # Delete first so the timer loop can't fire the same giveaway while we end it.
         await self.bot.timers.delete("giveaway", giveaway_id=str(giveaway_id))
+        self.bot.dispatch("giveaway_timer_complete", timer)
 
     @group("giveaway", description="Manage giveaways.", guild_only=True, hybrid=True)
     async def giveaway(self, ctx: Context) -> None:
@@ -582,6 +592,8 @@ class Giveaways(Cog):
         giveaway = await self.get_guild_giveaway(ctx.guild.id, giveaway_id)
         if giveaway is None:
             raise commands.BadArgument(f"Giveaway with ID `{giveaway_id}` was not found.")
+        if giveaway.kwargs.get("ended"):
+            raise commands.BadArgument(f"Giveaway with ID `{giveaway_id}` has already ended.")
 
         await self.end_giveaway(giveaway.id)
         await ctx.send_success(f"Giveaway [`{giveaway.id}`] has been ended manually.")
@@ -611,7 +623,9 @@ class Giveaways(Cog):
         if giveaway.message is MISSING:
             await giveaway.fetch_message()
 
-        await self.bot.db.giveaways.delete_giveaway(giveaway.id)
+        # Keep the row (marked ended) so the Reroll button can still find it; the first caller wins the draw.
+        if not await self.bot.db.giveaways.mark_ended(giveaway.id, giveaway.kwargs["expires"]):
+            return
 
         winners = await giveaway.get_winners()
         try:

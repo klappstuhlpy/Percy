@@ -14,6 +14,7 @@ from app.core import Bot, Cog, Context
 from app.core.models import PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import TextSource
 from app.rendering import get_dominant_color
+from app.services.webhooks import check_destination
 from app.utils import helpers, usage_per_day
 from app.utils.lock import lock
 from config import Emojis
@@ -240,14 +241,21 @@ class Emoji(Cog):
         if emoji_count >= ctx.guild.emoji_limit:
             raise commands.BadArgument("There are no more emoji slots in this server.")
 
-        async with self.bot.session.get(request_url) as resp:
-            if resp.status >= 400:
+        # The URL is user-typed: refuse internal hosts (internal API, Lavalink, metadata) and don't follow
+        # redirects, or a public URL could bounce the fetch inward.
+        if await check_destination(request_url) is not None:
+            raise commands.BadArgument("Could not fetch the image.")
+        async with self.bot.session.get(request_url, allow_redirects=False) as resp:
+            if resp.status >= 300:
                 raise commands.BadArgument("Could not fetch the image.")
-            if int(resp.headers["Content-Length"]) >= (256 * 1024):
+            # Content-Length is optional (chunked responses) and can lie, so cap the read itself.
+            data = await resp.content.read(256 * 1024)
+            if len(data) >= 256 * 1024:
                 raise commands.BadArgument("Image is too big.")
-
-            data = await resp.read()
-            image_color = get_dominant_color(io.BytesIO(data))
+            try:
+                image_color = await asyncio.to_thread(get_dominant_color, io.BytesIO(data))
+            except Exception:
+                raise commands.BadArgument("That is not a valid image.") from None
 
             coro = ctx.guild.create_custom_emoji(name=name, image=data, reason=reason)
             async with ctx.progress("Creating emoji..."):
@@ -321,7 +329,9 @@ class Emoji(Cog):
                 embed.set_thumbnail(url="https://klappstuhl.me/gallery/raw/LHIcq.jpeg")
                 await ctx.send(embed=embed)
                 return
-            embed.colour = discord.Colour.from_rgb(*get_dominant_color(io.BytesIO(await resp.read())))
+            embed.colour = discord.Colour.from_rgb(
+                *await asyncio.to_thread(get_dominant_color, io.BytesIO(await resp.read()))
+            )
 
         embed.set_thumbnail(url=cdn)
 

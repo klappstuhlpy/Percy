@@ -107,6 +107,11 @@ class FightView(LayoutView):
             await interaction.response.send_message("Only the challenged member can accept.", ephemeral=True)
             return
         assert interaction.guild is not None
+        # Claim the fight before the first await, so a double-click can't take both stakes twice.
+        if self.engine is not None or self._closed_text:
+            await interaction.response.defer()
+            return
+        self.engine = Fight()
         if self.bet:
             balances = [await self.client.db.get_user_balance(f.id, interaction.guild.id) for f in self.fighters]  # type: ignore[attr-defined]
             for fighter, balance in zip(self.fighters, balances, strict=True):
@@ -116,9 +121,18 @@ class FightView(LayoutView):
                     self._compose()
                     await interaction.response.edit_message(view=self)
                     return
-            for balance in balances:
-                await balance.remove(cash=self.bet)
-        self.engine = Fight()
+            # Conditional debits; if the second fighter spent the stake meanwhile, refund the first and cancel.
+            paid: list = []
+            for fighter, balance in zip(self.fighters, balances, strict=True):
+                if await self.client.db.economy.debit_cash(fighter.id, interaction.guild.id, self.bet) is None:  # type: ignore[attr-defined]
+                    for done in paid:
+                        await done.add(cash=self.bet)
+                    self._closed_text = f"**{fighter.display_name}** cannot cover the stake anymore — fight cancelled."
+                    self.stop()
+                    self._compose()
+                    await interaction.response.edit_message(view=self)
+                    return
+                paid.append(balance)
         self._compose()
         await interaction.response.edit_message(view=self)
 

@@ -19,7 +19,7 @@ from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 from app.utils.webhooks import send_webhook
 
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import resolve_channel, resolve_entity, resolve_role
+from ..helpers import parse_id, resolve_channel, resolve_entity, resolve_role
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -190,8 +190,13 @@ def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
     for key, value in data.items():
         if key == "mention_count":
             updates[key] = _check_mention_count(value)
-        elif key in _ALLOWED_CONFIG_FIELDS:
+        elif key == "use_music_panel":
+            if not isinstance(value, bool):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="use_music_panel must be a boolean")
             updates[key] = value
+        elif key in _ALLOWED_CONFIG_FIELDS:
+            # /batch hands over an untyped dict, so a string here would otherwise reach asyncpg as a 500.
+            updates[key] = None if value is None else parse_id(value, key)
         elif key == "flags" and isinstance(value, dict):
             new_flags = guild_config.flags.value
             for flag_name, bit in _FLAG_MAP.items():
@@ -202,6 +207,12 @@ def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
                         new_flags &= ~bit
             updates["flags"] = new_flags
         elif key == "prefixes" and isinstance(value, list):
+            # Same limits as the prefix command; an empty prefix would make every message a command.
+            if len(value) > 25 or not all(isinstance(p, str) and p.strip() and len(p) <= 100 for p in value):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="prefixes must be at most 25 non-empty strings of up to 100 characters",
+                )
             updates["prefixes"] = value
     return updates
 
@@ -544,7 +555,7 @@ async def manage_moderation_ignore(guild: GuildDep, bot: BotDep, body: Moderatio
     if body.action not in ("add", "remove"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action must be add or remove")
 
-    entity_id = int(body.entity_id)
+    entity_id = parse_id(body.entity_id, "entity_id")
 
     if body.action == "add":
         await bot.db.moderation.add_safe_entities(guild.id, [entity_id])

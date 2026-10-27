@@ -126,6 +126,12 @@ async def test_parse_schema_violation_returns_none() -> None:
     assert await service.parse('greet', schema=Greeting, system='sys') is None
 
 
+async def test_parse_rejects_non_finite_constants() -> None:
+    # ``max(0.0, min(1.0, nan))`` is 1.0 -- a NaN confidence must never reach a schema.
+    service, _ = make_service(['{"name": "Percy", "count": NaN}', '{"name": "Percy", "count": Infinity}'])
+    assert await service.parse('greet', schema=Greeting, system='sys') is None
+
+
 async def test_parse_non_object_json_returns_none() -> None:
     service, _ = make_service(['[1, 2, 3]', '[1, 2, 3]'])
     assert await service.parse('greet', schema=Greeting, system='sys') is None

@@ -22,6 +22,7 @@ from app.services import (
 )
 
 from ..dependencies import BotDep, GuildDep, verify_token
+from ..helpers import invalidate_cog_cache
 from .guild import _build_config_updates
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Backup & Templates"], dependencies=[Depends(verify_token)])
@@ -117,6 +118,8 @@ async def _apply_autoresponders(bot, guild, section: object) -> dict:
             skipped += 1
         else:
             created += 1
+    if created:
+        invalidate_cog_cache(bot, "Automation", "get_responders", guild.id)
     return {"created": created, "skipped": skipped, "failed": failed}
 
 
@@ -214,7 +217,7 @@ async def import_backup(
 
 
 @router.get("/templates")
-async def list_templates(guild: GuildDep, bot: BotDep, limit: int = Query(default=50, le=100)) -> dict:
+async def list_templates(guild: GuildDep, bot: BotDep, limit: int = Query(default=50, ge=1, le=100)) -> dict:
     """Public templates (the gallery) plus the ones this guild has published."""
     public = await bot.db.templates.list_public(limit=limit)
     own = await bot.db.templates.list_for_guild(guild.id)

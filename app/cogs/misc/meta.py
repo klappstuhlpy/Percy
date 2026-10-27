@@ -188,6 +188,9 @@ class MetaMixin:
         self, repo: str, path: str, start_line: str | None, end_line: str | None
     ) -> tuple[str, str | File] | None:
         """Fetches a snippet from a GitHub repo."""
+        if ".." in path:
+            # urljoin resolves dot segments, which would point the authenticated request at another endpoint.
+            return None
         branches = await self.github_request("GET", f"repos/{repo}/branches")
         tags = await self.github_request("GET", f"repos/{repo}/tags")
         refs = branches + tags
@@ -350,6 +353,9 @@ class MetaMixin:
             js = await r.json()
             if r.status == 429 or remaining == "0":
                 delta = discord.utils._parse_ratelimit_header(r)
+                if delta > 10:
+                    # Rate-limit windows last up to an hour; never park a listener that long.
+                    raise GithubError("GitHub rate limit reached, try again later.")
                 await asyncio.sleep(delta)
                 return await self.github_request(method, url, params=params, data=data, headers=headers)
             elif 300 > r.status >= 200:

@@ -10,7 +10,12 @@ if TYPE_CHECKING:
     from app.core import Bot
     from app.database.base import Database
 
-__all__ = ('BaseRepository',)
+__all__ = ('BaseRepository', 'escape_like')
+
+
+def escape_like(text: str) -> str:
+    """Escapes ``LIKE``/``ILIKE`` wildcards so user text matches literally (``\\`` is Postgres' default escape)."""
+    return text.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
 
 class BaseRepository:

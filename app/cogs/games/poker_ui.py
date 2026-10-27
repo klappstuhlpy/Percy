@@ -280,10 +280,17 @@ class TableView(LayoutView):
             await interaction.response.send_message(f"{Emojis.error} Invalid amount.", ephemeral=True)
             return
 
-        balance: Balance = await cast("Bot", interaction.client).db.get_user_balance(
-            interaction.user.id, interaction.guild_id
-        )
-        if balance.cash < amount:
+        # A negative buy-in would turn the debit below into a credit.
+        if not self.engine.min_buy_in <= amount <= self.engine.max_buy_in:
+            await interaction.response.send_message(
+                f"{Emojis.error} Buy-in must be between {fnumb(self.engine.min_buy_in)} and {fnumb(self.engine.max_buy_in)}.",
+                ephemeral=True,
+            )
+            return
+
+        if await cast("Bot", interaction.client).db.economy.debit_cash(
+            interaction.user.id, interaction.guild_id, amount  # type: ignore[arg-type]
+        ) is None:
             await interaction.response.send_message(
                 f"{Emojis.error} You don't have enough **cash** money to buy yourself in.\n"
                 f"You need at least {Emojis.Economy.coin} **{fnumb(self.engine.min_buy_in)}**.",
@@ -291,7 +298,6 @@ class TableView(LayoutView):
             )
             return
 
-        await balance.remove(cash=amount)
         self.engine.add_player(cast("discord.Member", interaction.user), stack=amount)
 
         view = self
@@ -818,15 +824,16 @@ class TableView(LayoutView):
         balance: Balance = await cast("Bot", interaction.client).db.get_user_balance(
             interaction.user.id, interaction.guild_id
         )
-        if balance.cash < amount:
+        if await cast("Bot", interaction.client).db.economy.debit_cash(
+            interaction.user.id, interaction.guild_id, amount  # type: ignore[arg-type]
+        ) is None:
             await interaction.response.send_message(
                 f"{Emojis.error} You don't have enough cash. You have {Emojis.Economy.coin} **{fnumb(balance.cash)}**.",
                 ephemeral=True,
             )
             return
 
-        # Deduct and add chips
-        await balance.remove(cash=amount)
+        # Already deducted above; add chips
         success = self.engine.rebuy(cast("discord.Member", interaction.user), amount)
 
         if success:

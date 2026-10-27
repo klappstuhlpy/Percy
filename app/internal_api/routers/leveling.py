@@ -9,6 +9,7 @@ from app.rendering.card_style import clean_style, style_options
 from app.services.level_message import LEVEL_UP_VARIABLES, level_up_values, render_level_up
 
 from ..dependencies import BotDep, GuildDep, verify_token
+from ..helpers import invalidate_cog_cache
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Leveling"], dependencies=[Depends(verify_token)])
 
@@ -124,7 +125,7 @@ async def get_leveling_config(guild: GuildDep, bot: BotDep) -> dict:
 async def get_leveling_leaderboard(
     guild: GuildDep,
     bot: BotDep,
-    limit: int = Query(default=25, le=100),
+    limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     records = await bot.db.leveling.get_leaderboard(guild.id, limit=limit + offset)
@@ -185,6 +186,11 @@ async def get_leveling_xp_history(
 async def patch_leveling_user(guild: GuildDep, bot: BotDep, user_id: int, body: PatchLevelingUserBody) -> dict:
     if body.level is None and body.xp is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify level or xp')
+    # levels.level is INTEGER and levels.xp BIGINT: out of range is a 500 from asyncpg, negative is nonsense.
+    if body.level is not None and not 0 <= body.level <= 2**31 - 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='level must not be negative')
+    if body.xp is not None and not 0 <= body.xp <= 2**63 - 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='xp must not be negative')
 
     updates: dict[str, object] = {}
     if body.level is not None:
@@ -215,6 +221,7 @@ async def patch_leveling_config(guild: GuildDep, bot: BotDep, body: PatchLevelin
         record = await bot.db.leveling.get_guild_config_record(guild.id)
 
     await bot.db.leveling.update_guild_config(guild.id, updates)
+    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return {'ok': True}
 
 
@@ -231,6 +238,7 @@ async def post_leveling_roles(guild: GuildDep, bot: BotDep, body: PostLevelingRo
         level_roles = {k: v for k, v in level_roles.items() if v != body.level}
 
     await bot.db.leveling.update_guild_config(guild.id, {'level_roles': level_roles})
+    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return {'ok': True}
 
 
@@ -277,9 +285,7 @@ async def setup_leveling(guild: GuildDep, bot: BotDep, body: SetupLevelingBody) 
     await bot.db.leveling.update_guild_config(guild.id, {'enabled': True, 'level_up_channel': target})
     created = await _create_preset_roles(guild, bot) if body.preset_roles else 0
 
-    cog = bot.get_cog('Leveling')
-    if cog is not None:
-        cog.get_guild_level_config.invalidate(guild.id)
+    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     message = f'Leveling is on. {text}.'
     if body.preset_roles:
         message += f' {created} milestone role{"s" if created != 1 else ""} created, the rest already existed.'
@@ -318,6 +324,7 @@ async def _create_preset_roles(guild: discord.Guild, bot: BotDep) -> int:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'failed to create roles: {exc}')
 
     await bot.db.leveling.update_guild_config(guild.id, {'level_roles': level_roles})
+    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return created
 
 
@@ -338,6 +345,7 @@ async def post_leveling_multipliers(guild: GuildDep, bot: BotDep, body: PostLeve
         current.pop(str(body.id), None)
 
     await bot.db.leveling.update_guild_config(guild.id, {field: current})
+    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return {'ok': True}
 
 
@@ -367,6 +375,7 @@ async def post_leveling_blacklist(guild: GuildDep, bot: BotDep, body: PostLeveli
         current.discard(body.id)
 
     await bot.db.leveling.update_guild_config(guild.id, {field: list(current)})
+    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return {'ok': True}
 
 

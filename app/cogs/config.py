@@ -433,14 +433,15 @@ class Config(Cog):
         :exc:`commands.BadArgument`
             The command is already disabled.
         """
-        self.get_commands_configuration.invalidate(guild_id)
-
         try:
             await db.guilds.set_command_config(guild_id, channel_id, name, whitelist=whitelist)
         except asyncpg.UniqueViolationError:
             raise commands.BadArgument(
                 "This command is already disabled." if not whitelist else "This command is already explicitly enabled."
             )
+        finally:
+            # After the write: invalidating first lets a concurrent bot_check re-cache the old rows.
+            self.get_commands_configuration.invalidate(guild_id)
 
     @config.group(
         "channel",

@@ -62,31 +62,45 @@ class CacheProtocol(Protocol[P, R]):
         ...
 
     def get_stats(self) -> tuple[int, int]:
-        """Get the current cache stats."""
+        """Get the current cache size and capacity (the TTL for ``Strategy.TIMED``)."""
+        ...
+
+    def cache_info(self) -> dict[str, int]:
+        """Hit/miss counters plus ``size`` and ``maxsize``."""
         ...
 
 
 #: Distinguishes "absent" from a legitimately stored ``None`` in :meth:`ExpiringCache.pop`.
 _SENTINEL: Any = object()
 
+#: Entry cap for ``Strategy.TIMED`` caches (whose ``maxsize`` is the TTL, not a size).
+TIMED_MAX_ENTRIES = 4096
+
 
 class ExpiringCache(dict):
     """A cache that expires after a given amount of time.
 
     Entries are stored internally as ``(value, inserted_at)``; every read path unwraps that
-    pair, so callers only ever see the value they put in.
+    pair, so callers only ever see the value they put in. Writes move the key to the end,
+    so the dict stays ordered oldest-first and pruning stops at the first live entry
+    instead of scanning everything on every read. ``maxlen`` (optional) caps the entry
+    count by evicting the oldest entries.
     """
 
-    def __init__(self, seconds: float) -> None:
+    def __init__(self, seconds: float, maxlen: int | None = None) -> None:
         self.__ttl: float = seconds
+        self.__maxlen: int | None = maxlen
         super().__init__()
 
     def __verify_cache_integrity(self) -> None:
-        # Have to do this in two steps...
         current_time = time.monotonic()
-        to_remove = [k for (k, (v, t)) in super().items() if current_time > (t + self.__ttl)]
-        for k in to_remove:
-            del self[k]
+        expired = []
+        for k, (_, t) in super().items():  # oldest first
+            if current_time <= t + self.__ttl:
+                break
+            expired.append(k)
+        for k in expired:
+            super().__delitem__(k)
 
     def __contains__(self, key: object) -> bool:
         self.__verify_cache_integrity()
@@ -116,7 +130,11 @@ class ExpiringCache(dict):
         return v[0]
 
     def __setitem__(self, key: str, value: Any) -> None:
+        super().pop(key, None)  # re-insert at the end so the dict stays oldest-first
         super().__setitem__(key, (value, time.monotonic()))
+        if self.__maxlen is not None:
+            while super().__len__() > self.__maxlen:
+                super().__delitem__(next(iter(super().keys())))
 
     def __len__(self) -> int:
         self.__verify_cache_integrity()
@@ -173,35 +191,47 @@ def cache(
     strategy: Strategy
         The strategy to use for the cache. Defaults to :class:`Strategy.LRU`.
     ignore_kwargs: bool
-        Whether to ignore keyword arguments when generating the cache key. Defaults to `False`.
-    action: Callable[[str, str], T]
-        The action to perform on the given strings. Defaults to `None`.
-        This will be called on invalidation with the item that was invalidated.
+        Whether to leave keyword-only parameters out of the cache key. Defaults to `False`.
+        Positional-or-keyword parameters are always keyed, however they are passed.
+    action: Callable[[Any], None]
+        Called on invalidation with the value that was invalidated. Defaults to `None`.
+        Skipped for a coroutine entry that is still running or that failed.
 
     Returns
     -------
     Callable[[Callable[..., Coroutine[Any, Any, R] | R], CacheProtocol[R]]
         The actual decorator.
+
+    Notes
+    -----
+    Coroutine results are cached as the :class:`asyncio.Task`, so concurrent misses for one
+    key share a single in-flight call. A task that raises or is cancelled evicts itself, so
+    a failed fetch is retried by the next caller instead of being served forever.
     """
 
     def decorator(func: Coro | NCoro) -> CacheProtocol[P, R]:
         """The actual decorator."""
-        _stats: Callable[[], tuple[int, int]] | None = None
         match strategy:
             case Strategy.LRU:
                 _internal_cache = LRU(maxsize)
-                _stats = _internal_cache.get_stats
             case Strategy.RAW:
                 _internal_cache = {}
             case Strategy.TIMED:
-                _internal_cache = ExpiringCache(maxsize)
+                # ponytail: fixed entry cap so per-query keys (search strings, pages) cannot grow
+                # without bound inside one TTL; make it a parameter if a cache needs more.
+                _internal_cache = ExpiringCache(maxsize, maxlen=TIMED_MAX_ENTRIES)
             case _:
                 raise ValueError(f"Invalid cache strategy {strategy!r}.")
 
-        if _stats is None:
+        _counters = {"hits": 0, "misses": 0}
 
-            def _stats() -> tuple[int, int]:
-                return len(_internal_cache), maxsize
+        def _stats() -> tuple[int, int]:
+            # (current size, capacity) for every strategy -- what ``stats.py`` unpacks. The
+            # lru-dict ``get_stats`` returns (hits, misses) instead, so it is not used here.
+            return len(_internal_cache), maxsize
+
+        def _info() -> dict[str, int]:
+            return {**_counters, "size": len(_internal_cache), "maxsize": maxsize}
 
         if not func.__doc__:
             # Add a default docstring if none is present
@@ -215,8 +245,7 @@ def cache(
         def _make_key(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
             """Generate a cache key from raw positional/keyword arguments.
 
-            Used as the fallback when the call cannot be bound to the signature
-            (and for the ``ignore_kwargs`` strategy, which keys on positionals only).
+            Fallback for calls that cannot be bound to the signature.
             """
             key_parts = [f"{func.__module__}.{func.__name__}"]
 
@@ -233,10 +262,7 @@ def cache(
 
         # Compute once at decoration time rather than on every call.
         _signature = inspect.signature(func)
-        _all_params: list[inspect.Parameter] = list(
-            filter(lambda x: x.kind != inspect.Parameter.KEYWORD_ONLY, _signature.parameters.values())
-        )
-        _skip_first_param: bool = any(p.name in ("self", "cls") for p in _all_params)
+        _skip_first_param: bool = any(p.name in ("self", "cls") for p in _signature.parameters.values())
         _is_coroutine: bool = inspect.iscoroutinefunction(func)
         # A view of the signature with the bound ``self``/``cls`` removed, so that a
         # call's *logical* arguments (everything after ``self``) can be bound and
@@ -244,28 +270,44 @@ def cache(
         _sig_logical = _signature.replace(
             parameters=[p for p in _signature.parameters.values() if p.name not in ("self", "cls")]
         )
+        _skipped_names = {"connection", "pool"}
+        if ignore_kwargs:
+            _skipped_names |= {
+                p.name for p in _sig_logical.parameters.values() if p.kind is inspect.Parameter.KEYWORD_ONLY
+            }
 
         def _key_for_call(logical_args: tuple[Any, ...], logical_kwargs: dict[str, Any]) -> str:
             """Build a cache key that is invariant to positional/keyword call style.
 
             ``logical_args`` must already have ``self``/``cls`` stripped. Binding the
-            arguments to the signature means ``f(123)`` and ``f(guild_id=123)`` map to
-            the same key, so signal-based invalidation (which always fires positionally)
-            reliably busts entries cached by keyword callers, and vice versa.
+            arguments to the signature (with defaults applied) means ``f(123)``,
+            ``f(guild_id=123)`` and ``f(123, flag=<default>)`` all map to the same key, so
+            signal-based invalidation (which always fires positionally) reliably busts
+            entries cached by keyword callers, and vice versa.
             """
-            if ignore_kwargs:
-                return _make_key(logical_args, logical_kwargs)
             try:
                 bound = _sig_logical.bind(*logical_args, **logical_kwargs)
             except TypeError:
                 # *args/**kwargs or arity mismatch — fall back to the raw key.
                 return _make_key(logical_args, logical_kwargs)
+            bound.apply_defaults()
             key_parts = [f"{func.__module__}.{func.__name__}"]
             for name, value in bound.arguments.items():
-                if name in ("connection", "pool"):
+                if name in _skipped_names:
                     continue
                 key_parts.append(f"{name}={_true_repr(value)}")
             return ":".join(key_parts)
+
+        def _evict_on_failure(key: str, task: asyncio.Task[Any]) -> None:
+            if not (task.cancelled() or task.exception() is not None):
+                return
+            # Only drop the entry if it is still this task (it may have been invalidated
+            # and replaced meanwhile).
+            try:
+                if _internal_cache[key] is task:
+                    del _internal_cache[key]
+            except KeyError:
+                pass
 
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R] | R:
@@ -278,13 +320,26 @@ def cache(
             try:
                 task = _internal_cache[key]
             except KeyError:
+                _counters["misses"] += 1
                 if _is_coroutine:
-                    _internal_cache[key] = task = asyncio.create_task(func(*args, **kwargs))
+                    task = asyncio.create_task(func(*args, **kwargs))
+                    _internal_cache[key] = task
+                    task.add_done_callback(functools.partial(_evict_on_failure, key))
                 else:
                     _internal_cache[key] = task = func(*args, **kwargs)
                 return task
             else:
+                _counters["hits"] += 1
                 return task
+
+        def _run_action(item: Any) -> None:
+            if action is None:
+                return
+            if isinstance(item, asyncio.Task):
+                if not item.done() or item.cancelled() or item.exception() is not None:
+                    return
+                item = item.result()
+            action(item)
 
         def _invalidate(*args: Any, **kwargs: Any) -> bool:
             """Invalidate a cache entry.
@@ -296,27 +351,17 @@ def cache(
                 item = _internal_cache.pop(_key_for_call(args, kwargs))
             except KeyError:
                 return False
-            else:
-                if action is not None:
-                    if isinstance(item, asyncio.Task):
-                        item = item.result()
-                    action(item)
-                return True
+            _run_action(item)
+            return True
 
         def _invalidate_containing(key: str) -> None:
             """Invalidate all cache entries containing the given key."""
-            _cache_keys = _internal_cache.keys() if strategy is Strategy.LRU else _internal_cache
-            keys_to_delete = [k for k in _cache_keys if key in k]
-
-            for k in keys_to_delete:
+            for k in [k for k in list(_internal_cache.keys()) if key in k]:
                 try:
-                    item = _internal_cache[k]
+                    item = _internal_cache.pop(k)
                 except KeyError:
                     continue
-                else:
-                    del _internal_cache[k]
-                    if action is not None:
-                        action(item)
+                _run_action(item)
 
         def _get_key(*args: Any, **kwargs: Any) -> str:
             """Get the cache key for the given (logical, ``self``-less) arguments."""
@@ -324,8 +369,10 @@ def cache(
 
         wrapper: Callable[P, asyncio.Task[R] | R]
         result = cast('CacheProtocol[P, R]', wrapper)
+        result.cache = _internal_cache
         result.get_key = _get_key
         result.get_stats = _stats
+        result.cache_info = _info
         result.invalidate = _invalidate
         result.invalidate_containing = _invalidate_containing
         return result

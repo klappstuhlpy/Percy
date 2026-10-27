@@ -32,15 +32,20 @@ class GuildsRepository(BaseRepository):
 
     async def get_config_record(self, guild_id: int) -> asyncpg.Record:
         """Fetches the config row for a guild, inserting a default row if absent."""
-        async with self.acquire(timeout=300.0) as con:
-            record = await con.fetchrow("SELECT * FROM guild_config WHERE id=$1;", guild_id)
-            if record is not None:
-                return record
-            return await con.fetchrow("INSERT INTO guild_config (id) VALUES ($1) RETURNING *;", guild_id)
+        record = await self.fetchrow("SELECT * FROM guild_config WHERE id=$1;", guild_id)
+        if record is not None:
+            return record
+        # Upsert, not a plain INSERT: two concurrent first lookups would otherwise race to a UniqueViolation.
+        return await self.fetchrow(
+            "INSERT INTO guild_config (id) VALUES ($1) ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id RETURNING *;",
+            guild_id)
 
     async def delete_config(self, guild_id: int) -> None:
         """Deletes the config row for a guild (e.g. when the bot leaves it)."""
         await self.execute("DELETE FROM guild_config WHERE id = $1;", guild_id)
+        # Otherwise a rejoin is served the deleted row from cache, and its updates match no row.
+        self.invalidate_cache("guild_config_changed", guild_id)
+        self.invalidate_cache("ai_config_changed", guild_id)
 
     # -- guild_sentinel -------------------------------------------------
 
@@ -157,11 +162,10 @@ class GuildsRepository(BaseRepository):
 
     async def bulk_add_plonks(self, guild_id: int, entity_ids: Iterable[int]) -> None:
         """Adds many entities to the guild's ignore list, skipping ones already present."""
-        async with self.acquire() as con, con.transaction():
-            records = await con.fetch("SELECT entity_id FROM plonks WHERE guild_id=$1;", guild_id)
-            current = {r[0] for r in records}
-            to_insert = [(guild_id, entity_id) for entity_id in entity_ids if entity_id not in current]
-            await con.copy_records_to_table('plonks', columns=['guild_id', 'entity_id'], records=to_insert)
+        # One statement: the old read-then-COPY raised on duplicate input ids or a concurrent insert.
+        await self.execute(
+            "INSERT INTO plonks (guild_id, entity_id) SELECT $1, unnest($2::bigint[]) ON CONFLICT DO NOTHING;",
+            guild_id, list(entity_ids))
 
     async def remove_plonks(self, guild_id: int, entity_ids: Iterable[int]) -> None:
         """Removes the given entities from the guild's ignore list."""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, ParamSpec, TypeVar, override
@@ -398,7 +399,11 @@ class TimerManager:
 
             # Also reached when the timer that woke us was deleted again before the reload.
             log.debug("No timers to load, waiting for new timers to be created.")
-            await self.__event.wait()
+            # Bounded: a timer beyond the look-ahead window sets no event, so an unbounded wait
+            # would never re-query and a lone long timer (e.g. a 60-day reminder) never fired.
+            with contextlib.suppress(TimeoutError):
+                async with asyncio.timeout(86400):
+                    await self.__event.wait()
 
     async def start_short_timer(self, seconds: float, timer: Timer) -> None:
         """Simply sleeps until the timer expires."""
@@ -437,6 +442,9 @@ class TimerManager:
         except asyncio.CancelledError:
             raise
         except (OSError, discord.ConnectionClosed, asyncpg.PostgresConnectionError):
+            # Back off: restarting at once spins in a tight loop for as long as the DB is down.
+            log.warning("Timer dispatch lost its connection; retrying in 5 seconds")
+            await asyncio.sleep(5)
             self.reset_task()
         except Exception:
             # A dead loop stops every timer (tempbans, mutes, lockdowns, reminders) until a restart.

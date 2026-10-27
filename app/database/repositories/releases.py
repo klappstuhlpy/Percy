@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import asyncpg
 
-from app.database.repositories.base import BaseRepository
+from app.database.repositories.base import BaseRepository, escape_like
 from app.services.releases import check_status, normalise
 
 if TYPE_CHECKING:
@@ -189,7 +189,7 @@ class ReleasesRepository(BaseRepository):
         if until is not None:
             add('release_date <= ${n}', until)
         if search:
-            add('title ILIKE ${n}', f'%{search}%')
+            add('title ILIKE ${n}', f'%{escape_like(search)}%')
         if creator is not None:
             add('EXISTS (SELECT 1 FROM comic_creators c WHERE c.release_id = comic_releases.id '
                 'AND lower(c.name) = lower(${n}))', creator)

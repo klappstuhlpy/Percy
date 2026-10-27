@@ -8,16 +8,20 @@ so everything here operates on plain dicts and bytes only.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 __all__ = (
     'SIGNATURE_HEADER',
     'WEBHOOK_EVENTS',
     'build_envelope',
+    'check_destination',
     'serialize_envelope',
     'sign_body',
     'valid_events',
@@ -90,3 +94,28 @@ def sign_body(secret: str, body: bytes) -> str:
     """
     digest = hmac.new(secret.encode('utf-8'), body, hashlib.sha256).hexdigest()
     return f'sha256={digest}'
+
+
+async def check_destination(url: str) -> str | None:
+    """Return why Percy must not deliver to ``url``, or ``None`` when it may.
+
+    Subscriber URLs are typed by guild admins, so without this a subscription pointed at
+    ``http://127.0.0.1:8090`` (the internal API), Lavalink, Ollama or a cloud metadata address
+    turns Percy into a request proxy into its own network -- with ``last_status`` as the oracle.
+    Every resolved address must be globally routable. Call it at delivery time (not only when
+    the subscription is saved, or DNS can change underneath it) and send with
+    ``allow_redirects=False``, or a public URL can 302 to an internal one.
+    """
+    host = urlsplit(url).hostname
+    if not host:
+        return 'url has no host'
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None)
+    except OSError:
+        return f'{host} does not resolve'
+    for *_, sockaddr in infos:
+        ip = ipaddress.ip_address(str(sockaddr[0]).split('%', 1)[0])
+        mapped = getattr(ip, 'ipv4_mapped', None)
+        if not ip.is_global or (mapped is not None and not mapped.is_global):
+            return f'{host} resolves to a non-public address'
+    return None

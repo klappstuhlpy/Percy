@@ -84,6 +84,8 @@ class RoleMenus(Cog):
             raise RoleMenuError('You cannot add the @​everyone role.')
         if role >= guild.me.top_role or role.managed:
             raise RoleMenuError(f"I can't assign @{role.name}: it's above my highest role or managed by an integration.")
+        if ui.is_elevated(role):
+            raise RoleMenuError(f'@{role.name} has moderation or admin permissions, so it cannot be self-assignable.')
         count = await self.bot.db.rolemenu.count_entries(menu_id)
         if count >= MAX_ROLES:
             raise RoleMenuError(f'A role menu can hold at most {MAX_ROLES} roles.')
@@ -196,6 +198,12 @@ class RoleMenus(Cog):
     ) -> None:
         """Add a role to an existing menu."""
         assert ctx.guild is not None
+        assert isinstance(ctx.author, discord.Member)
+        # The gate is Manage Server, not Manage Roles: without this a manager could offer
+        # (and then click) a role above their own.
+        if ctx.author.id != ctx.guild.owner_id and role >= ctx.author.top_role:
+            await ctx.send_error(f'{role.mention} is not below your highest role.')
+            return
         try:
             await self.add_role(ctx.guild, menu_id, role, emoji, label)
         except RoleMenuError as exc:

@@ -4,7 +4,10 @@ import hashlib
 import hmac
 import json
 
+import pytest
+
 from app.services import webhooks
+from app.services.webhooks import check_destination
 
 
 class TestValidEvents:
@@ -53,3 +56,20 @@ class TestSerializeAndSign:
     def test_signature_differs_by_secret(self) -> None:
         body = b"payload"
         assert webhooks.sign_body("k1", body) != webhooks.sign_body("k2", body)
+
+
+@pytest.mark.parametrize('url', [
+    'http://127.0.0.1:8090/api/v1/guilds',
+    'http://localhost/',
+    'http://169.254.169.254/latest/meta-data/',
+    'http://10.0.0.5/',
+    'http://[::1]/',
+    'http://[::ffff:127.0.0.1]/',
+    'http:///nohost',
+])
+async def test_check_destination_refuses_internal_hosts(url: str) -> None:
+    assert await check_destination(url) is not None
+
+
+async def test_check_destination_allows_public_ip() -> None:
+    assert await check_destination('https://1.1.1.1/hook') is None

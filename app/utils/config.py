@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import os
 import re
 import uuid
 from collections.abc import AsyncGenerator, Callable, Iterable, Iterator
@@ -92,10 +93,16 @@ class Config[K, V]:
         """Dumps the config to the file."""
         temp = f"{uuid.uuid4()}-{self.name}.tmp"
         _path = self.real_path(temp)
-        with _path.open("w", encoding="utf-8") as tmp:
-            json.dump(self._db.copy(), tmp, ensure_ascii=True, cls=self.encoder, separators=(",", ":"))
-
-        _path.replace(self.real_path(self.name))
+        try:
+            with _path.open("w", encoding="utf-8") as tmp:
+                json.dump(self._db.copy(), tmp, ensure_ascii=True, cls=self.encoder, separators=(",", ":"))
+                # Durable before the rename, or a crash can leave the *real* file empty.
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            _path.replace(self.real_path(self.name))
+        except BaseException:
+            _path.unlink(missing_ok=True)
+            raise
 
     async def save(self) -> None:
         """Saves the config to the file."""

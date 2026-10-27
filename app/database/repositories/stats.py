@@ -75,6 +75,8 @@ class StatsRepository(BaseRepository):
 
         If both ``guild_id`` and ``author_id`` are ``None`` the statistics are global.
         """
+        if group_by not in ('author_id', 'command', 'guild_id'):  # interpolated as an identifier below
+            raise ValueError(f'invalid group_by {group_by!r}')
         args: tuple[Any, ...] = ()
         query = f"SELECT {group_by}, COUNT(*) as uses FROM commands"
 
@@ -91,7 +93,7 @@ class StatsRepository(BaseRepository):
             query += f" {_pref()} used > (CURRENT_TIMESTAMP - ${len(args) + 1}::interval)"
             args += (datetime.timedelta(days=days),)
 
-        query += f" GROUP BY {group_by} ORDER BY uses DESC LIMIT {limit};"
+        query += f" GROUP BY {group_by} ORDER BY uses DESC LIMIT {int(limit)};"
         return await self.fetch(query, *args)
 
     async def get_command_total(self, guild_id: int, *, days: int) -> int:
@@ -148,7 +150,7 @@ class StatsRepository(BaseRepository):
                 guild_id
             FROM commands
             ORDER BY used DESC
-            LIMIT {limit};
+            LIMIT {int(limit)};
         """
         return await self.fetch(query)
 
@@ -632,7 +634,7 @@ class GameStatsRepository(BaseRepository):
             GROUP BY user_id
             HAVING SUM(played) >= {played_param}
             ORDER BY {order}
-            LIMIT {limit};
+            LIMIT {int(limit)};
         """
         return await self.fetch(query, *args)
 
