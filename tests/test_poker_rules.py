@@ -436,3 +436,26 @@ def test_preflop_equity_aces_vs_kings() -> None:
     odds = e.simulate(num_scenarios=20000, odds_type='tie_win')
     assert isinstance(odds, dict)
     assert 79.0 < odds['Player 1 Win'] < 85.0
+
+
+def test_kicker_detail_and_deciding_card() -> None:
+    """Board 2h 10h Jh 5s 2d: AQ beats A8 on the queen kicker, and the name shows the kickers."""
+    from app.cogs.games.engine.poker import Card, Hand, deciding_card
+
+    def evaluate(*cards: tuple[int, int]):
+        hand = Hand()
+        for value, suit in cards:
+            hand.add_card(Card(suit=suit, value=value))
+        return hand
+
+    board_cards = [Card(suit=2, value=2), Card(suit=2, value=10), Card(suit=2, value=11), Card(suit=1, value=5), Card(suit=3, value=2)]
+    board = np.array([[c.value, c.suit] for c in board_cards])
+    aq = evaluate((14, 1), (12, 4)).evaluate(board)
+    a8 = evaluate((8, 4), (14, 3)).evaluate(board)
+
+    assert aq.value > a8.value
+    assert aq.name == "One Pair, 2s (A-Q-J kickers)"
+    assert a8.name == "One Pair, 2s (A-J-10 kickers)"
+    assert deciding_card(aq.value, a8.value) == "Queen kicker"
+    # A higher pair is already in the name: no extra detail.
+    assert deciding_card(aq.value, aq.value) is None

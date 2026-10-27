@@ -128,6 +128,8 @@ class Hand(BaseHand[Card]):
         name = NAMED_HAND[np.max(best_comb.rank) // 16**5]
         if best_comb.name is not None:
             name += f", {best_comb.name}"
+        if kickers := hand_kickers(best_comb.rank):
+            name += f" ({'-'.join(SHORT_RANK[v] for v in kickers)} kicker{'s' if len(kickers) > 1 else ''})"
 
         return HandResult(
             name=name,
@@ -170,6 +172,48 @@ class CombResult(NamedTuple):
 
     all_combos: np.ndarray
     ranking: np.ndarray[Any, np.dtype[Any]]
+
+
+SHORT_RANK: dict[int, str] = {v: str(v) for v in range(2, 11)} | {11: "J", 12: "Q", 13: "K", 14: "A"}
+#: Categories whose single cards are kickers (straights/flushes/full houses use every card).
+_KICKER_CATEGORIES = frozenset({0, 1, 2, 3, 7})
+
+
+def _decode(value: int) -> tuple[int, list[int]]:
+    """Splits a :meth:`Ranker.rank_one_hand` score into (category, cards most significant first)."""
+    digits = [(value // 16**i) % 16 for i in range(5)]
+    return value // 16**5, digits[::-1]
+
+
+def hand_kickers(value: int) -> list[int]:
+    """The kicker values of a ranked 5-card hand, highest first (empty when no card is a kicker)."""
+    if value < 16**4:  # pre-flop pseudo value, not a ranked 5-card hand
+        return []
+    category, cards = _decode(value)
+    if category not in _KICKER_CATEGORIES:
+        return []
+    if category == 0:
+        return cards[1:]  # the top card already names the hand
+    return [c for c in cards if cards.count(c) == 1]
+
+
+def deciding_card(winner: int, runner_up: int) -> str | None:
+    """Why ``winner`` beat ``runner_up`` when both hold the same hand class, e.g. ``"Queen kicker"``.
+
+    ``None`` when the categories differ or the difference is already in the hand's name
+    (a higher pair, set, ...), so the caller only adds detail where the name hides it.
+    """
+    if winner < 16**4 or runner_up < 16**4:
+        return None
+    category, mine = _decode(winner)
+    other_category, theirs = _decode(runner_up)
+    if category != other_category or category not in _KICKER_CATEGORIES:
+        return None
+    for index, (a, b) in enumerate(zip(mine, theirs, strict=True)):
+        if a != b:
+            is_kicker = mine.count(a) == 1 and (category != 0 or index > 0)
+            return f"{UNAMED[a]} kicker" if is_kicker else None
+    return None
 
 
 class HandResult(NamedTuple):

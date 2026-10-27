@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
-from app.cogs.games.engine.poker import Card, OddsMode, TableState, TexasHoldem
+from app.cogs.games.engine.poker import Card, OddsMode, TableState, TexasHoldem, deciding_card
 from app.cogs.games.models import Game, GameResult
 from app.cogs.games.poker_ui import TableView
 from app.utils import helpers, number_suffix
@@ -378,13 +378,10 @@ class PokerSession:
                 name_parts.append("Folded")
             else:
                 if self.state == TableState.FINISHED:
-                    won_lost_chips = (
-                        f"+{sum(pot.amount // len(winners) for winners, pot in self.winners if player in winners)}"
-                    )
-                    if won_lost_chips == "+0":
-                        won_lost_chips = f"-{player.total_bet}"
-
-                    name_parts.append(f"{Emojis.Economy.coin} {won_lost_chips}")
+                    # Net result: what came back from the pots minus what this player put in.
+                    won = sum(pot.amount // len(winners) for winners, pot in self.winners if player in winners)
+                    net = won - player.total_bet
+                    name_parts.append(f"{Emojis.Economy.coin} {f'{net:+}' if net else '±0'}")
 
                 # Check if there is only one player that has not folded,
                 # if there is, he does not need to show his cards and wins automatically
@@ -428,6 +425,9 @@ class PokerSession:
                     if not self.tie
                     else "**Tie**"
                 )
+                if position == 1 and not self.tie and len(self.ranks) > 1:
+                    if reason := deciding_card(hand.value, self.ranks[1][1].value):
+                        hand_suffix += f" — wins on the **{reason}**"
                 text += f"{cards[0].top} {cards[1].top} {hand.name}\n{cards[0].bottom} {cards[1].bottom} {hand_suffix}"
         return text
 
