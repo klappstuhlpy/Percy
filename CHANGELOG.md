@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-10-27
+
+### Added
+
+- Owner-only `dev` commands: inspect and clear caches, toggle commands and cogs at runtime, view or edit a server's config, list, fire or cancel timers, probe the AI engine, check and reconnect Lavalink nodes, compare and sync slash commands.
+- `dev bypass on|off`: the bot owner can turn off their own bypass to test commands like a normal member.
+
+### Changed
+
+- The bot owner now also skips command cooldowns.
+- Owner tools moved under `dev`: `sql`, `pm`, `showlog` (now `dev log`), `list_tasks` (now `dev tasks`), `adminhelp` (now `dev`) and `bothealth` (now `dev bothealth`).
+
+### Removed
+
+- The owner commands `sudo` and `guilds`; jishaku's `jsk su`, `jsk in` and `jsk` cover them.
+
 ## [2.18.1] - 2026-10-27
 
 ### Fixed
