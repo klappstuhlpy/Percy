@@ -154,6 +154,38 @@ def chart_card(
     return NoticeView(container)
 
 
+def failure_ranking(
+    rows: Iterable[tuple[str, int, int]], *, min_uses: int = 5
+) -> list[tuple[str, int, int, float]]:
+    """``(command, total, failed, rate%)`` for commands with failures, worst rate first."""
+    ranked = [(name, total, bad, bad / total * 100) for name, total, bad in rows if total >= min_uses and bad]
+    return sorted(ranked, key=lambda r: (-r[3], -r[2]))
+
+
+def activity_grid(rows: Iterable[Mapping[str, Any]]) -> list[list[int]]:
+    """Folds ``(dow, hour, count)`` rows (dow 0 = Sunday) into ``grid[weekday][hour]``, Monday first."""
+    grid = [[0] * 24 for _ in range(7)]
+    for r in rows:
+        grid[(r["dow"] - 1) % 7][r["hour"]] += r["count"]
+    return grid
+
+
+def hour_totals(rows: Iterable[Mapping[str, Any]]) -> list[int]:
+    """Commands per hour of day (24 buckets) from ``(dow, hour, count)`` rows."""
+    totals = [0] * 24
+    for r in rows:
+        totals[r["hour"]] += r["count"]
+    return totals
+
+
+def daily_series(rows: Iterable[Mapping[str, Any]], days: int) -> tuple[list[str], list[int]]:
+    """Zero-filled ``days`` daily buckets ending today (naive UTC buckets from ``date_trunc``)."""
+    by_day = {r["bucket"].date(): r["value"] for r in rows}
+    today = datetime.datetime.now(datetime.UTC).date()
+    day_list = [today - datetime.timedelta(days=i) for i in range(days - 1, -1, -1)]
+    return [d.strftime("%d %b") for d in day_list], [by_day.get(d, 0) for d in day_list]
+
+
 def _streak(current: int, *, fire: str = "🔥", snowflake: str = "❄") -> str:
     if current > 0:
         return f"{fire} {current}W"
@@ -1170,6 +1202,92 @@ class Stats(Cog):
             accent=Accent.error if failed > success else Accent.brand,
         )
         await ctx.send(view=view)
+
+    @stats.command(name="failures", description="Which commands fail most often in this server.")
+    @describe(days="How many days back to look (1-90).")
+    async def stats_failures(self, ctx: Context, days: int = 30) -> None:
+        """Failure-rate ranking: failed vs total invocations per command."""
+        assert ctx.guild is not None
+        days = max(1, min(days, 90))
+        await ctx.typing()
+        rows = await ctx.db.stats.get_guild_command_failures(ctx.guild.id, days=days)
+        ranked = failure_ranking([(r["command"], r["total"], r["failed"]) for r in rows])
+        total = sum(r["total"] for r in rows)
+        failed = sum(r["failed"] for r in rows)
+        view = stats_card(
+            "Command Failure Rates",
+            f"`{failed}` of `{total}` invocations failed in the last {days} days.",
+            fields=[("Highest failure rate", _ranking(
+                ((f"{name} — {rate:.0f}% ({bad}/{count})", bad) for name, count, bad, rate in ranked[:10]),
+                unit="failed", empty="*No failed commands. Nice.*",
+            ))],
+            footer="Commands with fewer than 5 uses are left out.",
+            accent=Accent.error if total and failed / total > 0.25 else Accent.brand,
+            thumbnail=get_asset_url(ctx.guild),
+        )
+        await ctx.send(view=view)
+
+    @stats.command(name="heatmap", description="Weekday x hour command activity of a member (UTC).")
+    @describe(member="The member to show (defaults to you).", days="How many days back to look (1-365).")
+    async def stats_heatmap(self, ctx: Context, member: discord.Member | None = None, days: int = 90) -> None:
+        """Per-member activity heatmap."""
+        assert ctx.guild is not None
+        target = member or ctx.author
+        days = max(1, min(days, 365))
+        await ctx.typing()
+        rows = await ctx.db.stats.get_activity_grid(ctx.guild.id, target.id, days=days)
+        if not rows:
+            await ctx.send_info(f"No commands recorded for **{target.display_name}** in the last {days} days.")
+            return
+        file = await self.bot.render.heatmap_chart(activity_grid(rows), f"{target.display_name} - activity (UTC)")
+        view = chart_card(
+            f"Activity Heatmap for {target.display_name}",
+            f"`{sum(r['count'] for r in rows)}` commands over the last {days} days.",
+            file.filename, footer="Times are UTC.",
+            accent=target.colour if target.colour.value else Accent.brand,
+        )
+        await ctx.send(view=view, file=file)
+
+    @stats.command(name="activity", description="Command activity of this server over time.")
+    @describe(days="How many days back to look (2-90).")
+    async def stats_activity(self, ctx: Context, days: int = 30) -> None:
+        """Daily command volume chart for the server."""
+        assert ctx.guild is not None
+        days = max(2, min(days, 90))
+        await ctx.typing()
+        rows = await ctx.db.stats.get_command_series(ctx.guild.id, days=days, granularity="day")
+        labels, values = daily_series(rows, days)
+        if not any(values):
+            await ctx.send_info(f"No commands recorded in the last {days} days.")
+            return
+        file = await self.bot.render.series_chart(labels=labels, values=values, title=f"Commands per day - {ctx.guild.name}")
+        view = chart_card(
+            "Server Activity", f"`{sum(values)}` commands in the last {days} days (peak `{max(values)}`/day).",
+            file.filename, footer="Days are UTC.",
+        )
+        await ctx.send(view=view, file=file)
+
+    @stats.command(name="hours", description="Command usage by hour of day (UTC).")
+    @describe(days="How many days back to look (1-90).")
+    async def stats_hours(self, ctx: Context, days: int = 30) -> None:
+        """Command usage by hour of day."""
+        assert ctx.guild is not None
+        days = max(1, min(days, 90))
+        await ctx.typing()
+        rows = await ctx.db.stats.get_activity_grid(ctx.guild.id, None, days=days)
+        if not rows:
+            await ctx.send_info(f"No commands recorded in the last {days} days.")
+            return
+        values = hour_totals(rows)
+        file = await self.bot.render.series_chart(
+            labels=[f"{h:02d}" for h in range(24)], values=values, title="Commands by hour of day (UTC)", kind="bar",
+            filename="hours.png",
+        )
+        view = chart_card(
+            "Usage by Hour", f"Busiest hour: `{values.index(max(values)):02d}:00` UTC over the last {days} days.",
+            file.filename,
+        )
+        await ctx.send(view=view, file=file)
 
     async def game_autocomplete(self, _: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
         """Autocomplete over the tracked games."""

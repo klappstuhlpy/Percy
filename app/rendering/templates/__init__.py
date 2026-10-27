@@ -10,7 +10,9 @@ domain look-ups — which keeps them deterministic and unit-testable. The
 from app.rendering.templates.captcha import generate_captcha
 from app.rendering.templates.charts import (
     draw_avatar_collage,
+    draw_heatmap_chart,
     draw_presence_chart,
+    draw_series_chart,
     merge_images_vertical,
     render_bar_chart_images,
 )
@@ -23,10 +25,12 @@ __all__ = (
     'draw_avatar_collage',
     'draw_color_swatch',
     'draw_equalizer',
+    'draw_heatmap_chart',
     'draw_level_card',
     'draw_presence_chart',
     'draw_progress_bar',
     'draw_quote',
+    'draw_series_chart',
     'generate_captcha',
     'merge_images_vertical',
     'render_bar_chart_images',

@@ -75,3 +75,17 @@ async def test_game_stats_card_every_game_fits() -> None:
         cash="<:cash:123456789012345678>", fire="<a:fire:123456789012345678>", snowflake="<a:snow:123456789012345678>",
     )
     _within_limits(view)
+
+
+async def test_chart_data_helpers() -> None:
+    from app.cogs.stats import activity_grid, daily_series, failure_ranking, hour_totals
+
+    rows = [{"dow": 0, "hour": 3, "count": 2}, {"dow": 1, "hour": 3, "count": 5}]
+    grid = activity_grid(rows)
+    assert grid[6][3] == 2 and grid[0][3] == 5  # Sunday last, Monday first
+    assert hour_totals(rows)[3] == 7
+    ranked = failure_ranking([("a", 10, 1), ("b", 4, 4), ("c", 10, 5), ("d", 10, 0)])
+    assert [r[0] for r in ranked] == ["c", "a"]
+    today = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    labels, values = daily_series([{"bucket": today, "value": 9}], 3)
+    assert len(labels) == 3 and values == [0, 0, 9]

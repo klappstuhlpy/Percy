@@ -18,9 +18,11 @@ __all__ = (
     "ActiveBoost",
     "BarChartData",
     "ColorSwatchData",
+    "HeatmapData",
     "LevelCardData",
     "PresenceData",
     "QuoteData",
+    "SeriesData",
 )
 
 
@@ -83,3 +85,21 @@ class PresenceData:
     values: list[int] = field(default_factory=list)
     colors: list[str] = field(default_factory=list)
     title: str = 'Presence'
+
+
+@dataclass(slots=True)
+class SeriesData:
+    """A single-series chart: ``kind`` is ``'line'`` (area) or ``'bar'``; one label per value."""
+
+    labels: list[str] = field(default_factory=list)
+    values: list[int] = field(default_factory=list)
+    title: str = ''
+    kind: str = 'line'
+
+
+@dataclass(slots=True)
+class HeatmapData:
+    """A weekday x hour grid: ``grid[weekday][hour]``, weekday 0 = Monday, hours 0-23 (UTC)."""
+
+    grid: list[list[int]] = field(default_factory=list)
+    title: str = ''

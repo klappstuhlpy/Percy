@@ -223,3 +223,22 @@ def test_equalizer_clamps_gains_and_handles_odd_band_counts() -> None:
     image = Image.open(buffer)
     assert image.format == 'PNG'
     assert image.size == (music.WIDTH_PX, music.HEIGHT_PX)
+
+
+def test_series_and_heatmap_charts() -> None:
+    """Render the stats activity chart, hour-of-day bars and weekday x hour heatmap."""
+    from app.rendering.models import HeatmapData, SeriesData
+
+    days = [f'{d:02d} Oct' for d in range(1, 31)]
+    line = charts.draw_series_chart(SeriesData(labels=days, values=[(d * 7) % 41 for d in range(30)], title='Commands per day'))
+    bars = charts.draw_series_chart(
+        SeriesData(labels=[f'{h:02d}' for h in range(24)], values=[h * h % 37 for h in range(24)], title='By hour', kind='bar')
+    )
+    grid = [[(d * 24 + h) % 13 * (3 if 17 <= h <= 22 else 1) for h in range(24)] for d in range(7)]
+    heat = charts.draw_heatmap_chart(HeatmapData(grid=grid, title='Activity (UTC)'))
+    empty = charts.draw_series_chart(SeriesData(labels=[], values=[], title='Empty'))
+    ARTIFACTS.mkdir(exist_ok=True)
+    for name, buf in (('stats_activity.png', line), ('stats_hours.png', bars), ('stats_heatmap.png', heat), ('stats_empty.png', empty)):
+        image = Image.open(buf)
+        assert image.width == 1800
+        image.save(ARTIFACTS / name)

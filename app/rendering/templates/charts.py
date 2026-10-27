@@ -29,6 +29,7 @@ from app.rendering.templates.theme import (
     BRAND,
     BRAND_BRIGHT,
     FOREGROUND,
+    GRID,
     MENLO,
     MUTED,
     PANEL_BG,
@@ -41,13 +42,16 @@ from app.rendering.templates.theme import (
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
     from matplotlib.font_manager import FontProperties
 
-    from app.rendering.models import BarChartData, PresenceData
+    from app.rendering.models import BarChartData, HeatmapData, PresenceData, SeriesData
 
 __all__ = (
     'draw_avatar_collage',
+    'draw_heatmap_chart',
     'draw_presence_chart',
+    'draw_series_chart',
     'merge_images_vertical',
     'render_bar_chart_images',
 )
@@ -246,6 +250,68 @@ def draw_presence_chart(data: PresenceData) -> BytesIO:
     image.save(buffer, format='png')
     buffer.seek(0)
     return buffer
+
+
+def _png(figure: Figure) -> BytesIO:
+    image = figure_to_image(figure)
+    figure.clear()
+    buffer = BytesIO()
+    image.save(buffer, format='png')
+    buffer.seek(0)
+    return buffer
+
+
+def _style_axes(ax: Axes) -> None:
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(colors=MUTED, length=0, labelsize=10)
+    for label in (*ax.get_xticklabels(), *ax.get_yticklabels()):
+        label.set_fontproperties(MENLO)
+
+
+def draw_series_chart(data: SeriesData) -> BytesIO:
+    """Draws a single-series line/area or bar chart on a dashboard panel and returns a PNG buffer."""
+    width, height = 1800, 800
+    figure = panel_figure(width, height, dpi=200)
+    add_panel_title(figure, data.title, width_px=width, height_px=height)
+
+    ax: Axes = figure.add_axes((0.06, 0.14, 0.91, 0.62))
+    ax.set_facecolor('none')
+    xs = list(range(len(data.values)))
+    if data.kind == 'bar':
+        ax.bar(xs, data.values, color=BRAND, width=0.7)
+    else:
+        ax.fill_between(xs, data.values, color=BRAND, alpha=0.18, linewidth=0)
+        ax.plot(xs, data.values, color=BRAND_BRIGHT, linewidth=2.4)
+    ax.set_ylim(bottom=0, top=max(max(data.values, default=0), 1) * 1.1)
+    ax.set_xlim(-0.6, max(len(xs) - 0.4, 0.6))
+    step = max(1, math.ceil(len(xs) / 12))  # at most ~12 x ticks
+    ax.set_xticks(xs[::step], [data.labels[i] for i in xs[::step]])
+    ax.grid(axis='y', color=GRID, linewidth=1)
+    ax.set_axisbelow(True)
+    _style_axes(ax)
+    return _png(figure)
+
+
+def draw_heatmap_chart(data: HeatmapData) -> BytesIO:
+    """Draws a weekday x hour heatmap (UTC) and returns a PNG buffer."""
+    width, height = 1800, 700
+    figure = panel_figure(width, height, dpi=200)
+    add_panel_title(figure, data.title, width_px=width, height_px=height)
+
+    ax: Axes = figure.add_axes((0.07, 0.12, 0.91, 0.62))
+    ax.set_facecolor('none')
+    grid = np.array(data.grid or [[0] * 24] * 7, dtype=float)
+    cmap = LinearSegmentedColormap.from_list('heat', [TRACK_BG, BRAND, BRAND_BRIGHT])
+    ax.imshow(grid, cmap=cmap, aspect='auto', vmin=0, vmax=max(grid.max(), 1), interpolation='nearest')
+    ax.set_xticks(range(0, 24, 2), [f'{h:02d}' for h in range(0, 24, 2)])
+    ax.set_yticks(range(7), ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+    _style_axes(ax)
+    ax.set_xticks([x - 0.5 for x in range(1, 24)], minor=True)  # cell gutters
+    ax.set_yticks([y - 0.5 for y in range(1, 7)], minor=True)
+    ax.grid(which='minor', color=PANEL_BG, linewidth=2)
+    ax.tick_params(which='minor', length=0)
+    return _png(figure)
 
 
 def draw_avatar_collage(avatars: list[bytes]) -> BytesIO:

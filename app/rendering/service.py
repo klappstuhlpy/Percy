@@ -21,7 +21,16 @@ import discord
 
 from app.rendering import templates
 from app.rendering.card_style import DEFAULT_STYLE, CardStyle
-from app.rendering.models import ActiveBoost, BarChartData, ColorSwatchData, LevelCardData, PresenceData, QuoteData
+from app.rendering.models import (
+    ActiveBoost,
+    BarChartData,
+    ColorSwatchData,
+    HeatmapData,
+    LevelCardData,
+    PresenceData,
+    QuoteData,
+    SeriesData,
+)
 from app.rendering.primitives import Font, FontManager, get_dominant_color
 
 if TYPE_CHECKING:
@@ -155,6 +164,19 @@ class RenderingService:
         """Render a presence/activity donut chart."""
         data = PresenceData(labels=labels, values=values, colors=colors, title=title)
         buffer = await asyncio.to_thread(templates.draw_presence_chart, data)
+        return discord.File(buffer, filename=filename)
+
+    async def series_chart(
+        self, *, labels: list[str], values: list[int], title: str, kind: str = "line", filename: str = "series.png"
+    ) -> discord.File:
+        """Render a single-series line/area (``kind="line"``) or bar chart."""
+        data = SeriesData(labels=labels, values=values, title=title, kind=kind)
+        buffer = await asyncio.to_thread(templates.draw_series_chart, data)
+        return discord.File(buffer, filename=filename)
+
+    async def heatmap_chart(self, grid: list[list[int]], title: str, *, filename: str = "heatmap.png") -> discord.File:
+        """Render a weekday x hour (UTC) activity heatmap; ``grid[weekday][hour]``, Monday first."""
+        buffer = await asyncio.to_thread(templates.draw_heatmap_chart, HeatmapData(grid=grid, title=title))
         return discord.File(buffer, filename=filename)
 
     async def captcha(self, *, length: int = 6, filename: str = "captcha.png") -> Captcha:
