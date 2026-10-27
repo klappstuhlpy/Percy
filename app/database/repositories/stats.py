@@ -266,7 +266,7 @@ class StatsRepository(BaseRepository):
                 SELECT status, status_before, changed_at
                 FROM presence_history
                 WHERE uuid = $1
-                  AND (changed_at AT TIME ZONE 'UTC') > (CURRENT_TIMESTAMP - $2::interval)
+                  AND changed_at > (CURRENT_TIMESTAMP - $2::interval)
                 ORDER BY changed_at DESC;
             """,
             user_id, datetime.timedelta(days=days),

@@ -11,7 +11,7 @@ import time
 import traceback
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, ClassVar, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypedDict
 
 import aiohttp
 import asyncpg
@@ -26,9 +26,8 @@ from expiringdict import ExpiringDict
 
 import config
 from app.cogs.games.models import Game
-from app.core import Bot, Cog, Context
+from app.core import Accent, Bot, Cog, Context, NoticeView, make_notice
 from app.core.models import command, cooldown, describe, group
-from app.core.pagination import FilePaginator
 from app.core.views import LayoutView, UserInfoView
 from app.rendering import resize_to_limit
 from app.services import (
@@ -67,6 +66,9 @@ from app.utils.timetools import human_timedelta
 from app.utils.webhooks import send_webhook
 from config import Emojis, beta, get_full_version, path
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+
 log = logging.getLogger(__name__)
 
 #: When the daily summary lands in the log channel.
@@ -79,6 +81,136 @@ GATEWAY_WINDOW = 60.0
 #: A Lavalink node must stay disconnected this long (seconds) before it is reported; a
 #: reconnect within it posts nothing.
 LAVALINK_GRACE = 60.0
+
+
+#: Discord's caps for one Components V2 message.
+MAX_COMPONENTS = 40
+MAX_TEXT = 4000
+#: Text budget for card bodies; the rest is headroom for headings, field names and footers.
+_CARD_BUDGET = 3600
+
+
+def _fit(text: str, limit: int) -> str:
+    """Trims ``text`` to ``limit`` characters on a line boundary where possible."""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind("\n", 0, limit - 2)
+    return text[: cut if cut > 0 else limit - 2] + "\n…"
+
+
+def _since(dt: datetime.datetime | None, style: Literal["R", "D", "F"] = "D") -> str:
+    """Formats a timestamp column; ``commands.used`` is naive UTC, the history tables are aware."""
+    if dt is None:
+        return "*never*"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.UTC)
+    return discord.utils.format_dt(dt, style)
+
+
+def _ranking(rows: Iterable[tuple[str, int]], *, unit: str = "uses", empty: str = "*Nothing recorded yet.*") -> str:
+    """One medal-prefixed line per ``(label, count)``; ranks start at 1 so first place gets gold."""
+    return "\n".join(
+        f"{medal_emoji(rank)} {label} (`{count}` {unit})" for rank, (label, count) in enumerate(rows, start=1)
+    ) or empty
+
+
+def stats_card(
+    title: str,
+    description: str | None = None,
+    *,
+    fields: Sequence[tuple[str, str]] = (),
+    footer: str | None = None,
+    accent: Accent | discord.Colour | int = Accent.brand,
+    thumbnail: str | None = None,
+) -> NoticeView:
+    """:func:`make_notice` with field values trimmed so the card always fits Discord's text cap."""
+    description = _fit(description, _CARD_BUDGET // 3) if description else None
+    remaining = _CARD_BUDGET - len(description or "")
+    fitted = []
+    for index, (name, value) in enumerate(fields):
+        # Fair share of what is left, so a short field hands its headroom to the next one.
+        value = _fit(value, remaining // (len(fields) - index))
+        remaining -= len(value)
+        fitted.append((name, value))
+    return make_notice(title, description, accent=accent, thumbnail=thumbnail or None, fields=fitted, footer=footer)
+
+
+def chart_card(
+    title: str,
+    description: str | None,
+    filename: str,
+    *,
+    footer: str | None = None,
+    accent: Accent | discord.Colour | int = Accent.brand,
+) -> NoticeView:
+    """A card around a rendered image; send it with ``file=`` carrying ``filename``."""
+    colour = accent.colour if isinstance(accent, Accent) else accent
+    container = discord.ui.Container(accent_colour=colour)
+    container.add_item(discord.ui.TextDisplay(f"## {title}\n{description}" if description else f"## {title}"))
+    container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(f"attachment://{filename}")))
+    if footer:
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
+    return NoticeView(container)
+
+
+def _streak(current: int, *, fire: str = "🔥", snowflake: str = "❄") -> str:
+    if current > 0:
+        return f"{fire} {current}W"
+    if current < 0:
+        return f"{snowflake} {abs(current)}L"
+    return "—"
+
+
+def _winrate(won: int, played: int) -> float:
+    return (won / played * 100) if played else 0.0
+
+
+def _icon(game: Game) -> str:
+    """``game.icon``, tolerating games added to the enum without a badge (``Game.icon`` raises)."""
+    try:
+        return game.icon
+    except KeyError:
+        return "🎮"
+
+
+def game_stats_card(
+    name: str,
+    display_name: str,
+    totals: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    cash: str = "💵",
+    fire: str = "🔥",
+    snowflake: str = "❄",
+) -> NoticeView:
+    """A member's game record: totals up top, one compact block per game (most played first).
+
+    Every game shares one text block, so the card stays a handful of components however many
+    games exist; the block is trimmed to the text cap instead.
+    """
+    rate = _winrate(totals["won"], totals["played"])
+    summary = (
+        f"**{totals['played']}** rounds • **{totals['won']}**W / **{totals['lost']}**L ({rate:.0f}% win-rate)\n"
+        f"Net profit: {cash} **{fnumb(totals['profit'])}** • Biggest win: {cash} **{fnumb(totals['biggest_win'])}**\n"
+        f"Streak: {_streak(totals['current_streak'])} • Best: {_streak(totals['best_streak'])}"
+    )
+    blocks = []
+    for record in rows:
+        game = Game(record["game"])
+        tied = f" / `{record['tied']}`T" if record["tied"] else ""
+        blocks.append(
+            f"**{_icon(game)} {game.label}** — `{record['played']}` played • `{record['won']}`W / `{record['lost']}`L"
+            f"{tied} • **{_winrate(record['won'], record['played']):.0f}%**\n"
+            f"-# Net {cash} {fnumb(record['profit'])} • Streak "
+            f"{_streak(record['current_streak'], fire=fire, snowflake=snowflake)} (best {record['best_streak']}W)"
+        )
+    return stats_card(
+        f"{name}'s Game Stats",
+        f"-# {display_name} has played **{totals['played']}** games in this server.",
+        fields=[("Overall", summary), ("Per game", "\n".join(blocks) or "*No games yet.*")],
+        footer="Want to play? See ?help Games",
+    )
 
 
 def _make_presence_key(member: discord.Member) -> str:
@@ -794,22 +926,33 @@ class Stats(Cog):
     async def socketstats(self, ctx: Context) -> None:
         """Shows the current socket event statistics."""
         await self.bot.wait_until_ready()
-        delta = discord.utils.utcnow() - self.bot.startup_timestamp
-        minutes = delta.total_seconds() / 60
         total = sum(self.bot.socket_stats.values())
-        cpm = total / minutes
+        cpm = total / self._minutes_up()
         image = await self.bot.render.bar_chart(
             dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
             f"{total} socket events observed ({cpm:.2f}/minute)",
             merge=True,
         )
-        await FilePaginator.start(ctx, entries=[image], per_page=1)  # type: ignore[arg-type]
+        assert isinstance(image, discord.File)
+        view = chart_card(
+            "Socket Events", f"`{total}` events since {_since(self.bot.startup_timestamp, 'R')}", image.filename
+        )
+        await ctx.send(view=view, file=image)
+
+    def _minutes_up(self) -> float:
+        """Minutes since startup, floored so a just-booted bot never divides by zero."""
+        return max((discord.utils.utcnow() - self.bot.startup_timestamp).total_seconds() / 60, 1.0)
 
     @command(description="Tells you how long the bot has been up for.")
     async def uptime(self, ctx: Context) -> None:
         """Tells you how long the bot has been up for."""
         await self.bot.wait_until_ready()
-        await ctx.send(f"Uptime: **{self.get_bot_uptime()}**")
+        view = stats_card(
+            "Uptime",
+            f"**{self.get_bot_uptime()}**",
+            footer=f"Online since {_since(self.bot.startup_timestamp, 'F')}",
+        )
+        await ctx.send(view=view)
 
     @command(description="Tells you information about the bot itself.")
     async def about(self, ctx: Context) -> None:
@@ -830,7 +973,7 @@ class Stats(Cog):
         assert isinstance(config.owners, int)
         owner = ctx.bot.get_user(config.owners)
 
-        container = discord.ui.Container()
+        container = discord.ui.Container(accent_colour=Accent.brand.colour)
 
         container.add_item(
             discord.ui.Section(
@@ -844,6 +987,7 @@ class Stats(Cog):
 
         total_members = 0
         total_unique = len(self.bot.users)
+        bots = sum(user.bot for user in self.bot.users)
 
         text, voice, guilds = 0, 0, 0
         for guild in self.bot.guilds:
@@ -862,7 +1006,8 @@ class Stats(Cog):
         container.add_item(
             discord.ui.TextDisplay(
                 f"### Stats\n"
-                f"Members: `{total_members}` total | `{total_unique}` unique | `{(total_unique / total_members):.2%}` bots\n"
+                f"Members: `{total_members}` total | `{total_unique}` unique | "
+                f"`{bots / max(total_unique, 1):.2%}` bots\n"
                 f"Channels: `{text + voice}` total | `{text}` text | `{voice}` voice\n"
                 f"Guilds: `{guilds}`\n"
                 f"Commands run since last reboot: `{sum(self.bot.command_stats.values())}`"
@@ -921,97 +1066,50 @@ class Stats(Cog):
         """Tells you command usage stats for the server or a member."""
         assert ctx.guild is not None
         async with ctx.progress("Fetching command statistics..."):
-            embed = discord.Embed()
-
+            stats = ctx.db.stats
+            guild_id = ctx.guild.id
             if member is None:
-                embed.title = "Server Command Stats"
-                embed.colour = helpers.Colour.white()
-
-                count: tuple[int, datetime.datetime] = await ctx.db.stats.get_command_summary(  # type: ignore
-                    ctx.guild.id
+                count, top, top_today, users, users_today = await asyncio.gather(
+                    stats.get_command_summary(guild_id),
+                    self.get_commands_stats(guild_id),
+                    self.get_commands_stats(guild_id, days=1),
+                    self.get_commands_stats(guild_id, group_by="author_id"),
+                    self.get_commands_stats(guild_id, group_by="author_id", days=1),
                 )
-
-                top_commands = await self.get_commands_stats(ctx.guild.id) or []
-                value = (
-                    "\n".join(
-                        f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)"
-                        for i, record in enumerate(top_commands)
-                    )
-                    or "*No Command Usages available.*"
+                view = stats_card(
+                    "Server Command Stats",
+                    f"Total of `{count[0]}` commands used.",
+                    fields=[
+                        ("Top Commands", _ranking((r["command"], r["uses"]) for r in top or [])),
+                        ("Top Commands Today", _ranking((r["command"], r["uses"]) for r in top_today or [])),
+                        ("Top Command Users", _ranking((f"<@{r['author_id']}>", r["uses"]) for r in users or [])),
+                        (
+                            "Top Command Users Today",
+                            _ranking((f"<@{r['author_id']}>", r["uses"]) for r in users_today or []),
+                        ),
+                    ],
+                    footer=f"Tracking command usage since {_since(count[1])}",
+                    thumbnail=get_asset_url(ctx.guild),
                 )
-                embed.add_field(name="Top Commands", value=value, inline=True)
-
-                top_commands_today = await self.get_commands_stats(ctx.guild.id, days=1) or []
-                value = (
-                    "\n".join(
-                        f"{medal_emoji(index)}: {cmd} (`{uses}` uses)"
-                        for (index, (cmd, uses)) in enumerate(top_commands_today)
-                    )
-                    or "*No Command Usages available.*"
-                )
-                embed.add_field(name="Top Commands Today", value=value, inline=True)
-
-                # placeholder
-                embed.add_field(name="\u200b", value="\u200b", inline=True)
-
-                top_users = await self.get_commands_stats(ctx.guild.id, group_by="author_id") or []
-                value = (
-                    "\n".join(
-                        f"{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)"
-                        for i, record in enumerate(top_users)
-                    )
-                    or "*No Command Bot Users available.*"
-                )
-                embed.add_field(name="Top Command Users", value=value, inline=True)
-
-                top_users_today = await self.get_commands_stats(ctx.guild.id, group_by="author_id", days=1) or []
-                value = (
-                    "\n".join(
-                        f"{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)"
-                        for i, record in enumerate(top_users_today)
-                    )
-                    or "*No Command Bot Users available.*"
-                )
-                embed.add_field(name="Top Command Users Today", value=value, inline=True)
-
-                embed.set_footer(text="Tracking command usage since")
             else:
-                embed.title = "Command Stats"
-                embed.colour = member.colour
-                embed.set_author(name=str(member), icon_url=get_asset_url(member))
-
-                count: tuple[int, datetime.datetime] = await ctx.db.stats.get_command_summary(  # type: ignore
-                    ctx.guild.id, member.id
+                count, most_used, most_used_today = await asyncio.gather(
+                    stats.get_command_summary(guild_id, member.id),
+                    self.get_commands_stats(guild_id, member.id),
+                    self.get_commands_stats(guild_id, member.id, days=1),
+                )
+                view = stats_card(
+                    f"Command Stats for {member.display_name}",
+                    f"Total of `{count[0]}` commands used.",
+                    fields=[
+                        ("Most Used Commands", _ranking((r["command"], r["uses"]) for r in most_used or [])),
+                        ("Most Used Today", _ranking((r["command"], r["uses"]) for r in most_used_today or [])),
+                    ],
+                    footer=f"First command used {_since(count[1])}",
+                    accent=member.colour if member.colour.value else Accent.brand,
+                    thumbnail=get_asset_url(member),
                 )
 
-                most_used = await self.get_commands_stats(ctx.guild.id, member.id) or []
-                value = (
-                    "\n".join(
-                        f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)"
-                        for i, record in enumerate(most_used)
-                    )
-                    or "*No Command Usages available.*"
-                )
-
-                embed.add_field(name="Most Used Commands", value=value, inline=False)
-
-                most_used_today = await self.get_commands_stats(ctx.guild.id, member.id, days=1) or []
-                value = (
-                    "\n".join(
-                        f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)"
-                        for i, record in enumerate(most_used_today)
-                    )
-                    or "*No Command Usages available.*"
-                )
-
-                embed.add_field(name="Most Used Commands Today", value=value, inline=False)
-
-                embed.set_footer(text="First command used")
-
-            embed.description = f"Total of `{count[0]}` commands used."
-            embed.timestamp = count[1].replace(tzinfo=datetime.UTC) if count[1] else discord.utils.utcnow()
-
-            await ctx.send(embed=embed)
+        await ctx.send(view=view)
 
     @stats.command(
         name="global",
@@ -1020,43 +1118,31 @@ class Stats(Cog):
     async def stats_global(self, ctx: Context) -> None:
         """Global all time command statistics."""
         await ctx.typing()
-
         total: int = await ctx.db.stats.count_all_commands()
-        embed = discord.Embed(title="Command Stats", colour=helpers.Colour.white())
-        embed.description = f"`{total}` commands used."
+        view = stats_card("Global Command Stats", f"`{total}` commands used.", fields=await self._global_fields())
+        await ctx.send(view=view)
 
-        top_commands = await self.get_commands_stats() or []
-        value = (
-            "\n".join(
-                f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)" for i, record in enumerate(top_commands)
-            )
-            or "*No Command Usages available.*"
+    async def _global_fields(self, *, days: int | None = None) -> list[tuple[str, str]]:
+        """Top commands, guilds and users bot-wide, optionally over the trailing ``days``."""
+        top_commands, top_guilds, top_users = await asyncio.gather(
+            self.get_commands_stats(days=days),
+            self.get_commands_stats(group_by="guild_id", days=days),
+            self.get_commands_stats(group_by="author_id", days=days),
         )
-        embed.add_field(name="Top Commands", value=value, inline=False)
 
-        top_guilds = await self.get_commands_stats(group_by="guild_id") or []
-        value = []
-        for i, record in enumerate(top_guilds):
-            if record["guild_id"] is None:
-                guild = "Private Message"
-            else:
-                guild = censor_object(
-                    self.bot.blacklist, self.bot.get_guild(record["guild_id"]) or f"<Unknown {record['guild_id']}>"
-                )
-            value.append(f"{medal_emoji(i)}: {guild} (`{record['uses']}` uses)")
-        embed.add_field(name="Top Guilds", value="\n".join(value), inline=False)
+        def guild_label(guild_id: int | None) -> str:
+            if guild_id is None:
+                return "Private Message"
+            return censor_object(self.bot.blacklist, self.bot.get_guild(guild_id) or f"<Unknown {guild_id}>")
 
-        value.clear()
+        def user_label(user_id: int) -> str:
+            return censor_object(self.bot.blacklist, self.bot.get_user(user_id) or f"<Unknown {user_id}>")
 
-        top_users = await self.get_commands_stats(group_by="author_id") or []
-        for i, record in enumerate(top_users):
-            user = censor_object(
-                self.bot.blacklist, self.bot.get_user(record["author_id"]) or f"<Unknown {record['author_id']}>"
-            )
-            value.append(f"{medal_emoji(i)}: {user} (`{record['uses']}` uses)")
-        embed.add_field(name="Top Users", value="\n".join(value), inline=False)
-
-        await ctx.send(embed=embed)
+        return [
+            ("Top Commands", _ranking((r["command"], r["uses"]) for r in top_commands or [])),
+            ("Top Guilds", _ranking((guild_label(r["guild_id"]), r["uses"]) for r in top_guilds or [])),
+            ("Top Users", _ranking((user_label(r["author_id"]), r["uses"]) for r in top_users or [])),
+        ]
 
     @stats.command(
         name="today",
@@ -1066,77 +1152,32 @@ class Stats(Cog):
         """Global command statistics for the day."""
         await ctx.typing()
 
-        total = await ctx.db.stats.get_daily_status_counts()
-        failed, success, question = 0, 0, 0
-        for state, count in total:
+        failed, success, unknown = 0, 0, 0
+        for state, count in await ctx.db.stats.get_daily_status_counts():
             match state:
                 case False:
                     success += count
                 case True:
                     failed += count
                 case _:
-                    question += count
+                    unknown += count
 
-        embed = discord.Embed(title="Last 24 Hour Command Stats", colour=helpers.Colour.white())
-        embed.description = (
-            f"`{failed + success + question}` commands used today. "
-            f"(`{success}` succeeded, `{failed}` failed, `{question}` unknown)"
+        view = stats_card(
+            "Last 24 Hour Command Stats",
+            f"`{failed + success + unknown}` commands used today "
+            f"(`{success}` succeeded, `{failed}` failed, `{unknown}` unknown).",
+            fields=await self._global_fields(days=1),
+            accent=Accent.error if failed > success else Accent.brand,
         )
-
-        top_commands = await self.get_commands_stats(days=1) or []
-        value = (
-            "\n".join(
-                f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)" for i, record in enumerate(top_commands)
-            )
-            or "*No Command Usages available.*"
-        )
-        embed.add_field(name="Top Commands", value=value, inline=False)
-
-        top_guilds = await self.get_commands_stats(group_by="guild_id", days=1) or []
-        value = []
-        for i, record in enumerate(top_guilds):
-            if record["guild_id"] is None:
-                guild = "Private Message"
-            else:
-                guild = censor_object(
-                    self.bot.blacklist, self.bot.get_guild(record["guild_id"]) or f"<Unknown {record['guild_id']}>"
-                )
-            value.append(f"{medal_emoji(i)}: {guild} (`{record['uses']}` uses)")
-        embed.add_field(name="Top Guilds", value="\n".join(value), inline=False)
-
-        top_users = await self.get_commands_stats(group_by="author_id", days=1) or []
-        value = []
-        for i, record in enumerate(top_users):
-            user = censor_object(
-                self.bot.blacklist, self.bot.get_user(record["author_id"]) or f"<Unknown {record['author_id']}>"
-            )
-            value.append(f"{medal_emoji(i)}: {user} (`{record['uses']}` uses)")
-        embed.add_field(name="Top Users", value="\n".join(value), inline=False)
-
-        await ctx.send(embed=embed)
+        await ctx.send(view=view)
 
     async def game_autocomplete(self, _: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
         """Autocomplete over the tracked games."""
         return [
-            Choice(name=f"{game.icon} {game.label}", value=game.value)
+            Choice(name=f"{_icon(game)} {game.label}", value=game.value)
             for game in Game
             if current.lower() in game.label.lower()
         ][:25]
-
-    @staticmethod
-    def _format_streak(current_streak: int, static: bool = True) -> str:
-        """Pretty-prints an active win/loss streak."""
-        fire = "\N{FIRE}" if static else Emojis.fire
-        snowflake = "\N{SNOWFLAKE}" if static else Emojis.snowflake
-        if current_streak > 0:
-            return f"{fire} {current_streak}W"
-        if current_streak < 0:
-            return f"{snowflake} {abs(current_streak)}L"
-        return "—"
-
-    @staticmethod
-    def _winrate(won: int, played: int) -> float:
-        return (won / played * 100) if played else 0.0
 
     @stats.command(
         name="games",
@@ -1149,64 +1190,19 @@ class Stats(Cog):
         assert ctx.guild is not None
         target = member or ctx.author
 
-        rows = await ctx.db.game_stats.get_member_games(ctx.guild.id, target.id)
-        if not rows:
+        rows, totals = await asyncio.gather(
+            ctx.db.game_stats.get_member_games(ctx.guild.id, target.id),
+            ctx.db.game_stats.get_member_totals(ctx.guild.id, target.id),
+        )
+        if not rows or totals is None:
             who = "You have" if target == ctx.author else f"**{target.display_name}** has"
             await ctx.send_info(f"{who} not played any tracked games yet.")
             return
 
-        totals = await ctx.db.game_stats.get_member_totals(ctx.guild.id, target.id)
-        assert totals is not None
-
-        container = discord.ui.Container()
-
-        container.add_item(
-            discord.ui.TextDisplay(
-                f"## {target}'s Game Stats\n"
-                f"-# {target.display_name} has played a total of **{totals['played']}** games in this server.\n"
-                f"### This overview shows the users stats about their game history!"
-            )
+        view = game_stats_card(
+            str(target), target.display_name, totals, rows,
+            cash=Emojis.Economy.cash, fire=Emojis.fire, snowflake=Emojis.snowflake,
         )
-        container.add_item(discord.ui.Separator())
-
-        container.add_item(
-            discord.ui.TextDisplay(
-                f"```diff\n"
-                f"+ Current streak: {self._format_streak(totals['current_streak'])}\n"
-                f"+ Best streak:    {self._format_streak(totals['best_streak'])}\n"
-                f"```"
-            )
-        )
-        container.add_item(discord.ui.Separator())
-
-        win_rate = self._winrate(totals["won"], totals["played"])
-        container.add_item(
-            discord.ui.TextDisplay(
-                f"**{totals['played']}** rounds played • **{totals['won']}**W / **{totals['lost']}**L "
-                f"({win_rate:.0f}% win-rate)\n"
-                f"Net profit: {Emojis.Economy.cash} **{fnumb(totals['profit'])}** • "
-                f"Biggest win: {Emojis.Economy.cash} **{fnumb(totals['biggest_win'])}**"
-            )
-        )
-        container.add_item(discord.ui.Separator())
-
-        for record in rows:
-            game = Game(record["game"])
-            rate = self._winrate(record["won"], record["played"])
-            value = (
-                f"`{record['played']}` played • `{record['won']}`W / `{record['lost']}`L"
-                f"{f' / `{record['tied']}`T' if record['tied'] else ''} • **{rate:.0f}%**\n"
-                f"Net: {Emojis.Economy.cash} **{fnumb(record['profit'])}** • "
-                f"Streak: {self._format_streak(record['current_streak'], static=False)} "
-                f"(best {record['best_streak']}W)"
-            )
-            container.add_item(discord.ui.TextDisplay(f"### {game.icon} {game.label}\n" + value))
-            container.add_item(discord.ui.Separator())
-
-        container.add_item(discord.ui.TextDisplay("-# want to play? checkout ?help Games for further info"))
-
-        view = LayoutView()
-        view.add_item(container)
         await ctx.send(view=view)
 
     @stats.command(
@@ -1243,34 +1239,29 @@ class Stats(Cog):
             await ctx.send_info(f"No game results have been recorded{scope} yet.")
             return
 
-        title = f"{selected.icon} {selected.label} Leaderboard" if selected else "🏆 Game Leaderboard"
-        embed = discord.Embed(title=title, colour=helpers.Colour.white())
-        embed.description = (
-            f"Top players in **{ctx.guild.name}**"
-            + ("" if selected else " across all games")
-            + ", ranked by wins."
+        rankings = "\n".join(
+            f"{medal_emoji(rank)} <@{record['user_id']}> — **{record['won']}**W / **{record['lost']}**L "
+            f"({_winrate(record['won'], record['played']):.0f}%) • {Emojis.Economy.cash} **{fnumb(record['profit'])}**"
+            for rank, record in enumerate(rows, start=1)
         )
-
-        lines = []
-        for i, record in enumerate(rows):
-            rate = self._winrate(record["won"], record["played"])
-            lines.append(
-                f"{medal_emoji(i)} <@!{record['user_id']}> — **{record['won']}**W / **{record['lost']}**L "
-                f"({rate:.0f}%) • {Emojis.Economy.cash} **{fnumb(record['profit'])}**"
-            )
-        embed.add_field(name="Rankings", value="\n".join(lines), inline=False)
-
+        fields = [("Rankings", rankings)]
         if not selected:
             overview = await ctx.db.game_stats.get_guild_overview(ctx.guild.id)
             if overview:
                 popular = "\n".join(
-                    f"{Game(r['game']).icon} **{Game(r['game']).label}** — `{r['played']}` rounds"
+                    f"{_icon(Game(r['game']))} **{Game(r['game']).label}** — `{r['played']}` rounds"
                     for r in overview[:5]
                 )
-                embed.add_field(name="Most Played", value=popular, inline=False)
+                fields.append(("Most Played", popular))
 
-        embed.set_footer(text="Use /stats games to see your own record.")
-        await ctx.send(embed=embed)
+        view = stats_card(
+            f"{_icon(selected)} {selected.label} Leaderboard" if selected else "🏆 Game Leaderboard",
+            f"Top players in **{ctx.guild.name}**{'' if selected else ' across all games'}, ranked by wins.",
+            fields=fields,
+            footer="Use /stats games to see your own record.",
+            thumbnail=get_asset_url(ctx.guild),
+        )
+        await ctx.send(view=view)
 
     async def send_guild_stats(self, embed: discord.Embed, guild: discord.Guild) -> None:
         embed.add_field(name="Name", value=guild.name)
@@ -1338,15 +1329,16 @@ class Stats(Cog):
             await ctx.send_error("No name history found.")
             return
 
-        un_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in usernames)
-        nn_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in nicknames)
-        await ctx.send(
-            f"""
-            ### Username History for {user}
-            **Usernames:** {un_text or "*No usernames found.*"}
-            **Nicknames:** {nn_text or "*No nicknames found.*"}
-            """
+        def history(records: list[asyncpg.Record]) -> str:
+            # Newest first; stats_card trims the tail if someone has renamed hundreds of times.
+            return "\n".join(f"`{name}` {_since(changed_at, 'R')}" for name, changed_at in records) or "*None recorded.*"
+
+        view = stats_card(
+            f"Name History for {user}",
+            fields=[("Usernames", history(usernames)), ("Nicknames", history(nicknames))],
+            thumbnail=get_asset_url(user),
         )
+        await ctx.send(view=view)
 
     @command("lastseen", alias="ls", description="Shows when a user was last seen.", guild_only=True)
     @describe(member="The member to show the last seen for.")
@@ -1386,19 +1378,16 @@ class Stats(Cog):
                 await progress.update(f"Generating collage from {len(avatars)} avatars...")
                 file = await self.bot.render.avatar_collage(avatars)
 
-        embed = discord.Embed(
-            title=f"Avatar Collage for {user}",
-            description=(
-                f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
-                f"`{'Generating':<{12}}:` {timer.seconds:.3f}s\n\n"
-                f"Showing `{len(history)}` of up to `100` changes."
+        view = chart_card(
+            f"Avatar Collage for {user}",
+            f"Showing `{len(history)}` of up to `100` changes.",
+            file.filename,
+            footer=(
+                f"Last updated {_since(history[-1]['changed_at'], 'R')} • "
+                f"fetched in {fetching_time:.3f}s, rendered in {timer.seconds:.3f}s"
             ),
-            timestamp=history[-1]["changed_at"],
-            colour=helpers.Colour.white(),
         )
-        embed.set_image(url=f"attachment://{file.filename if file else 'collage.png'}")
-        embed.set_footer(text="Last updated")
-        await ctx.send(embed=embed, file=file)
+        await ctx.send(view=view, file=file)
 
     @command("presence", alias="ps", description="Shows the presence history of a user.", guild_only=True)
     @describe(member="The member to show the presence history for.")
@@ -1437,19 +1426,21 @@ class Stats(Cog):
                     ],
                 )
 
-        embed = discord.Embed(
-            title=f"Past 1 Month User Activity of {user}",
-            description=(
-                f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
-                f"`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n"
-                f"`{'Generating':<{12}}:` {timer.seconds:.3f}s"
-            ),
-            timestamp=breakdown.earliest,
-            colour=helpers.Colour.white(),
+        tracked = sum(breakdown.durations.values()) or 1
+        shares = " • ".join(
+            f"{label} **{breakdown.durations[key] / tracked:.0%}**"
+            for label, key in (("Online", "Online"), ("Idle", "Idle"), ("DND", "Do Not Disturb"), ("Offline", "Offline"))
         )
-        embed.set_image(url=f"attachment://{canvas.filename}")
-        embed.set_footer(text="Watching since")
-        await ctx.send(embed=embed, file=canvas)
+        view = chart_card(
+            f"Activity of {user} (last {query_days} days)",
+            shares,
+            canvas.filename,
+            footer=(
+                f"Watching since {_since(breakdown.earliest, 'D')} • fetched in {fetching_time:.3f}s, "
+                f"analysed in {analyzing_time:.3f}s, rendered in {timer.seconds:.3f}s"
+            ),
+        )
+        await ctx.send(view=view, file=canvas)
 
     @command(name="userinfo", alias="ui", description="Shows information about a user.", guild_only=True)
     @describe(member="The member to show information for.")
@@ -1517,7 +1508,7 @@ class Stats(Cog):
             badges.append("<:owner:1322355079109541940>")  # Emoji Server
 
         if isinstance(user, discord.Member) and user.premium_since is not None:
-            guild_related.append(f"**Boosting Since:** `{discord.utils.format_dt(user.premium_since, 'R')}`")
+            guild_related.append(f"**Boosting Since:** {discord.utils.format_dt(user.premium_since, 'R')}")
             badges.append("<:booster:1322354580184633344>")  # Emoji Server
 
         if badges:
@@ -1643,19 +1634,14 @@ class Stats(Cog):
 
     async def send_bot_health(self, ctx: Context) -> None:
         """Sends the bot health report; invoked by ``dev bothealth``, which owns the owner gate."""
-
-        LEVEL_COLOURS = {
-            HealthLevel.HEALTHY: helpers.Colour.lime_green(),
-            HealthLevel.WARNING: helpers.Colour.energy_yellow(),
-            HealthLevel.UNHEALTHY: helpers.Colour.darker_red(),
+        level_accents = {
+            HealthLevel.HEALTHY: Accent.success,
+            HealthLevel.WARNING: Accent.warning,
+            HealthLevel.UNHEALTHY: Accent.error,
         }
-
-        embed = discord.Embed(title="Bot Health Report")
 
         # Gather the raw runtime observations; the analysis is delegated to the service.
         pool = self.bot.db.pool_stats()
-        total_waiting = pool.waiting
-        current_generation = pool.generation
         connections = [
             ConnectionState(generation=c.generation, in_use=c.in_use, is_closed=c.is_closed)
             for c in pool.connections
@@ -1674,69 +1660,51 @@ class Stats(Cog):
 
         report = assess_bot_health(
             connections,
-            current_generation=current_generation,
+            current_generation=pool.generation,
             is_being_spammed=bool(being_spammed),
             command_waiters=command_waiters,
             has_failed_inner_tasks=bool(bad_inner_tasks),
             global_rate_limit=global_rate_limit,
         )
 
-        uptime = human_timedelta(self.bot.startup_timestamp, suffix=False)
-        ws_latency = self.bot.latency * 1000
+        description = (
+            f"Uptime: **{human_timedelta(self.bot.startup_timestamp, suffix=False)}**\n"
+            f"WebSocket Latency: `{self.bot.latency * 1000:.1f}ms`\n"
+            f"Global Rate Limit: {'**YES**' if global_rate_limit else 'No'}"
+        )
 
-        description = [
-            f"Uptime: **{uptime}**",
-            f"WebSocket Latency: `{ws_latency:.1f}ms`",
-            f"Global Rate Limit: {'**YES**' if global_rate_limit else 'No'}",
-            "",
-            f"Pool Waiters: {total_waiting} | Generation: {current_generation}",
-            f"Connections In Use: {pool.in_use}/{pool.size}",
-            f"Questionable Connections: {report.questionable_connections}",
-            "",
-            f"Current Spammers: {', '.join(str(s) for s in being_spammed) if being_spammed else 'None'}",
-            f"Commands Waiting: {command_waiters}",
-            f"Avatars Waiting: {len(self._avatar_data_batch)}",
-        ]
-
-        connection_value = "\n".join(
+        connection_lines = [
             f"<Holder i={index} gen={c.generation} in_use={c.in_use} closed={c.is_closed}>"
             for index, c in enumerate(connections, start=1)
+        ]
+        pool_value = (
+            f"Waiters: {pool.waiting} • Generation: {pool.generation} • In use: {pool.in_use}/{pool.size} • "
+            f"Questionable: {report.questionable_connections}\n"
+            f"```py\n{_fit(chr(10).join(connection_lines), 900) or 'No connections'}\n```"
         )
-        embed.add_field(name="Connections", value=f"```py\n{connection_value}\n```", inline=False)
-        embed.add_field(name="Inner Tasks", value=f"Total: {len(inner_tasks)}\nFailed: {bad_inner_tasks or 'None'}")
-        embed.add_field(name="Events Waiting", value=f"Total: {len(event_tasks)}", inline=False)
 
-        # Database query metrics
         tracker = self.bot.db.query_tracker
         db_lines = [
-            f"Total Queries: {fnumb(tracker.total_queries)}",
-            f"Avg Duration: `{tracker.avg_duration_ms:.2f}ms`",
-            f"Slow Queries (>{tracker._threshold_ms:.0f}ms): {len(tracker._slow_queries)}",
+            f"Total Queries: {fnumb(tracker.total_queries)} • Avg: `{tracker.avg_duration_ms:.2f}ms` • "
+            f"Slow (>{tracker._threshold_ms:.0f}ms): {len(tracker._slow_queries)}",
+            *(f"`{sq['duration_ms']}ms` {discord.utils.escape_markdown(sq['query'][:60])}" for sq in tracker.slow_queries(3)),
         ]
-        top_slow = tracker.slow_queries(3)
-        if top_slow:
-            db_lines.append("")
-            db_lines.extend(f"`{sq['duration_ms']}ms` {sq['query'][:60]}" for sq in top_slow)
-        embed.add_field(name="Database", value="\n".join(db_lines), inline=False)
 
-        # Cache stats
         guild_size, guild_max = self.bot.db.get_guild_config.get_stats()
         user_size, user_max = self.bot.db.get_user_config.get_stats()
         sentinel_size, sentinel_max = self.bot.db.get_guild_sentinel.get_stats()
-        cache_lines = [
-            f"Guilds: {guild_size}/{guild_max}",
-            f"Users: {user_size}/{user_max}",
-            f"Sentinels: {sentinel_size}/{sentinel_max}",
-        ]
-        embed.add_field(name="Cache", value="\n".join(cache_lines))
-
-        # Process info
         memory_usage = self.process.memory_full_info().uss / 1024**2
         cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
-        embed.add_field(name="Process", value=f"{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU")
-
-        # Extension status
-        embed.add_field(name="Extensions", value=f"Loaded: {len(self.bot.extensions)}\nCogs: {len(self.bot.cogs)}")
+        runtime = (
+            f"Process: {memory_usage:.2f} MiB • {cpu_usage:.2f}% CPU\n"
+            f"Extensions: {len(self.bot.extensions)} • Cogs: {len(self.bot.cogs)}\n"
+            f"Inner tasks: {len(inner_tasks)} (failed: {bad_inner_tasks or 'none'}) • "
+            f"Events waiting: {len(event_tasks)}\n"
+            f"Spammers: {', '.join(str(s) for s in being_spammed) if being_spammed else 'none'} • "
+            f"Commands waiting: {command_waiters} • Avatars waiting: {len(self._avatar_data_batch)}\n"
+            f"Cache: guilds {guild_size}/{guild_max} • users {user_size}/{user_max} • "
+            f"sentinels {sentinel_size}/{sentinel_max}"
+        )
 
         # Lavalink node (scraped from its Prometheus /metrics endpoint)
         ll = await self._fetch_lavalink_metrics()
@@ -1744,83 +1712,42 @@ class Stats(Cog):
             ll_uptime = human_timedelta(
                 discord.utils.utcnow() - datetime.timedelta(seconds=ll.uptime_seconds), suffix=False
             )
-            ll_lines = [
-                f"Players: {ll.playing_players} playing / {ll.players} total",
-                f"Uptime: **{ll_uptime}**",
+            lavalink = (
+                f"Players: {ll.playing_players} playing / {ll.players} total • Uptime: **{ll_uptime}**\n"
                 f"Memory: {ll.memory_used_bytes / 1024**2:.0f} MiB used "
-                f"({ll.memory_used_ratio * 100:.0f}% of {ll.memory_allocated_bytes / 1024**2:.0f} MiB)",
-                f"CPU: {ll.lavalink_load * 100:.1f}% LL / {ll.system_load * 100:.1f}% system "
-                f"({ll.cpu_cores} cores)",
-            ]
-            embed.add_field(name="Lavalink", value="\n".join(ll_lines), inline=False)
+                f"({ll.memory_used_ratio * 100:.0f}% of {ll.memory_allocated_bytes / 1024**2:.0f} MiB)\n"
+                f"CPU: {ll.lavalink_load * 100:.1f}% LL / {ll.system_load * 100:.1f}% system ({ll.cpu_cores} cores)"
+            )
         else:
-            embed.add_field(name="Lavalink", value="No node connected or metrics unavailable.", inline=False)
+            lavalink = "No node connected or metrics unavailable."
 
-        embed.colour = LEVEL_COLOURS[report.level]
-        embed.set_footer(text=f"{report.warnings} warning(s)")
-        embed.description = "\n".join(description)
-        await ctx.send(embed=embed)
+        view = stats_card(
+            "Bot Health Report",
+            description,
+            fields=[
+                ("Runtime", runtime),
+                ("Database", "\n".join(db_lines)),
+                ("Lavalink", lavalink),
+                ("Connection Pool", pool_value),
+            ],
+            footer=f"{report.warnings} warning(s)",
+            accent=level_accents[report.level],
+        )
+        await ctx.send(view=view)
 
     @command(hidden=True, description="Shows the current gateway traffic interaction with the bot.")
     @commands.is_owner()
     async def gateway(self, ctx: Context) -> None:
         """Gateway related stats."""
         yesterday = discord.utils.utcnow() - datetime.timedelta(days=1)
-        colour = helpers.Colour.white()
-
         traffic = summarize_gateway_traffic(self.bot.identifies, self.bot.resumes, since=yesterday)
-
-        builder = [
-            f"Total RESUME(s): `{traffic.total_resumes}`",
-            f"Total IDENTIFY(s): `{traffic.total_identifies}`",
-        ]
-
-        # shard_count = len(self.bot.shards)
-        # if total_identifies > (shard_count * 10):
-        #     issues = 2 + (total_identifies // 10) - shard_count
-        # else:
-        #     issues = 0
-        #
-        # for shard_id, shard in self.bot.shards.items():
-        #     badge = None
-        #     if shard.is_closed():
-        #         badge = Emojis.Status.offline
-        #         issues += 1
-        #     elif shard._parent._task and shard._parent._task.done():
-        #         exc = shard._parent._task.exception()
-        #         if exc is not None:
-        #             badge = '\N{FIRE}'
-        #             issues += 1
-        #         else:
-        #             badge = '\U0001f504'
-        #
-        #     if badge is None:
-        #         badge = Emojis.Status.online
-        #
-        #     stats = []
-        #     identify = identifies.get(shard_id, 0)
-        #     resume = resumes.get(shard_id, 0)
-        #     if resume != 0:
-        #         stats.append(f'R: {resume}')
-        #     if identify != 0:
-        #         stats.append(f'ID: {identify}')
-        #
-        #     if stats:
-        #         builder.append(f'Shard ID {shard_id}: {badge} ({', '.join(stats)})')
-        #     else:
-        #         builder.append(f'Shard ID {shard_id}: {badge}')
-        #
-        # if issues == 0:
-        #     colour = helpers.Colour.lime_green()
-        # elif issues < len(self.bot.shards) // 4:
-        #     colour = helpers.Colour.energy_yellow()
-        # else:
-        #     colour = helpers.Colour.light_red()
-
-        embed = discord.Embed(colour=colour, title="Gateway (last 24 hours)")
-        embed.description = "\n".join(builder)
-        embed.set_footer(text="None warnings")
-        await ctx.send(embed=embed)
+        view = stats_card(
+            "Gateway",
+            f"RESUMEs: `{traffic.total_resumes}`\nIDENTIFYs: `{traffic.total_identifies}`",
+            footer="Last 24 hours",
+            accent=Accent.neutral,
+        )
+        await ctx.send(view=view)
 
     @staticmethod
     async def send_records_table(ctx: Context, records: list[asyncpg.Record]) -> None:
@@ -1857,27 +1784,34 @@ class Stats(Cog):
         Note: Use a negative number to display from the bottom.
         """
         counter = self.bot.command_stats
+        if not counter:
+            await ctx.send_info("No commands have been used since the last restart.")
+            return
+
         total = sum(counter.values())
         slash_commands = self.bot.command_types_used[True]
+        cpm = total / self._minutes_up()
 
-        delta = discord.utils.utcnow() - self.bot.startup_timestamp
-        minutes = delta.total_seconds() / 60
-        cpm = total / minutes
-
-        if limit > 0:
-            common = counter.most_common(limit)
-            title = f"Top `{limit}` Commands"
+        if limit >= 0:
+            common = counter.most_common(limit or None)
+            title = f"Top {limit} Commands" if limit else "All Commands"
         else:
             common = counter.most_common()[limit:]
-            title = f"Bottom `{limit}` Commands"
+            title = f"Bottom {abs(limit)} Commands"
 
         image = await self.bot.render.bar_chart(
             dict(sorted(dict(common).items(), key=lambda item: item[1], reverse=True)),
             f"{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)",
             merge=True,
         )
-        await ctx.send(f"## {title}")
-        await FilePaginator.start(ctx, entries=[image], per_page=1)  # type: ignore[arg-type]
+        assert isinstance(image, discord.File)
+        view = chart_card(
+            title,
+            f"`{total}` commands since {_since(self.bot.startup_timestamp, 'R')} • `{cpm:.2f}`/minute • "
+            f"`{slash_commands}` slash",
+            image.filename,
+        )
+        await ctx.send(view=view, file=image)
 
     @_cmd.group(
         name="history",
@@ -1945,7 +1879,8 @@ class Stats(Cog):
         """Command history log for the last N days."""
         async with ctx.channel.typing():
             all_commands = {c.qualified_name: 0 for c in self.bot.walk_commands()}
-            records = await self.get_commands_stats(days=days) or []
+            # Every command, not the default top 5: everything past the limit was reported as unused.
+            records = await self.get_commands_stats(days=days, limit=len(all_commands) + 100) or []
             for record in records:
                 if record["command"] in all_commands:
                     all_commands[record["command"]] = record["uses"]
@@ -1961,14 +1896,14 @@ class Stats(Cog):
 
             top_ten = "\n".join(f"{record['command']}: {record['uses']}" for record in records[:10])
             bottom_ten = "\n".join(f"{record['command']}: {record['uses']}" for record in records[-10:])
-            embed.add_field(name="Top 10", value=top_ten)
-            embed.add_field(name="Bottom 10", value=bottom_ten)
+            embed.add_field(name="Top 10", value=top_ten or "None")
+            embed.add_field(name="Bottom 10", value=bottom_ten or "None")
 
             unused = ", ".join(name for name, uses in as_data if uses == 0)
             if len(unused) > 1024:
                 unused = "Way too many..."
 
-            embed.add_field(name="Unused", value=unused, inline=False)
+            embed.add_field(name="Unused", value=unused or "None", inline=False)
 
             await ctx.send(embed=embed, file=discord.File(io.BytesIO(rendered.encode()), filename="full_results.accesslog"))
 
