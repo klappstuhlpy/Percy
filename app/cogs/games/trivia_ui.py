@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from app.cogs.games.models import Game, GameResult
+from app.cogs.games.models import Game, GameResult, claim_free_reward
 from app.core.views import LayoutView
 from app.utils import fnumb, helpers
 from config import Emojis
@@ -107,6 +107,8 @@ class TriviaView(LayoutView):
         if index == self.trivia.correct_index:
             self.finished = True
             self.winner = interaction.user
+            if not claim_free_reward(interaction.guild.id, interaction.user.id, Game.TRIVIA):
+                self.reward = 0  # daily cap reached: still a win, no coins
             balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
             await balance.add(cash=self.reward)
             self._disable()

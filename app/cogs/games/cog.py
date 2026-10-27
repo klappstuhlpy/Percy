@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
+import logging
 import random
 from contextlib import suppress
 from pathlib import Path
@@ -23,9 +24,11 @@ from app.cogs.games import (
     heist_ui,
     higherlower_ui,
     horserace_ui,
+    keno_ui,
     mines_ui,
     minesweeper_ui,
     overview_ui,
+    plinko_ui,
     poker_bridge,
     roulette_ui,
     russianroulette_ui,
@@ -40,6 +43,8 @@ from app.cogs.games.engine import crash as crash_engine
 from app.cogs.games.engine import dice as dice_engine
 from app.cogs.games.engine import heist as heist_engine
 from app.cogs.games.engine import horserace as horserace_engine
+from app.cogs.games.engine import keno as keno_engine
+from app.cogs.games.engine import plinko as plinko_engine
 from app.cogs.games.engine import roulette as roulette_engine
 from app.cogs.games.engine.cards import MinimumBet, Payouts
 from app.cogs.games.engine.trivia import RawQuestion, build_round
@@ -68,6 +73,8 @@ if TYPE_CHECKING:
 
     from app.core.timer import Timer
     from app.database.base import Balance
+
+log = logging.getLogger(__name__)
 
 
 async def roulette_space_autocomplete(_, current: str) -> list[Choice[str | int | float]]:
@@ -104,6 +111,20 @@ class Games(Cog):
         self.wordle_played: set[tuple[int, int, int]] = set()
         self._trivia_questions: list[RawQuestion] | None = None
         self._wordle_words: list[str] | None = None
+
+    async def cog_load(self) -> None:
+        """Refunds roulette / horse-race stakes a previous process took and never settled."""
+        # ponytail: a hot reload mid horse race refunds here while the old instance's race coroutine
+        # still pays out; settle-by-claim (pay only rows open_bets_clear deleted) if reloads become routine.
+        try:
+            rows = await self.bot.db.game_stats.open_bets_take_all()
+            for row in rows:
+                balance = await self.bot.db.get_user_balance(row['user_id'], row['guild_id'])
+                await balance.add(cash=row['amount'])
+            if rows:
+                log.info('Refunded %d orphaned game bet(s) after restart', len(rows))
+        except Exception:
+            log.exception('Could not refund orphaned game bets')
 
     def _load_trivia(self) -> list[RawQuestion]:
         """Lazily loads and caches the bundled trivia question bank."""
@@ -158,6 +179,21 @@ class Games(Cog):
             )
             return False
         return True
+
+    async def _persist_bet(self, game: str, ctx: Context, bet: int) -> None:
+        """Records an in-memory table stake; telemetry-grade failure handling is wrong here, but never block play."""
+        assert ctx.guild is not None
+        try:
+            await self.bot.db.game_stats.open_bet_add(game, ctx.guild.id, ctx.channel.id, ctx.author.id, bet)
+        except Exception:
+            log.exception('Could not persist %s bet', game)
+
+    async def _settle_bets(self, game: str, channel_id: int) -> None:
+        """Drops a table's persisted stakes right before they are paid or refunded in-process (claim-then-pay)."""
+        try:
+            await self.bot.db.game_stats.open_bets_clear(game, channel_id)
+        except Exception:
+            log.exception('Could not clear persisted %s bets', game)
 
     async def _refund(self, ctx: Context, amount: int) -> None:
         """Credits back a stake taken by :meth:`_take_bet` when the game could not start after all."""
@@ -307,7 +343,7 @@ class Games(Cog):
             return
 
         tower = tower_ui.Tower(cast("discord.Member", ctx.author), bet)
-        await ctx.send(view=tower)
+        tower.message = await ctx.send(view=tower)
 
     @command("slots", description="Play a game of slots.", alias="slot", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")
@@ -317,7 +353,7 @@ class Games(Cog):
             return
 
         slots = slot_ui.SlotMachine(cast("discord.Member", ctx.author), bet)
-        await ctx.send(view=slots)
+        slots.message = await ctx.send(view=slots)
 
     @command("blackjack", description="Play a Blackjack game.", alias="bj", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")
@@ -585,10 +621,12 @@ class Games(Cog):
                 return
 
             roulette.place(roulette_ui.Bet(cast("discord.Member", ctx.author), space, bet))
+            await self._persist_bet('roulette', ctx, bet)
             await ctx.maybe_edit(roulette.message, view=roulette.view.render())
         else:
             roulette = roulette_ui.Table(ctx)
             roulette.place(roulette_ui.Bet(cast("discord.Member", ctx.author), space, bet))
+            await self._persist_bet('roulette', ctx, bet)
 
             message = await ctx.send(view=roulette.view.render())
 
@@ -663,7 +701,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
         game = higherlower_ui.HigherLowerGame(cast("discord.Member", ctx.author), bet)
-        await ctx.send(view=game)
+        game.message = await ctx.send(view=game)
 
     @command("dice", description="Bet on the total of two dice (2-12).", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.", target="The total to bet on (2-12).")
@@ -824,10 +862,12 @@ class Games(Cog):
                 await ctx.send_error("The gates are closed for this race. Wait for the next one.")
                 return
             table.place(horserace_ui.Bet(member, horse, bet))
+            await self._persist_bet('horserace', ctx, bet)
             await ctx.maybe_edit(table.message, view=table.view.render())
         else:
             table = horserace_ui.Table(ctx)
             table.place(horserace_ui.Bet(member, horse, bet))
+            await self._persist_bet('horserace', ctx, bet)
             message = await ctx.send(view=table.view.render())
             table.message = message
             self.horse_tables[ctx.channel.id] = table
@@ -856,6 +896,47 @@ class Games(Cog):
         game = crash_ui.CrashGame(cast("discord.Member", ctx.author), bet, auto)
         game.message = await ctx.send(view=game)
         await game.run(self.bot)
+
+    @command("plinko", description="Drop a ball through the pegs and win the multiplier it lands on.", guild_only=True)
+    @describe(bet="The amount of coins to bet.", rows="Peg rows: 8, 12 or 16.", risk="low, medium or high.")
+    async def plinko(self, ctx: Context, bet: int, rows: int = 12, risk: str = "medium") -> None:
+        """Drop a ball down 8, 12 or 16 rows of pegs. Higher risk means bigger edge slots and a duller middle."""
+        risk = risk.lower()
+        if rows not in plinko_engine.ROWS or risk not in plinko_engine.RISKS:
+            await ctx.send_error(
+                f"Rows must be one of **{', '.join(map(str, plinko_engine.ROWS))}** "
+                f"and risk one of **{', '.join(plinko_engine.RISKS)}**."
+            )
+            return
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        assert ctx.guild is not None
+        game = plinko_ui.PlinkoGame(cast("discord.Member", ctx.author), bet, rows, risk)
+        game.message = await ctx.send(view=game)
+        await game.play(self.bot, ctx.guild.id)
+
+    @command("keno", description="Pick 1-10 numbers from 40; ten are drawn. More matches pay more.", guild_only=True)
+    @describe(bet="The amount of coins to bet.", numbers="Numbers 1-40 separated by spaces, or a count 1-10 for a quick pick.")
+    async def keno(self, ctx: Context, bet: int, *, numbers: str) -> None:
+        """Choose up to ten numbers (or give a single count for random picks). Ten of forty numbers are drawn."""
+        try:
+            vals = [int(x) for x in numbers.replace(",", " ").split()]
+        except ValueError:
+            await ctx.send_error("Give numbers between **1** and **40**, separated by spaces.")
+            return
+        if len(vals) == 1 and 1 <= vals[0] <= keno_engine.MAX_PICKS:
+            picks = set(random.sample(range(1, keno_engine.POOL + 1), vals[0]))
+        else:
+            picks = set(vals)
+            if not 1 <= len(picks) <= keno_engine.MAX_PICKS or not all(1 <= n <= keno_engine.POOL for n in picks):
+                await ctx.send_error(f"Pick **1-{keno_engine.MAX_PICKS}** distinct numbers between **1** and **{keno_engine.POOL}**.")
+                return
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        assert ctx.guild is not None
+        game = keno_ui.KenoGame(cast("discord.Member", ctx.author), bet, picks)
+        game.message = await ctx.send(view=game)
+        await game.play(self.bot, ctx.guild.id)
 
     @command("scratch", description="Scratch three of nine tiles; win their average multiplier.", guild_only=True, hybrid=True)
     @describe(bet="The price of the card.")
@@ -1025,6 +1106,7 @@ class Games(Cog):
                 roulette.message = await channel.fetch_message(message_id)
             except discord.HTTPException:
                 assert roulette.ctx.guild is not None
+                await self._settle_bets('roulette', channel_id)
                 balances = await self._balances_for(roulette.ctx.guild.id, [bet.placed_by.id for bet in roulette.bets])
                 for bet in roulette.bets:
                     await balances[bet.placed_by.id].add(cash=bet.amount)
@@ -1040,6 +1122,7 @@ class Games(Cog):
         )
         await asyncio.sleep(5)
 
+        await self._settle_bets('roulette', channel_id)
         result = roulette_engine.spin()
         # Get all bets that are on the winning space.
         winning_spaces = list(roulette.get_winning_spaces(result))
@@ -1088,6 +1171,7 @@ class Games(Cog):
             try:
                 table.message = await channel.fetch_message(message_id)
             except discord.HTTPException:
+                await self._settle_bets('horserace', channel_id)
                 balances = await self._balances_for(guild_id, [bet.placed_by.id for bet in table.bets])
                 for bet in table.bets:
                     await balances[bet.placed_by.id].add(cash=bet.amount)
@@ -1104,6 +1188,7 @@ class Games(Cog):
                 await table.message.edit(view=table.view.render(frame, racing=True))
             await asyncio.sleep(1.1)
 
+        await self._settle_bets('horserace', channel_id)
         pool = table.pool
         multiplier = horserace_engine.parimutuel_multiplier(pool, table.total_on(winner + 1))
         balances = await self._balances_for(guild_id, [bet.placed_by.id for bet in table.bets])

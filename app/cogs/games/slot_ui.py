@@ -4,6 +4,7 @@ import asyncio
 import enum
 import inspect
 import random
+from contextlib import suppress
 from typing import TYPE_CHECKING, ClassVar
 
 import discord
@@ -16,7 +17,7 @@ from app.utils import find_word, fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Iterable, Sequence
 
 
 class Fruits(enum.Enum):
@@ -36,6 +37,30 @@ class Fruits(enum.Enum):
     GRAPE = "🍇"
 
     COOL = "🆒"
+
+
+#: Payout (in bets) for a line of three matching fruits, wilds substituting; a line of only wilds pays more.
+LINE_PAYOUT = 3
+WILD_LINE_PAYOUT = 5
+
+
+def line_multiplier(line: Iterable[Fruits]) -> int:
+    """Payout multiplier of one line: 🆒 is wild, and a line of only 🆒 pays ``WILD_LINE_PAYOUT``."""
+    fruits = {f for f in line if f is not Fruits.COOL}
+    if not fruits:
+        return WILD_LINE_PAYOUT
+    return LINE_PAYOUT if len(fruits) == 1 else 0
+
+
+def grid_multiplier(grid: Sequence[Sequence[Fruits]]) -> int:
+    """Sum of every winning line (all rows, columns and both diagonals) of a square grid.
+
+    Exact RTP for the 3x3, 13-symbol machine is ~0.936.
+    """
+    n = len(grid)
+    lines = [list(row) for row in grid] + [[grid[r][c] for r in range(n)] for c in range(n)]
+    lines += [[grid[i][i] for i in range(n)], [grid[i][n - 1 - i] for i in range(n)]]
+    return sum(line_multiplier(line) for line in lines)
 
 
 class SlotMachine(LayoutView):
@@ -66,6 +91,7 @@ class SlotMachine(LayoutView):
         # creates a rows x columns 2D array of random fruits
         self.slots: np.ndarray | None = None
         self.finished: bool = False
+        self._timed_out: bool = False
 
         self._start = discord.ui.Button(label="Start", style=discord.ButtonStyle.blurple)
         self._start.callback = self._on_start  # type: ignore[assignment]
@@ -172,37 +198,10 @@ class SlotMachine(LayoutView):
             yield self.build(i)
 
     def check_winning(self) -> int:
-        """Check if the slot machine has a winning combination.
-
-        Multipliers:
-        - 3 of the same fruit: 3x
-        - 5 of the same fruit: 5x
-
-        If fruit is COOL, it is considered a wild card and can be used to substitute any other fruit.
-        """
+        """Total multiplier: every winning line pays (🆒 is wild), see :func:`grid_multiplier`."""
         if self.slots is None:
             return 0
-
-        # check rows
-        for row in self.slots:
-            if len(set(row)) == 1:
-                return 5 if row[0] == Fruits.COOL else 3
-
-        # check columns
-        for col in self.slots.T:
-            if len(set(col)) == 1:
-                return 5 if col[0] == Fruits.COOL else 3
-
-        # check diagonals
-        diagonal = self.slots.diagonal()
-        if len(set(diagonal)) == 1:
-            return 5 if diagonal[0] == Fruits.COOL else 3
-
-        diagonal = np.fliplr(self.slots).diagonal()
-        if len(set(diagonal)) == 1:
-            return 5 if diagonal[0] == Fruits.COOL else 3
-
-        return 0
+        return grid_multiplier(self.slots.tolist())
 
     def get_winning(self, bet: int) -> tuple[int, int]:
         """Calculate the winning amount."""
@@ -225,6 +224,19 @@ class SlotMachine(LayoutView):
         """Recompose the layout: the slot card plus the control row (omitted while rolling)."""
         self.clear_items()
         self.add_item(self.build_container(display, status, buttons=buttons))
+
+    async def on_timeout(self) -> None:
+        """Refunds a stake that was never spun (a spun round is already settled)."""
+        self._timed_out = True
+        if self._start.disabled:  # spinning, or the last spin already paid
+            return
+        self._start.disabled = True  # claim the refund before the first await
+        guild_id = self.player.guild.id
+        await (await self.player._state._get_client().db.get_user_balance(self.player.id, guild_id)).add(cash=self.bet)  # type: ignore[attr-defined]
+        self._compose(status="`⏰ Timed out` — stake refunded.", buttons=False)
+        if self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
     async def _on_start(self, interaction: discord.Interaction) -> None:
         """Spins the slot machine, revealing one row at a time."""
@@ -280,6 +292,11 @@ class SlotMachine(LayoutView):
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
                 ephemeral=True,
             )
+            return
+
+        if self._timed_out:  # the view expired while the stake was being taken
+            await (await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)).add(cash=self.bet)
+            await interaction.response.defer()
             return
 
         self.reset()

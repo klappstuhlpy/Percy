@@ -357,6 +357,28 @@ class StatsRepository(BaseRepository):
         """
         return await self.fetch(query, guild_id, datetime.timedelta(days=days), granularity)
 
+    async def get_guild_command_failures(self, guild_id: int, *, days: int) -> list[asyncpg.Record]:
+        """Per-command ``(command, total, failed)`` for a guild over the trailing ``days``, busiest first."""
+        query = """
+            SELECT command, COUNT(*) AS total, COUNT(*) FILTER (WHERE failed) AS failed
+            FROM commands
+            WHERE guild_id = $1 AND used > (CURRENT_TIMESTAMP - $2::interval)
+            GROUP BY command
+            ORDER BY total DESC;
+        """
+        return await self.fetch(query, guild_id, datetime.timedelta(days=days))
+
+    async def get_activity_grid(self, guild_id: int, user_id: int | None, *, days: int) -> list[asyncpg.Record]:
+        """``(dow, hour, count)`` rows for a guild or one member (``used`` is naive UTC; dow 0 = Sunday)."""
+        query = """
+            SELECT EXTRACT(DOW FROM used)::int AS dow, EXTRACT(HOUR FROM used)::int AS hour, COUNT(*) AS count
+            FROM commands
+            WHERE guild_id = $1 AND ($3::bigint IS NULL OR author_id = $3)
+              AND used > (CURRENT_TIMESTAMP - $2::interval)
+            GROUP BY dow, hour;
+        """
+        return await self.fetch(query, guild_id, datetime.timedelta(days=days), user_id)
+
 
 # -- Emoji Stats -----------------------------------------------------------
 
@@ -480,6 +502,23 @@ class GameStatsRepository(BaseRepository):
     ``/stats games`` command group. Methods return raw records/scalars; the cog
     owns the Discord-side formatting.
     """
+
+    # -- open bets (roulette / horse race) --------------------------------
+
+    async def open_bet_add(self, game: str, guild_id: int, channel_id: int, user_id: int, amount: int) -> None:
+        """Remembers a debited stake of a shared table so a restart can refund it."""
+        await self.execute(
+            'INSERT INTO game_bets (game, guild_id, channel_id, user_id, amount) VALUES ($1, $2, $3, $4, $5)',
+            game, guild_id, channel_id, user_id, amount,
+        )
+
+    async def open_bets_clear(self, game: str, channel_id: int) -> None:
+        """Forgets a table's stakes once it settles (or is refunded in-process)."""
+        await self.execute('DELETE FROM game_bets WHERE game = $1 AND channel_id = $2', game, channel_id)
+
+    async def open_bets_take_all(self) -> list[Any]:
+        """Atomically removes and returns every remembered stake (``guild_id, user_id, amount``)."""
+        return await self.fetch('DELETE FROM game_bets RETURNING guild_id, user_id, amount')
 
     # -- writes -----------------------------------------------------------
 

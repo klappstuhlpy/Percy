@@ -278,18 +278,7 @@ class TableView(LayoutView):
         balance: Balance = await self.table.ctx.db.get_user_balance(self.table.ctx.user.id, self.table.ctx.guild.id)
 
         if not hand.finished:
-            # Compare blackjack values for split (face cards all worth 10)
-            def bj_value(card_value: int) -> int:
-                if card_value >= 10:
-                    return 11 if card_value == 14 else 10  # Ace=11, face cards=10
-                return card_value
-
-            cards = hand.cards
-            can_split = (
-                len(hand) == 2
-                and bj_value(cards[0].value) == bj_value(cards[1].value)
-                and hand.bet <= balance.cash
-            )
+            can_split = self.table.can_split and hand.bet <= balance.cash
             insurance_cost = hand.bet // 2
 
             self.split.disabled = not can_split
@@ -341,9 +330,10 @@ class TableView(LayoutView):
 
     async def _on_split(self, interaction: discord.Interaction) -> None:
         """Splits the hand"""
-        values = [min(v, 10) if v != 14 else 11 for v in self.table.active_hand.card_arr[:, 0]]
-        if len(values) != 2 or values[0] != values[1]:
-            await interaction.response.send_message(f"{Emojis.error} You can only split a starting pair.", ephemeral=True)
+        if not self.table.can_split:
+            await interaction.response.send_message(
+                f"{Emojis.error} You can only split a starting pair, up to 3 hands.", ephemeral=True
+            )
             return
         if not await self._pay(interaction, self.table.active_hand.bet):
             return

@@ -8,7 +8,7 @@ import discord
 from discord import PartialEmoji
 
 from app.cogs.games.engine.tictactoe import Board, BoardKind
-from app.cogs.games.models import Game, GameResult
+from app.cogs.games.models import Game, GameResult, claim_free_reward
 from app.core import LayoutView
 from app.utils import fnumb, helpers, pluralize
 from config import Emojis
@@ -104,7 +104,9 @@ class TicTacToeButton(discord.ui.Button["TicTacToe"]):
 
             if winner is not BoardKind.Empty:
                 user_balance: Balance = await interaction.client.db.get_user_balance(player.member.id, interaction.guild.id)
-                amount: int = random.randint(25, 100)
+                amount: int = (
+                    random.randint(25, 100) if claim_free_reward(guild_id, player.member.id, Game.TICTACTOE) else 0
+                )
                 await user_balance.add(cash=amount)
 
                 winning_player = next_player if next_player.kind is winner else player

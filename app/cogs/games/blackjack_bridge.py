@@ -77,6 +77,10 @@ class Blackjack:
     def advance_hand(self) -> Hand:
         return self.engine.advance_hand()
 
+    @property
+    def can_split(self) -> bool:
+        return self.engine.can_split
+
     def split(self) -> Hand:
         return self.engine.split()
 

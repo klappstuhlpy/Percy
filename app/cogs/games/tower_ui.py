@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from contextlib import suppress
 from typing import ClassVar
 
 import discord
@@ -39,6 +40,7 @@ class Tower(LayoutView):
         self._stack = 0
         self.multiplier: float = 1.0
         self.finished: bool = False
+        self._restarting: bool = False
 
         self.restart = discord.ui.Button(label="Restart", style=discord.ButtonStyle.green)
         self.restart.callback = self._on_restart  # type: ignore[assignment]
@@ -134,10 +136,12 @@ class Tower(LayoutView):
             await interaction.response.defer()
             return
         self.finished = False
+        self._restarting = True  # the new stake isn't taken yet: a timeout now must not refund it
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
 
         if await interaction.client.db.economy.debit_cash(interaction.user.id, interaction.guild.id, self.bet) is None:  # type: ignore[attr-defined]
             self.finished = True
+            self._restarting = False
             await interaction.response.send_message(
                 f"{Emojis.error} You do not have enough money to bet that amount.\n"
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
@@ -146,8 +150,22 @@ class Tower(LayoutView):
             return
 
         self.reset()
+        self._restarting = False
         self._compose()
         await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self) -> None:
+        """Walking away cashes out at the current multiplier (x1.00 -- a refund -- with nothing stacked)."""
+        # Checked and flipped with no await between, so a click can't also pay out.
+        if self.finished or self._restarting:
+            return
+        self.finished = True
+        amount = round(self.bet * self.multiplier)
+        await (await self.player._state._get_client().db.get_user_balance(self.player.id, self.player.guild.id)).add(cash=amount)  # type: ignore[attr-defined]
+        self._compose()
+        if self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
     async def _on_stack(self, interaction: discord.Interaction) -> None:
         if self.finished:

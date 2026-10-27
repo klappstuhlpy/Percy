@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import suppress
+
 import discord
 
 from app.cogs.games.engine.higherlower import HigherLower
@@ -108,6 +110,20 @@ class HigherLowerGame(LayoutView):
             await interaction.response.edit_message(view=self)
             await self._record(interaction, GameResult.LOSS, -self.bet)
             self.stop()
+
+    async def on_timeout(self) -> None:
+        """Walking away cashes out at the current multiplier (x1.00 -- a refund -- before the first call)."""
+        # ``finished`` is checked and flipped with no await between, so a click can't also pay out.
+        if self.finished:
+            return
+        self.finished = True
+        payout = self._potential()
+        await (await self.player._state._get_client().db.get_user_balance(self.player.id, self.player.guild.id)).add(cash=payout)  # type: ignore[attr-defined]
+        self._status = f"`⏰ Timed out` — cashed out {Emojis.Economy.cash} **{fnumb(payout)}**."
+        self._compose()
+        if self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
     async def _on_higher(self, interaction: discord.Interaction) -> None:
         await self._resolve_guess(interaction, True)

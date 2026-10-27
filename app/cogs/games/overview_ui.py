@@ -32,6 +32,8 @@ GAME_DETAILS: dict[Game, tuple[str, str]] = {
     Game.HORSERACE: ('horserace <bet> <horse>', 'Back a horse; parimutuel payouts after the race.'),
     Game.RUSSIAN_ROULETTE: ('russianroulette [ante]', 'Players ante in — the last one standing takes the pot.'),
     Game.CRASH: ('crash <bet> [auto]', 'Ride a climbing multiplier and cash out before it crashes.'),
+    Game.PLINKO: ('plinko <bet> [rows] [risk]', 'Drop a ball through the pegs; win the multiplier it lands on.'),
+    Game.KENO: ('keno <bet> <numbers>', 'Pick 1-10 numbers from 40; ten are drawn, more matches pay more.'),
     Game.SCRATCH: ('scratch <bet>', 'Scratch three of nine tiles; you win their average multiplier.'),
     Game.SNAKE_EYES: ('snakeeyes <bet>', 'Roll two dice — one 1 pays x2, double 1s pay x15.'),
     Game.GAMBLE: ('gamble <bet>', 'Out-roll Percy on a d12; ties go to the house.'),
@@ -48,7 +50,7 @@ GAME_DETAILS: dict[Game, tuple[str, str]] = {
 CASINO_GAMES: tuple[Game, ...] = (
     Game.BLACKJACK, Game.SLOTS, Game.ROULETTE, Game.POKER, Game.TOWER, Game.HIGHERLOWER,
     Game.DICE, Game.MINES, Game.COINFLIP, Game.HORSERACE, Game.RUSSIAN_ROULETTE,
-    Game.CRASH, Game.SCRATCH, Game.SNAKE_EYES, Game.GAMBLE, Game.FIGHT, Game.HEIST,
+    Game.CRASH, Game.PLINKO, Game.KENO, Game.SCRATCH, Game.SNAKE_EYES, Game.GAMBLE, Game.FIGHT, Game.HEIST,
 )
 
 #: Free-to-play party games.

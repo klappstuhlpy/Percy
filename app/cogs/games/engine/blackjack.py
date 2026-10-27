@@ -159,6 +159,10 @@ class Hand(BaseHand):
         return blocks
 
 
+#: Most hands one player may hold after re-splits (the original plus two splits).
+MAX_HANDS = 3
+
+
 class BlackjackGame:
     """The pure blackjack game state and rules: the deck, the dealer and player hands,
     dealing, hitting, standing (with the dealer drawing rules), splitting and winner
@@ -215,7 +219,10 @@ class BlackjackGame:
 
         if self.playing_players:
             return
+        self._play_dealer()
 
+    def _play_dealer(self) -> None:
+        """Reveals the hole card and draws the dealer's hand once every player hand is done."""
         self.dealer.set_card_hidden(1, False)
 
         if len(self.player_hands) == 1 and self.player_hands[0].value > 21:
@@ -226,8 +233,23 @@ class BlackjackGame:
         while self.dealer.value <= 16:
             self.hit(self.dealer)
 
+    @property
+    def can_split(self) -> bool:
+        """True when the active hand is a starting pair of equal blackjack value and the hand limit allows it."""
+        hand = self.active_hand
+        if hand.finished or len(hand) != 2 or len(self.player_hands) >= MAX_HANDS:
+            return False
+        a, b = (11 if c.value == 14 else min(c.value, 10) for c in hand.cards)
+        return a == b
+
     def split(self) -> Hand:
-        """Splits the active hand into two, drawing a new card for each. Returns the new hand."""
+        """Splits the active hand into two, drawing a new card for each. Returns the new hand.
+
+        Split aces get exactly one card each and stand automatically.
+        """
+        if not self.can_split:
+            raise ValueError("this hand cannot be split")
+        aces = self.active_hand.cards[0].value == 14
         new_hand = Hand(bet=self.active_hand.bet)
         new_hand.splitted = True
         self.active_hand.splitted = True
@@ -242,6 +264,10 @@ class BlackjackGame:
         self.hit(self.active_hand)
 
         self.player_hands.append(new_hand)
+        if aces:
+            new_hand.finished = self.active_hand.finished = True
+            if not self.playing_players:
+                self._play_dealer()
         return new_hand
 
     def surrender(self) -> None:
