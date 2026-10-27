@@ -13,7 +13,6 @@ working across bot restarts once :class:`AIModerationButton` is registered with
 
 from __future__ import annotations
 
-from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -201,8 +200,10 @@ class AIModerationButton(
 
         interaction.client.dispatch('mod_action', interaction.guild.id, 'warn', self.target_id, moderator.id,
                                     _reason_from(interaction.message))
-        with suppress(discord.HTTPException):
-            await target.send(f'{Emojis.warning} You were warned in **{interaction.guild.name}**.')
+        from app.cogs.modlog.ui import send_warn_dm
+
+        # The AI's reason stays moderator-side; the member only learns they were warned.
+        await send_warn_dm(target, None)
         await self._resolve(interaction, f'\N{WARNING SIGN} Warned by {moderator.mention}', _RESOLVED_COLOUR)
 
     async def _do_kick(self, interaction: discord.Interaction) -> None:

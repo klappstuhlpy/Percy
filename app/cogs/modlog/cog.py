@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-import textwrap
 from contextlib import suppress
+from typing import TYPE_CHECKING
 
 import discord
 
-from app.cogs.modlog.models import CaseType, ModerationCase, summarize_case_counts
-from app.cogs.modlog.ui import build_case_embed
+from app.cogs.modlog.models import CaseType, ModerationCase
+from app.cogs.modlog.ui import CaseHistoryView, build_case_view, build_warn_result_view, send_warn_dm
 from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, command, describe, group
-from app.core.pagination import LinePaginator
-from app.utils import get_asset_url, helpers, truncate
 from app.utils.checks import hierarchy_error
-from config import Emojis
+
+if TYPE_CHECKING:
+    import datetime
+
+#: How many cases ``cases`` loads. Enough for any real history while keeping the summary honest.
+HISTORY_LIMIT = 500
 
 
 class ModLog(Cog):
@@ -43,12 +46,46 @@ class ModLog(Cog):
         channel = self.bot.get_channel(channel_id)
         return channel if isinstance(channel, (discord.TextChannel, discord.Thread)) else None
 
+    async def _resolve_user(self, user_id: int | None) -> discord.User | None:
+        if user_id is None:
+            return None
+        if (user := self.bot.get_user(user_id)) is not None:
+            return user
+        with suppress(discord.HTTPException):
+            return await self.bot.fetch_user(user_id)
+        return None
+
+    async def _case_expiry(self, case: ModerationCase) -> datetime.datetime | None:
+        """Best-effort expiry of a temporary action; cases themselves store no duration."""
+        if case.action in ('tempban', 'tempmute'):
+            # ponytail: the tempban command arms its timer just after dispatching the case, so a
+            # very fast post can miss it; storing the expiry on the case would need a migration.
+            timer = await self.bot.timers.fetch_member_timer(case.action, case.guild_id, case.target_id)
+            return timer.expires if timer is not None else None
+        if case.action == 'timeout':
+            guild = self.bot.get_guild(case.guild_id)
+            member = guild.get_member(case.target_id) if guild else None
+            until = member.timed_out_until if member else None
+            return until if until and until > discord.utils.utcnow() else None
+        return None
+
+    async def build_case_view(self, case: ModerationCase) -> discord.ui.LayoutView:
+        """The CV2 card for ``case`` with its users and expiry resolved."""
+        return build_case_view(
+            case,
+            target=await self._resolve_user(case.target_id),
+            moderator=await self._resolve_user(case.moderator_id),
+            expires=await self._case_expiry(case),
+        )
+
     async def _post_to_modlog(self, case: ModerationCase) -> None:
         channel = await self._get_modlog_channel(case.guild_id)
         if channel is None:
             return
         try:
-            message = await channel.send(embed=build_case_embed(self.bot, case))
+            message = await channel.send(
+                view=await self.build_case_view(case), allowed_mentions=discord.AllowedMentions.none()
+            )
         except discord.HTTPException:
             return
         await self.bot.db.cases.set_log_message(case.id, message.id)
@@ -61,7 +98,13 @@ class ModLog(Cog):
             return
         try:
             message = await channel.fetch_message(case.log_message_id)
-            await message.edit(embed=build_case_embed(self.bot, case))
+            # Posts from before the CV2 cards are embeds; a CV2 edit must clear content/embeds.
+            await message.edit(
+                content=None,
+                embeds=[],
+                view=await self.build_case_view(case),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
         except discord.HTTPException:
             pass
 
@@ -131,12 +174,13 @@ class ModLog(Cog):
             return
 
         case = await self.record_case(ctx.guild.id, CaseType.WARN.value, member.id, ctx.author.id, reason)
+        warn_count = await self.bot.db.cases.count_cases(ctx.guild.id, action=CaseType.WARN.value, target_id=member.id)
+        delivered = await send_warn_dm(member, reason, case_index=case.index, warn_count=warn_count)
 
-        with suppress(discord.HTTPException):
-            note = f': {truncate(reason, 1500)}' if reason else '.'
-            await member.send(f'{Emojis.warning} You were warned in **{ctx.guild.name}**{note}')
-
-        await ctx.send_success(f'Warned {member.mention} • **Case #{case.index}**.')
+        await ctx.send(
+            view=build_warn_result_view(member, case.index, warn_count=warn_count, dm_delivered=delivered),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     @command(
         'cases',
@@ -149,31 +193,18 @@ class ModLog(Cog):
     async def cases(self, ctx: Context, user: discord.User) -> None:
         """List a member's moderation cases."""
         assert ctx.guild is not None
-        records = await self.bot.db.cases.get_user_cases(ctx.guild.id, user.id)
+        # The repository defaults to 25 rows, which silently cut both the list and the summary.
+        records = await self.bot.db.cases.get_user_cases(ctx.guild.id, user.id, limit=HISTORY_LIMIT)
         if not records:
             await ctx.send_info(f'**{user}** has a clean record — no cases.')
             return
 
-        cases = [ModerationCase.from_record(record) for record in records]
-        summary = summarize_case_counts([case.action for case in cases])
-
-        entries = []
-        for case in cases:
-            case_type = case.type
-            label = case_type.label if case_type else case.action.title()
-            emoji = case_type.emoji if case_type else '\N{MEMO}'
-            reason = textwrap.shorten(case.reason or 'No reason provided.', width=100)
-            entries.append(
-                f'{emoji} **#{case.index}** • {label} • {discord.utils.format_dt(case.created_at, "R")}\n{reason}'
-            )
-
-        embed = discord.Embed(
-            title=f'Moderation history for {user}',
-            description=f'**Summary:** {summary}\n\n',
-            colour=helpers.Colour.white(),
+        total = len(records)
+        if total == HISTORY_LIMIT:
+            total = await self.bot.db.cases.count_user_cases(ctx.guild.id, user.id)
+        await CaseHistoryView.start(
+            ctx, entries=[ModerationCase.from_record(record) for record in records], user=user, total=total
         )
-        embed.set_thumbnail(url=get_asset_url(user))
-        await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
 
     @command(
         'case',
@@ -189,7 +220,10 @@ class ModLog(Cog):
         if record is None:
             await ctx.send_error(f'Case #{index} does not exist.')
             return
-        await ctx.send(embed=build_case_embed(self.bot, ModerationCase.from_record(record)))
+        await ctx.send(
+            view=await self.build_case_view(ModerationCase.from_record(record)),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     @command(
         'reason',

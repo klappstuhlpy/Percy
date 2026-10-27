@@ -244,10 +244,12 @@ async def apply_member_action(
             elif action == 'warn':
                 if member.bot:
                     raise MemberActionError(400, 'cannot warn a bot')
+                from app.cogs.modlog.ui import send_warn_dm
+
                 # A warning is only a case plus a courtesy DM — closed DMs are not an error.
-                with suppress(discord.HTTPException):
-                    note = f': {reason[:1500]}' if reason else '.'
-                    await member.send(f'\N{WARNING SIGN} You were warned in **{guild.name}**{note}')
+                # The case is recorded by the dispatch below, so this is the next warn on record.
+                warns = await bot.db.cases.count_cases(guild.id, action='warn', target_id=user_id)
+                await send_warn_dm(member, reason, warn_count=warns + 1)
     except discord.Forbidden:
         raise MemberActionError(403, f'I am missing the permissions to {action} this member') from None
     except discord.HTTPException as e:

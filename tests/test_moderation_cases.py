@@ -19,8 +19,6 @@ from app.cogs.moderation.antispam import SpamChecker, check_raid, mention_spam_b
 from app.cogs.moderation.cog import Moderation
 from app.cogs.moderation.infractions import softban
 from app.cogs.moderation.models import SpamCheckerResult
-from app.cogs.modlog.models import ModerationCase
-from app.cogs.modlog.ui import FIELD_LIMIT, build_case_embed
 from app.database.repositories import CasesRepository
 
 PERCY = 999
@@ -230,31 +228,7 @@ async def test_softban_success() -> None:
     bot.timers.delete_member_timer.assert_not_awaited()
 
 
-# -- case embed + numbering ---------------------------------------------------------------------
-
-
-def _case(reason: str | None) -> ModerationCase:
-    return ModerationCase(
-        id=1, guild_id=1, index=4, action="warn", target_id=7, moderator_id=8, reason=reason,
-        log_message_id=None, created_at=datetime.datetime(2026, 1, 1),
-    )
-
-
-def test_long_reason_is_truncated_to_the_field_limit() -> None:
-    bot = MagicMock()
-    bot.get_user.return_value = None
-    embed = build_case_embed(bot, _case("x" * 3000))
-
-    value = embed.fields[2].value
-    assert value is not None and len(value) == FIELD_LIMIT
-    assert value.endswith("\N{HORIZONTAL ELLIPSIS}")
-
-
-def test_short_and_missing_reasons_are_unchanged() -> None:
-    bot = MagicMock()
-    bot.get_user.return_value = None
-    assert build_case_embed(bot, _case("spam")).fields[2].value == "spam"
-    assert build_case_embed(bot, _case(None)).fields[2].value == "*No reason provided.*"
+# -- case numbering (the case card is covered in test_modlog_ui.py) ---------------------------
 
 
 async def test_case_number_comes_from_the_high_water_mark() -> None:
