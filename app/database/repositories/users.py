@@ -256,7 +256,7 @@ class UsersRepository(BaseRepository):
         # member would own two wallets that every ``WHERE user_id AND guild_id`` update then credits twice.
         # ponytail: advisory lock stands in for the missing unique index; swap for ON CONFLICT once a migration adds it
         async with self.acquire() as conn:
-            await conn.execute(_WALLET_SESSION_LOCK, user_id, guild_id)
+            await conn.execute(_WALLET_SESSION_LOCK, str(user_id), str(guild_id))
             try:
                 record = await conn.fetchrow(
                     "SELECT * FROM economy WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
@@ -265,7 +265,7 @@ class UsersRepository(BaseRepository):
                         "INSERT INTO economy (user_id, guild_id, cash, bank) VALUES ($1, $2, 0, 0) RETURNING *;",
                         user_id, guild_id)
             finally:
-                await conn.execute(_WALLET_SESSION_UNLOCK, user_id, guild_id)
+                await conn.execute(_WALLET_SESSION_UNLOCK, str(user_id), str(guild_id))
         return record
 
     async def find_balance_record(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
