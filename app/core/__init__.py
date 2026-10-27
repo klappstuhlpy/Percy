@@ -19,7 +19,7 @@ from .components_v2 import Accent, NoticeView, make_notice
 from .context import Context, HybridContext, HybridContextProtocol
 from .converter import *
 from .embeds import EmbedBuilder
-from .errors import ErrorCategory, ServiceUnavailableError, categorize_error
+from .errors import ServiceUnavailableError
 from .flags import *
 from .models import AppBadArgument, BadArgument, Cog, CogT
 from .permissions import PermissionSpec, PermissionTemplate

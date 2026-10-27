@@ -327,7 +327,8 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         Called when the paginator times out.
         """
         if self.msg:
-            await self.msg.edit(view=None)
+            with suppress(discord.HTTPException):
+                await self.msg.edit(view=None)
 
     @abstractmethod
     async def format_page(self, entries: list[T], /) -> discord.Embed:
@@ -507,10 +508,11 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         else:
             interaction: discord.Interaction = ctx
             if interaction.response.is_done():
-                await interaction.followup.send(**kwargs, ephemeral=ephemeral)
+                # original_response() would be the deferred/earlier message, not this followup.
+                message = await interaction.followup.send(**kwargs, ephemeral=ephemeral, wait=True)
             else:
                 await interaction.response.send_message(**kwargs, ephemeral=ephemeral)
-            message = await interaction.original_response()
+                message = await interaction.original_response()
         return message
 
     @classmethod
@@ -575,9 +577,10 @@ class LinePaginator(BasePaginator[T]):
         embed = self.embed.copy()
         custom_fields = isinstance(entries[0], tuple)
 
-        def fmt(x: T) -> str:
+        def fmt(index: int, x: T) -> str:
+            # Positional, not entries.index(x): equal entries all got the first one's number.
             if self.numerate:
-                return f"{self.numerate_start + entries.index(x)}. {x}"
+                return f"{self.numerate_start + index}. {x}"
             return str(x)
 
         match self.location:
@@ -586,9 +589,9 @@ class LinePaginator(BasePaginator[T]):
                     for name, value, inline in entries:
                         embed.add_field(name=name, value=value, inline=inline)
                 else:
-                    embed.add_field(name="Results", value="\n".join(fmt(e) for e in entries))
+                    embed.add_field(name="Results", value="\n".join(fmt(i, e) for i, e in enumerate(entries)))
             case "description":
-                embed.description = "\n".join(fmt(e) for e in entries)
+                embed.description = "\n".join(fmt(i, e) for i, e in enumerate(entries))
 
         return embed
 

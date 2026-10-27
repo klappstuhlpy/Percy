@@ -81,7 +81,7 @@ class View(discord.ui.View):
             (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
             or (not is_iterable and interaction.user.id != members.id)
         ):
-            await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.")
+            await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.", ephemeral=True)
             return False
         return True
 

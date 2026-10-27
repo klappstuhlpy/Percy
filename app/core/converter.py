@@ -101,36 +101,38 @@ class CodeblockConverter(commands.Converter[list[str]]):
         return codeblocks
 
 
+def _parse_hex(value: str) -> Colour | None:
+    """``#rgb``/``#rrggbb``/``0xrrggbb``/``rrggbb`` -> :class:`Colour`, else ``None``.
+
+    Only exactly three or six hex digits count: ``bytes.fromhex`` on any other even length
+    handed ``Colour.from_rgb`` the wrong number of channels and raised ``TypeError``.
+    """
+    value = value.strip().lower().removeprefix("#").removeprefix("0x")
+    if len(value) == 3:
+        value = "".join(c * 2 for c in value)
+    if len(value) != 6 or not all(c in "0123456789abcdef" for c in value):
+        return None
+    return Colour(int(value, 16))
+
+
 class ColorTransformer(commands.Converter[Colour | str], app_commands.Transformer):
     """A color converter that will try to match a color HEX or name to a :class:``discord.Color``."""
 
     def _convert(self, _, argument: str) -> Colour | None:
         """Converts a color HEX to the matching :class:``Colour` if possible else return None."""
-        try:
-            if isinstance(argument, Colour):
-                return argument
+        if isinstance(argument, Colour):
+            return argument
 
-            argument = argument.strip()
-
-            if argument.startswith("#"):
-                argument = argument[1:]
-            elif argument.startswith("0x"):
-                argument = argument[2:]
-            else:
-                argument = argument
-
-            result = Colour.from_rgb(*bytes.fromhex(argument))
-        except ValueError:
-            results: list[tuple[str, str]] = fuzzy.finder(argument, get_colour_dict().items(), key=lambda x: x[0], limit=1)  # type: ignore
-            if results:
-                try:
-                    result = Colour.from_rgb(*bytes.fromhex(results[0][1]))
-                except (ValueError, IndexError):
-                    return Colour.blurple()
-                else:
-                    return result
-        else:
+        argument = argument.strip()
+        if (result := _parse_hex(argument)) is not None:
             return result
+
+        # The colour table's values are "#rrggbb"; feeding them to bytes.fromhex() unstripped
+        # made every named colour fall back to blurple.
+        results: list[tuple[str, str]] = fuzzy.finder(argument, get_colour_dict().items(), key=lambda x: x[0], limit=1)  # type: ignore
+        if results:
+            return _parse_hex(results[0][1]) or Colour.blurple()
+        return None
 
     async def transform(self, interaction: discord.Interaction, value: str) -> Colour | None:
         return self._convert(interaction, value)
@@ -236,15 +238,6 @@ class ActionReason(commands.Converter[str], app_commands.Transformer):
     @property
     def max_value(self) -> int:
         return 512
-
-
-class UserConverter(commands.UserConverter):
-    """A UserConverter that allows the use of 'me' to refer to the command invoker."""
-
-    async def convert(self, ctx: Context, argument: str) -> User | Member:
-        if argument.lower() == "me":
-            return ctx.author
-        return await super().convert(ctx, argument)
 
 
 class MemberConverter(commands.MemberConverter):

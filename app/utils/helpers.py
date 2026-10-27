@@ -17,7 +17,6 @@ T = TypeVar("T")
 
 __all__ = (
     "BaseFlags",
-    "CancellableQueue",
     "Colour",
     "HashableT",
     "HealthBarBuilder",
@@ -228,81 +227,6 @@ class ListedRateLimit[V]:
         new_tat = max(tat, now) + datetime.timedelta(seconds=self.ratio)
         self.tat = new_tat
         return []
-
-
-class CancellableQueue[T, V]:
-    """A queue that lets you cancel the items pending for work by a provided unique ID."""
-
-    if TYPE_CHECKING:
-        _waiters: deque[asyncio.Future[None]]
-        _data: OrderedDict[T, V]
-        _loop: asyncio.AbstractEventLoop
-
-    def __init__(self, hook_check: Callable[..., Any] | None = None) -> None:
-        self._hook_check = hook_check
-        self._waiters: deque[asyncio.Future[None]] = deque()
-        self._data: OrderedDict[T, V] = OrderedDict()
-        self._loop = asyncio.get_running_loop()
-
-    def __wakeup_next(self) -> None:
-        while self._waiters:
-            waiter = self._waiters.popleft()
-            if not waiter.done():
-                waiter.set_result(None)
-                break
-
-    def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} data={self._data!r} getters[{len(self._waiters)}]>"
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def is_empty(self) -> bool:
-        """:class:`bool`: Returns ``True`` if the queue is empty."""
-        return not self._data
-
-    def put(self, key: T, value: V) -> None:
-        """Puts an item into the queue.
-        If the key is the same as one that already exists then it's overwritten.
-        This wakes up the first coroutine waiting for the queue.
-        """
-        self._data[key] = value
-        self.__wakeup_next()
-
-    async def get(self) -> V:
-        """Removes and returns an item from the queue.
-        If the queue is empty then it waits until one is available.
-        """
-        while self.is_empty() and not (self._hook_check and self._hook_check()):
-            getter = self._loop.create_future()
-            self._waiters.append(getter)
-
-            try:
-                await getter
-            except BaseException:
-                getter.cancel()
-                with contextlib.suppress(ValueError):
-                    self._waiters.remove(getter)
-
-                if not self.is_empty() and not getter.cancelled():
-                    self.__wakeup_next()
-
-                raise
-
-        _, value = self._data.popitem(last=False)
-        return value
-
-    def is_pending(self, key: T) -> bool:
-        """Returns ``True`` if the key is currently pending in the queue."""
-        return key in self._data
-
-    def cancel(self, key: T) -> V | None:
-        """Attempts to cancel the queue item at the given key and returns it if so."""
-        return self._data.pop(key, None)
-
-    def cancel_all(self) -> None:
-        """Cancels all the queue items"""
-        self._data.clear()
 
 
 class Timer:

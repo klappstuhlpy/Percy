@@ -105,34 +105,6 @@ class ShortTime:
         return cls(value, now=now, tzinfo=tzinfo)
 
 
-# we do this to ensure that the annotation checker from dpy recognizes the transform and convert methods
-# if we use this class as an annotation in a commands params
-@copy_dict(ShortTime)
-class TimeDelta(ShortTime):
-    """A Converter that parses a time delta string.
-
-    Examples
-    --------
-    - 2y
-    - 2 months
-    - 4 weeks
-    - 4min
-    """
-
-    dt: datetime.timedelta
-
-    def __init__(
-        self,
-        argument: str,
-        *,
-        now: datetime.datetime | None = None,
-        tzinfo: datetime.tzinfo = datetime.UTC,
-    ) -> None:
-        super().__init__(argument, now=now, tzinfo=tzinfo, as_timedelta=True)
-
-    __dict__ = ShortTime.__dict__
-
-
 class HumanTime:
     """A Converter that parses a human time string.
 

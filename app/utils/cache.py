@@ -36,14 +36,6 @@ Parameters
 T = TypeVar("T")
 
 
-class AwaitableObj[T]:
-    def __init__(self, value: T) -> None:
-        self.value: T = value
-
-    def __await__(self) -> Generator[Any, None, T]:
-        return asyncio.sleep(0, result=self.value).__await__()
-
-
 class CacheProtocol(Protocol[P, R]):
     cache: MutableMapping[str, object] | LRU[Hashable, Any] | dict[Any, Any] | ExpiringCache
 

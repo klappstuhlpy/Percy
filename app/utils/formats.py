@@ -427,36 +427,6 @@ def resolve_entity_id(x: int, *, guild: discord.Guild) -> str:
     return f"<@{x}>"
 
 
-def validate_snowflakes(*ids: str, guild: discord.Guild, to_obj: bool = False) -> list[int | discord.abc.Snowflake]:
-    """Returns all ids that match the following conditions:
-
-    - The id is a valid snowflake.
-    - The id is a user or channel in the guild.
-
-    Parameters
-    ----------
-    *ids : `str`
-        The ids to validate.
-    guild : `discord.Guild`
-        The guild to validate the ids in.
-    to_obj : `bool`
-        Whether to return the object instead of the id.
-        If this is set to true, it only returns the object if it's a valid Snowflake object.
-    """
-
-    def _check_id(x: Any) -> int | discord.abc.Snowflake | None:
-        if not x.isdigit():
-            return None
-        x = int(x)
-        if to_obj:
-            return next(
-                filter(lambda v: v is not None, [guild.get_role(x), guild.get_member(x), guild.get_channel_or_thread(x)])
-            )
-        return x
-
-    return [x for x in map(_check_id, ids) if x is not None]
-
-
 def get_asset_url(obj: discord.Guild | discord.User | discord.Member | discord.ClientUser | None) -> str:
     """Returns the asset URL of an available discord object."""
     if isinstance(obj, discord.Guild):

@@ -78,7 +78,8 @@ class Timer(BaseRecord, table="timers", pk="id"):
         new_kwargs = self.metadata["kwargs"].copy()
         new_kwargs.update(kwargs)
 
-        new_args = self.metadata["args"] + args
+        # A persisted timer's args come back from jsonb as a list, a short timer's as a tuple.
+        new_args = [*self.metadata["args"], *args]
 
         return await self.bot.timers.create(when, self.event, *new_args, **new_kwargs)
 
@@ -115,7 +116,9 @@ class Timer(BaseRecord, table="timers", pk="id"):
     def __repr__(self) -> str:
         return f"<Timer id={self.id} event={self.event!r} expires={self.expires!r}>"
 
-    def __eq__(self: TimerT, other: TimerT) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Timer):
+            return NotImplemented
         return self.id == other.id
 
     def __hash__(self) -> int:

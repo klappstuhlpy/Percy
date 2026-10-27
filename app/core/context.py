@@ -266,7 +266,7 @@ class Context[CogT: "Cog"](commands.Context):
             kwargs.pop("files", None)
             kwargs.pop("reference", None)
 
-            await self.maybe_edit(content, **kwargs)
+            await self.maybe_edit(None, content, **kwargs)
             return self._message
 
         if (
@@ -337,7 +337,7 @@ class Context[CogT: "Cog"](commands.Context):
             kwargs.pop("file", None)
             return await self.send(file=discord.File(fp, filename="message_too_long.txt"), **kwargs)
         else:
-            return await self.send(content)
+            return await self.send(content, **kwargs)
 
 
 ContextT = TypeVar("ContextT", bound=Context, covariant=True)  # type: ignore[misc]

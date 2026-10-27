@@ -915,14 +915,17 @@ class BaseRecord(ABC):
 
     @classmethod
     def temporary(cls, *args: Any, **kwargs: Any) -> Self:
-        """Creates a temporary instance of this class with __ignore_record__ set to True."""
-        return ignore_record(cls)(*args, **kwargs)  # type: ignore[return-value]
+        """Creates a temporary instance without a backing record.
 
-
-def ignore_record(cls: type[BaseRecord]) -> type[BaseRecord]:
-    """A decorator that sets the __ignore_record__ attribute to True."""
-    cls.__ignore_record__ = True
-    return cls
+        The flag is only flipped for the synchronous constructor call, so the class itself
+        keeps requiring a record afterwards.
+        """
+        previous = cls.__ignore_record__
+        cls.__ignore_record__ = True
+        try:
+            return cls(*args, **kwargs)
+        finally:
+            cls.__ignore_record__ = previous
 
 
 class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="guild_config_changed"):

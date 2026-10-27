@@ -404,36 +404,6 @@ class Bot(commands.Bot):
     ) -> Context:  # type: ignore[override]
         return await super().get_context(origin, cls=cls)
 
-    def get_slash_command_payloads(self, shortened: bool = False) -> list[dict]:
-        """Return the application (slash) command payloads for all registered app commands.
-
-        This iterates over the bot's commands and collects the app command representation
-        (as produced by discord.app_commands Command.to_dict) for any hybrid/group commands
-        that declare an .app_command attribute.
-        """
-        payloads: list[dict] = []
-        for cmd in self.walk_commands():
-            app_cmd = getattr(cmd, "app_command", None)
-            if app_cmd is None:
-                continue
-
-            try:
-                payload = app_cmd.to_dict(tree=self.tree)
-            except Exception:
-                app_cmd = getattr(app_cmd, "app_command", None)
-                if app_cmd is None:
-                    continue
-                payload = app_cmd.to_dict(tree=self.tree)
-
-            if shortened:
-                payload = {
-                    "name": app_cmd.qualified_name,
-                    "description": payload["description"]
-                }
-
-            payloads.append(payload)
-        return payloads
-
     def apply_native_permissions(self) -> int:
         """Apply :func:`assign_native_permissions` across every registered command.
 
@@ -546,7 +516,8 @@ class Bot(commands.Bot):
         trace = ''.join(traceback.format_exception(exc_type, exc, tb))
         embed = discord.Embed(
             title=f'{Emojis.warning} Event Error',
-            description=f'```py\n{trace}\n```',
+            # Keep the tail (where the exception is): an embed description caps at 4096 chars.
+            description=f'```py\n{trace[-3900:]}\n```',
             timestamp=discord.utils.utcnow(),
             colour=helpers.Colour.burgundy()
         )
@@ -555,7 +526,8 @@ class Bot(commands.Bot):
 
         args_str = TextSource(prefix='```py', max_size=1024)
         for index, arg in enumerate(args):
-            args_str.add_line(f'[{index}]: {arg!r}')
+            # add_line raises on a line longer than the page; a long repr must not kill the report.
+            args_str.add_line(f'[{index}]: {arg!r}'[:900])
         args_str.close_page()
         embed.add_field(name='Args', value=args_str.pages[0], inline=False)
 
@@ -922,7 +894,8 @@ class Bot(commands.Bot):
         builder.append((' ' * 4) + ctx.clean_prefix, color=AnsiColor.white, bold=True)
 
         if ctx.interaction:
-            invoked_with = command.qualified_name + ' ' + (ctx.invoked_with or '')
+            # A slash context's invoked_with is the command's own name; appending it doubled it.
+            invoked_with = command.qualified_name
         else:
             if ctx.invoked_parents and ctx.invoked_subcommand:
                 invoked_with = ' '.join([*ctx.invoked_parents, ctx.invoked_with or ''])
@@ -1124,7 +1097,6 @@ class Bot(commands.Bot):
                     for member in members:
                         yield member
 
-    @cache.cache()
     def find_member_from_user(self, user: discord.abc.Snowflake) -> discord.Member | None:
         """Finds the first member object given a user/object.
 

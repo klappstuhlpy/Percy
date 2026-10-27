@@ -115,10 +115,11 @@ class CommandTree(app_commands.CommandTree):
         embed.add_field(name="Location", value=fmt, inline=False)
 
         namespace = interaction.namespace.__dict__
-        embed.add_field(name="Namespace(s)", value=", ".join(f"{k}: {v!r}" for k, v in namespace.items()), inline=False)
+        embed.add_field(name="Namespace(s)", value=", ".join(f"{k}: {v!r}" for k, v in namespace.items())[:1024] or "-", inline=False)
 
         exc = "".join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
-        embed.description = f"### Retrieved Traceback\n```py\n{exc}\n```"
+        # The tail holds the exception; an over-long description made the webhook send fail silently.
+        embed.description = f"### Retrieved Traceback\n```py\n{exc[-3800:]}\n```"
         embed.set_footer(text="occurred at")
 
         with suppress(discord.HTTPException, ValueError):
