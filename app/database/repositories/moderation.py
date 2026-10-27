@@ -302,6 +302,7 @@ class CasesRepository(BaseRepository):
         target_id: int,
         moderator_id: int | None,
         reason: str | None,
+        expires_at: datetime.datetime | None = None,
     ) -> asyncpg.Record:
         """Inserts a case with the next per-guild ``case_index`` and returns the row.
 
@@ -313,6 +314,8 @@ class CasesRepository(BaseRepository):
         out) or the live maximum, whichever is higher, so deleting the newest case never hands its
         number to the next one, and guilds that predate the column continue from their history.
         """
+        if expires_at is not None:
+            expires_at = ensure_utc(expires_at).replace(tzinfo=None)
         query = """
             WITH allocated AS (
                 INSERT INTO modlog_config (guild_id, last_case_index)
@@ -321,13 +324,13 @@ class CasesRepository(BaseRepository):
                     SET last_case_index = GREATEST(modlog_config.last_case_index + 1, EXCLUDED.last_case_index)
                 RETURNING last_case_index
             )
-            INSERT INTO mod_cases (guild_id, case_index, action, target_id, moderator_id, reason)
-            SELECT $1, last_case_index, $2, $3, $4, $5 FROM allocated
+            INSERT INTO mod_cases (guild_id, case_index, action, target_id, moderator_id, reason, expires_at)
+            SELECT $1, last_case_index, $2, $3, $4, $5, $6 FROM allocated
             RETURNING *;
         """
         async with self.acquire() as con, con.transaction():
             await con.execute('SELECT pg_advisory_xact_lock($1);', guild_id)
-            return await con.fetchrow(query, guild_id, action, target_id, moderator_id, reason)
+            return await con.fetchrow(query, guild_id, action, target_id, moderator_id, reason, expires_at)
 
     async def set_log_message(self, case_id: int, log_message_id: int) -> None:
         """Records the id of the announcement message posted for a case."""
@@ -338,15 +341,73 @@ class CasesRepository(BaseRepository):
         return await self.fetchrow(
             'SELECT * FROM mod_cases WHERE guild_id = $1 AND case_index = $2;', guild_id, case_index)
 
-    async def get_user_cases(self, guild_id: int, target_id: int, *, limit: int = 25) -> list[asyncpg.Record]:
-        """Fetches a target's cases for a guild, newest first."""
+    async def get_user_cases(
+        self, guild_id: int, target_id: int, *, limit: int = 25, action: str | None = None
+    ) -> list[asyncpg.Record]:
+        """Fetches a target's cases for a guild, newest first (optionally only one ``action``)."""
         query = """
             SELECT * FROM mod_cases
-            WHERE guild_id = $1 AND target_id = $2
+            WHERE guild_id = $1 AND target_id = $2 AND ($4::text IS NULL OR action = $4)
             ORDER BY case_index DESC
             LIMIT $3;
         """
-        return await self.fetch(query, guild_id, target_id, limit)
+        return await self.fetch(query, guild_id, target_id, limit, action)
+
+    # -- warn policy ------------------------------------------------------
+
+    async def get_warn_rows(self, guild_id: int, target_id: int) -> list[asyncpg.Record]:
+        """A target's un-pardoned warns (``expires_at``/``pardoned_at`` only), for active counting."""
+        return await self.fetch(
+            "SELECT expires_at FROM mod_cases WHERE guild_id = $1 AND target_id = $2 AND action = 'warn' "
+            'AND pardoned_at IS NULL;',
+            guild_id, target_id,
+        )
+
+    async def pardon_case(self, guild_id: int, case_index: int, moderator_id: int) -> asyncpg.Record | None:
+        """Marks an un-pardoned warn pardoned (kept for the audit trail). ``None`` if missing/not a warn/already pardoned."""
+        return await self.fetchrow(
+            "UPDATE mod_cases SET pardoned_at = now() at time zone 'utc', pardoned_by = $3 "
+            "WHERE guild_id = $1 AND case_index = $2 AND action = 'warn' AND pardoned_at IS NULL RETURNING *;",
+            guild_id, case_index, moderator_id,
+        )
+
+    async def pardon_user_warns(self, guild_id: int, target_id: int, moderator_id: int) -> list[asyncpg.Record]:
+        """Pardons every un-pardoned warn of a target; returns the updated rows."""
+        return await self.fetch(
+            "UPDATE mod_cases SET pardoned_at = now() at time zone 'utc', pardoned_by = $3 "
+            "WHERE guild_id = $1 AND target_id = $2 AND action = 'warn' AND pardoned_at IS NULL RETURNING *;",
+            guild_id, target_id, moderator_id,
+        )
+
+    async def get_warn_expiry_days(self, guild_id: int) -> int | None:
+        return await self.fetchval('SELECT expire_days FROM warn_policy WHERE guild_id = $1;', guild_id)
+
+    async def set_warn_expiry_days(self, guild_id: int, days: int | None) -> None:
+        await self.execute(
+            'INSERT INTO warn_policy (guild_id, expire_days) VALUES ($1, $2) '
+            'ON CONFLICT (guild_id) DO UPDATE SET expire_days = EXCLUDED.expire_days;',
+            guild_id, days,
+        )
+
+    async def get_warn_thresholds(self, guild_id: int) -> list[asyncpg.Record]:
+        return await self.fetch(
+            'SELECT warn_count, action, duration_seconds FROM warn_thresholds WHERE guild_id = $1 '
+            'ORDER BY warn_count;',
+            guild_id,
+        )
+
+    async def set_warn_threshold(self, guild_id: int, count: int, action: str, duration: int | None) -> None:
+        await self.execute(
+            'INSERT INTO warn_thresholds (guild_id, warn_count, action, duration_seconds) VALUES ($1, $2, $3, $4) '
+            'ON CONFLICT (guild_id, warn_count) DO UPDATE '
+            'SET action = EXCLUDED.action, duration_seconds = EXCLUDED.duration_seconds;',
+            guild_id, count, action, duration,
+        )
+
+    async def remove_warn_threshold(self, guild_id: int, count: int) -> bool:
+        result = await self.execute(
+            'DELETE FROM warn_thresholds WHERE guild_id = $1 AND warn_count = $2;', guild_id, count)
+        return result.endswith(' 1')
 
     async def count_user_cases(self, guild_id: int, target_id: int) -> int:
         """Counts how many cases a target has in a guild."""

@@ -109,6 +109,8 @@ class ModerationCase:
     reason: str | None
     log_message_id: int | None
     created_at: datetime.datetime
+    expires_at: datetime.datetime | None = None
+    pardoned_at: datetime.datetime | None = None
 
     @classmethod
     def from_record(cls, record: asyncpg.Record) -> ModerationCase:
@@ -122,6 +124,8 @@ class ModerationCase:
             reason=record['reason'],
             log_message_id=record['log_message_id'],
             created_at=record['created_at'],
+            expires_at=record.get('expires_at'),
+            pardoned_at=record.get('pardoned_at'),
         )
 
     @property

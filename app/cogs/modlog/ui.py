@@ -117,6 +117,8 @@ def build_case_view(
     container.add_item(discord.ui.TextDisplay(f'**Reason**\n{_quote(case.reason)}'))
     if expires is not None:
         container.add_item(discord.ui.TextDisplay(f'**Expires** {_ts(expires, "R")} · {_ts(expires)}'))
+    if case.pardoned_at is not None:
+        container.add_item(discord.ui.TextDisplay(f'**Pardoned** {_ts(case.pardoned_at, "R")} · no longer counts'))
     container.add_item(discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small))
     container.add_item(
         discord.ui.TextDisplay(f'-# Case ID {case.id} · User ID {case.target_id} · {_ts(case.created_at)}')

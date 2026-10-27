@@ -205,6 +205,7 @@ async def apply_member_action(
     # The recorded case can differ from the requested action (a mute with a duration is a
     # tempmute), so actions set this rather than assuming action.
     case_action = action
+    case_expires: datetime.datetime | None = None
 
     try:
         if action == 'unban':
@@ -232,13 +233,16 @@ async def apply_member_action(
             elif action == 'timeout':
                 delta = validate_timeout_duration(duration)
                 await member.timeout(delta, reason=reason)
-                extra['until'] = (datetime.datetime.now(datetime.UTC) + delta).isoformat()
+                case_expires = datetime.datetime.now(datetime.UTC) + delta
+                extra['until'] = case_expires.isoformat()
             elif action == 'untimeout':
                 if member.timed_out_until is None:
                     raise MemberActionError(400, 'member is not timed out')
                 await member.timeout(None, reason=reason)
             elif action == 'mute':
                 case_action = await apply_mute(bot, guild, member, moderator, reason, duration)
+                if duration is not None:
+                    case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
             elif action == 'unmute':
                 await lift_mute(bot, guild, member, reason)
             elif action == 'warn':
@@ -248,7 +252,10 @@ async def apply_member_action(
 
                 # A warning is only a case plus a courtesy DM — closed DMs are not an error.
                 # The case is recorded by the dispatch below, so this is the next warn on record.
-                warns = await bot.db.cases.count_cases(guild.id, action='warn', target_id=user_id)
+                from app.cogs.modlog.warns import active_warn_count
+
+                rows = await bot.db.cases.get_warn_rows(guild.id, user_id)
+                warns = active_warn_count(row['expires_at'] for row in rows)
                 await send_warn_dm(member, reason, warn_count=warns + 1)
     except discord.Forbidden:
         raise MemberActionError(403, f'I am missing the permissions to {action} this member') from None
@@ -257,6 +264,7 @@ async def apply_member_action(
 
     # Purging messages is a cleanup, not a standing change — it gets no case.
     if action != 'purge':
-        bot.dispatch('mod_action', guild.id, case_action, user_id, moderator.id, reason)
+        args = (guild.id, case_action, user_id, moderator.id, reason)
+        bot.dispatch('mod_action', *args, *((case_expires,) if case_expires else ()))
 
     return {'ok': True, 'action': case_action, **extra}

@@ -1844,7 +1844,7 @@ class Moderation(Cog):
             raise
         # Not banned until now, so any tempban timer left over is stale and would end this one early.
         await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.id)
-        self.bot.dispatch("mod_action", ctx.guild.id, "tempban", member.id, ctx.author.id, reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "tempban", member.id, ctx.author.id, reason, duration.dt)
         await self.bot.timers.create(
             duration.dt,
             "tempban",
@@ -2096,7 +2096,7 @@ class Moderation(Cog):
         # The member is not muted, so any tempmute timer left over is stale and would end this one early.
         await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
         await member.add_roles(discord.Object(id=role_id), reason=reason)
-        self.bot.dispatch("mod_action", ctx.guild.id, "tempmute", member.id, ctx.author.id, reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "tempmute", member.id, ctx.author.id, reason, duration.dt)
 
         zone = await self.bot.db.get_user_timezone(ctx.author.id)
         await self.bot.timers.create(
