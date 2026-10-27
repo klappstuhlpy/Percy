@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Games: `plinko` and `keno` (text commands; the global slash budget is full).
-- Poker: ½ Pot and Pot bet buttons; leaving mid-hand folds and cashes out your stack.
+- Poker: ½ Pot and Pot bet buttons; leaving mid-hand folds and cashes out your stack; add kicker details and deciding card logic for hand comparisons
 - Warn policy: `warnpolicy show|set|remove|expiry` for expiring warns and automatic punishments at N active warns; `pardon` and `clearwarns` keep the record; `warnings` lists warns only. Case cards show stored expiry.
 - Giveaways: required role and minimum account/server age (`--role`, `--min_account_days`, `--min_join_days`).
 - Tags: `tag transfer cancel`; pending transfers expire after 24 hours.
@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Poker odds froze the bot for over a second each street.
 - Slash commands with failed permission checks showed "Something went wrong".
 - Empty lists crashed several paginators.
+- Economy `get_balance_record`: ensure user_id and guild_id are strings in wallet session locking
 
 ### Migrations
 - V62 warn policy, V63 tag transfers, V64 open game bets (applied on next start).
