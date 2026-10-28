@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The test suite no longer hangs about one run in three: dropping the SQLite pool could block forever on a worker that never exited (fixed in kls-web-core 0.1.1, kls-core v0.17.1). Calls to Percy now time out (5 s connect, 30 s total) instead of waiting forever.
+
 ### Security
 - Requests whose path carries an encoded `/`, `\`, `?` or `#` are refused (400). Path parameters were spliced into Percy URLs decoded, so a crafted member id or trigger could reach another guild's endpoints past the manage check.
 

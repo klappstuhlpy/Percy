@@ -114,8 +114,15 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
     let percy = config.percy_api_url().map(|url| {
         tracing::info!("Percy API client configured: {}", url);
 
+        // A bounded timeout: a Percy that accepts the connection but never answers must
+        // fail the request (and any test against a fake), never hang it.
+        let http = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("reqwest client builds");
         Arc::new(percy_client::PercyClient::new(
-            reqwest::Client::new(),
+            http,
             url,
             config.percy_api_token(),
         ))
@@ -142,3 +149,4 @@ async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
     tracing::info!("shutdown signal received");
 }
+

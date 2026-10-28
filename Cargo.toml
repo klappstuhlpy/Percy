@@ -25,9 +25,9 @@ serde_yaml = "0.9"
 # Renders the public legal docs (fetched as CommonMark from the canonical GitHub
 # repo) and the local command-syntax guide to HTML.
 pulldown-cmark = "0.10"
-kls-ui = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
-kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
-percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.17.0" }
+kls-ui = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.17.1" }
+kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.17.1" }
+percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.17.1" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.
