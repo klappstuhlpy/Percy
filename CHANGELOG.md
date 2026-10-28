@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Internal API: `POST /rolemenus/{menu_id}/roles` requires `user_id`; a missing actor no longer skips the role-hierarchy check.
+
+### Changed
+- Tests: every test times out after 60 s (pytest-timeout), so a blocking test fails with a traceback instead of freezing the run.
+
 ### Changed
 - Leveling: rank and leaderboard order by level, then XP (was message count / XP within the level), and include voice-only and `level set` members.
 

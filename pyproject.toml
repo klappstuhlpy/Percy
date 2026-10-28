@@ -48,6 +48,7 @@ ruff = ">=0.8.0"
 pyright = ">=1.1.0"
 pytest = ">=8.0"
 pytest-asyncio = ">=0.24"
+pytest-timeout = ">=2.3"
 
 [tool.ruff]
 target-version = "py313"
@@ -128,6 +129,10 @@ testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = "-ra -q"
+# A test that blocks (deadlock, unanswered socket, lost wakeup) fails with a traceback instead
+# of freezing the run; thread method so it also fires inside a stuck event loop.
+timeout = 60
+timeout_method = "thread"
 
 
 [build-system]
