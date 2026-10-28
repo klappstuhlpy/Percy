@@ -512,9 +512,11 @@ class GameStatsRepository(BaseRepository):
             game, guild_id, channel_id, user_id, amount,
         )
 
-    async def open_bets_clear(self, game: str, channel_id: int) -> None:
-        """Forgets a table's stakes once it settles (or is refunded in-process)."""
-        await self.execute('DELETE FROM game_bets WHERE game = $1 AND channel_id = $2', game, channel_id)
+    async def open_bets_clear(self, game: str, channel_id: int) -> int:
+        """Forgets a table's stakes once it settles (or is refunded in-process); returns how many rows this call claimed."""
+        rows = await self.fetch(
+            'DELETE FROM game_bets WHERE game = $1 AND channel_id = $2 RETURNING 1', game, channel_id)
+        return len(rows)
 
     async def open_bets_take_all(self) -> list[Any]:
         """Atomically removes and returns every remembered stake (``guild_id, user_id, amount``)."""

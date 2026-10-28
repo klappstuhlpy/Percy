@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+from contextlib import suppress
 from typing import TYPE_CHECKING, cast
 
 import discord
 
 from app.cogs.games.engine.poker import Card, OddsMode, TableState, TexasHoldem, deciding_card
 from app.cogs.games.models import Game, GameResult
-from app.cogs.games.poker_ui import TableView
+from app.cogs.games.poker_ui import RunItTwiceView, TableView
 from app.utils import helpers, number_suffix
 from config import Emojis
 
@@ -62,6 +63,8 @@ class PokerSession:
         self.engine.host = ctx.author
         # The Monte-Carlo odds run in a worker thread on a snapshot (see :meth:`flush_odds`).
         self.engine.defer_odds = True
+        self.engine.hold_runout_for_vote = True  # all-in runouts wait for the run-it-twice vote
+        self._vote_task: asyncio.Task | None = None
         self.odds_lock: asyncio.Lock = asyncio.Lock()
 
         self.message: discord.Message | None = None
@@ -172,12 +175,46 @@ class PokerSession:
         self.cancel_timer()
         if self.engine.pending_odds:
             self.loop.create_task(self.flush_odds())
-        if self.engine.state == TableState.RUNNING:
+        if self.engine.runout_pending:
+            # No turn timer during the vote: nobody is to act, and autoplay would fold into it.
+            if self._vote_task is None or self._vote_task.done():
+                self._vote_task = self.loop.create_task(self.run_it_twice_vote())
+        elif self.engine.state == TableState.RUNNING:
             self._round_settled = False
             self.running_autoplay_loop = self.loop.create_task(self.start_timer(self.engine.current_player))
         elif self.engine.state == TableState.FINISHED and not self._round_settled:
             self._round_settled = True
             self.loop.create_task(self.settle_round_stats())
+
+    async def run_it_twice_vote(self) -> None:
+        """|coro|
+
+        Asks the all-in players whether to run the board twice. Unanimous yes within 20 s runs it
+        twice; a No, a timeout or any failure runs it once, so the hand can never hang.
+        """
+        accepted = False
+        msg: discord.Message | None = None
+        try:
+            members = [p.member for p in self.engine.playing_players]
+            vote = RunItTwiceView(members)
+            msg = await self.ctx.channel.send(
+                f"{' '.join(m.mention for m in members)} Everyone is all-in. **Run it twice?** "
+                "Both players must accept within 20 seconds.",
+                view=vote,
+            )
+            await vote.wait()
+            accepted = vote.accepted
+        except Exception:  # a failed vote means run it once
+            accepted = False
+        finally:
+            if self.engine.resolve_runout(accepted):
+                self.restart_timer()
+            if msg is not None:
+                with suppress(discord.HTTPException):
+                    await msg.edit(content=f"Run it twice? **{'Yes' if accepted else 'No'}**", view=None)
+            if self.message is not None:
+                with suppress(discord.HTTPException):
+                    await self.message.edit(view=self.view.render())
 
     async def flush_odds(self) -> None:
         """|coro|
@@ -214,7 +251,7 @@ class PokerSession:
         """A timer that runs out if the current player takes too long. (120 seconds)"""
         timer: int = 0
         while timer < 120:
-            if self.engine.state != TableState.RUNNING:
+            if self.engine.state != TableState.RUNNING or self.engine.runout_pending:
                 return
 
             await asyncio.sleep(1)
@@ -379,7 +416,7 @@ class PokerSession:
             else:
                 if self.state == TableState.FINISHED:
                     # Net result: what came back from the pots minus what this player put in.
-                    won = sum(pot.amount // len(winners) for winners, pot in self.winners if player in winners)
+                    won = self.engine.payouts.get(player.member, 0)
                     net = won - player.total_bet
                     name_parts.append(f"{Emojis.Economy.coin} {f'{net:+}' if net else '±0'}")
 
@@ -450,3 +487,14 @@ class PokerSession:
 
         if len(cards) == 5:
             container.add_item(discord.ui.TextDisplay('### The River\n' + cards[4].display('large', formatted=True)))
+
+        boards = self.engine.run_it_twice_boards
+        if self.state == TableState.FINISHED and boards:
+            container.add_item(discord.ui.Separator())
+            for i, board in enumerate(boards, 1):
+                shown = [cast("DisplayCard", Card.from_arr(c).display("small")) for c in board]
+                names = ", ".join(w.member.display_name for w in self.engine.run_it_twice_board_winners[i - 1])
+                container.add_item(discord.ui.TextDisplay(
+                    f"### Run {i} - {names}\n"
+                    + " ".join(c.top for c in shown) + "\n" + " ".join(c.bottom for c in shown)
+                ))

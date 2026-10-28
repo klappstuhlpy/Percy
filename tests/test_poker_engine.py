@@ -272,3 +272,43 @@ def test_bet_preset_clamps_to_min_raise_and_stack() -> None:
     assert engine.bet_preset(p, 0.0) == engine.min_raise_to - p.bet  # clamped up to a full raise
     p.stack = 5
     assert engine.bet_preset(p, 1.0) == 5  # clamped to the stack -> all-in
+
+
+def _all_in_heads_up(stacks: list[int], hold: bool = True) -> TexasHoldem:
+    engine = _running(stacks)
+    engine.hold_runout_for_vote = hold
+    while engine.state == TableState.RUNNING and not engine.runout_pending:
+        engine.AllIn()
+        engine.switch_player(by_raise=True)
+    return engine
+
+
+def test_all_in_runout_waits_for_vote_only_when_held() -> None:
+    engine = _all_in_heads_up([500, 500], hold=False)
+    assert engine.state == TableState.FINISHED and not engine.run_it_twice_boards
+
+    engine = _all_in_heads_up([500, 500])
+    assert engine.runout_pending and engine.state == TableState.RUNNING
+    assert len(engine.community_arr) < 5
+
+
+def test_run_it_twice_conserves_chips_and_records_full_boards() -> None:
+    for stacks in ([500, 500], [500, 301], [777, 123]):
+        engine = _all_in_heads_up(stacks)
+        assert engine.resolve_runout(True)
+        assert engine.state == TableState.FINISHED
+        assert sum(p.stack for p in engine.players) == sum(stacks)  # odd chips included
+        assert sum(engine.payouts.values()) == sum(stacks)
+        assert len(engine.run_it_twice_boards) == 2
+        assert all(len(b) == 5 for b in engine.run_it_twice_boards)
+        entry = engine.hand_history[-1]
+        assert entry.boards == engine.run_it_twice_boards and len(entry.community_cards) == 5
+        assert not engine.resolve_runout(True)  # a second (stale) resolve is a no-op
+
+
+def test_declined_runout_runs_once_and_conserves_chips() -> None:
+    engine = _all_in_heads_up([500, 500])
+    assert engine.resolve_runout(False)
+    assert engine.state == TableState.FINISHED and len(engine.community_arr) == 5
+    assert not engine.run_it_twice_boards and engine.hand_history[-1].boards == []
+    assert sum(p.stack for p in engine.players) == 1000

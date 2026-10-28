@@ -114,8 +114,8 @@ class Games(Cog):
 
     async def cog_load(self) -> None:
         """Refunds roulette / horse-race stakes a previous process took and never settled."""
-        # ponytail: a hot reload mid horse race refunds here while the old instance's race coroutine
-        # still pays out; settle-by-claim (pay only rows open_bets_clear deleted) if reloads become routine.
+        # A race still running in a previous instance (hot reload) loses its claim in ``_settle_bets``
+        # because the take-all below deletes its rows, so each stake is paid or refunded exactly once.
         try:
             rows = await self.bot.db.game_stats.open_bets_take_all()
             for row in rows:
@@ -188,12 +188,18 @@ class Games(Cog):
         except Exception:
             log.exception('Could not persist %s bet', game)
 
-    async def _settle_bets(self, game: str, channel_id: int) -> None:
-        """Drops a table's persisted stakes right before they are paid or refunded in-process (claim-then-pay)."""
+    async def _settle_bets(self, game: str, channel_id: int) -> bool:
+        """Claims a table's persisted stakes right before they are paid or refunded in-process (claim-then-pay).
+
+        ``False`` means another path (the restart refund in :meth:`cog_load`) already took them and
+        refunded the players, so the caller must not pay. A failed claim returns ``True``: the stakes
+        are then still on record for the next start, but paying beats stranding the players.
+        """
         try:
-            await self.bot.db.game_stats.open_bets_clear(game, channel_id)
+            return await self.bot.db.game_stats.open_bets_clear(game, channel_id) > 0
         except Exception:
             log.exception('Could not clear persisted %s bets', game)
+            return True
 
     async def _refund(self, ctx: Context, amount: int) -> None:
         """Credits back a stake taken by :meth:`_take_bet` when the game could not start after all."""
@@ -1122,7 +1128,9 @@ class Games(Cog):
         )
         await asyncio.sleep(5)
 
-        await self._settle_bets('roulette', channel_id)
+        if not await self._settle_bets('roulette', channel_id):
+            self.roulette_tables.pop(channel_id, None)
+            return  # stakes were already refunded by a reload
         result = roulette_engine.spin()
         # Get all bets that are on the winning space.
         winning_spaces = list(roulette.get_winning_spaces(result))
@@ -1188,7 +1196,9 @@ class Games(Cog):
                 await table.message.edit(view=table.view.render(frame, racing=True))
             await asyncio.sleep(1.1)
 
-        await self._settle_bets('horserace', channel_id)
+        if not await self._settle_bets('horserace', channel_id):
+            self.horse_tables.pop(channel_id, None)
+            return  # stakes were already refunded by a reload
         pool = table.pool
         multiplier = horserace_engine.parimutuel_multiplier(pool, table.total_on(winner + 1))
         balances = await self._balances_for(guild_id, [bet.placed_by.id for bet in table.bets])

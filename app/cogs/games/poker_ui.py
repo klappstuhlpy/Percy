@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 __all__ = (
     "BuyInModal",
     "RaiseBetModal",
+    "RunItTwiceView",
     "SetBlindsModal",
     "TableView",
 )
@@ -97,6 +98,42 @@ class EscalationModal(discord.ui.Modal, title="Blind Escalation Settings"):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.interaction = interaction
         self.stop()
+
+
+class RunItTwiceView(discord.ui.View):
+    """Yes/No vote among the all-in players; ``accepted`` is True only if every one of them said yes."""
+
+    def __init__(self, members: list[discord.Member], timeout: float = 20) -> None:
+        super().__init__(timeout=timeout)
+        self.members = members
+        self.yes: set[int] = set()
+        self.accepted: bool = False
+        self._done: bool = False  # flips before any await, so a double click can't vote twice
+
+    async def _vote(self, interaction: discord.Interaction, yes: bool) -> None:
+        if interaction.user not in self.members:
+            await interaction.response.send_message(f"{Emojis.error} Only the players in this hand can vote.", ephemeral=True)
+            return
+        if self._done:
+            await interaction.response.defer()
+            return
+        if yes:
+            self.yes.add(interaction.user.id)
+            if len(self.yes) < len(self.members):
+                await interaction.response.send_message("Waiting for the other player...", ephemeral=True)
+                return
+        self._done = True
+        self.accepted = yes
+        self.stop()
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self._vote(interaction, True)
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
+    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self._vote(interaction, False)
 
 
 class TableView(LayoutView):
@@ -553,6 +590,10 @@ class TableView(LayoutView):
         # A stale click after the hand ended must not act (it would settle the pot again).
         if self.engine.state != TableState.RUNNING:
             await interaction.response.send_message(f"{Emojis.error} There is no hand in progress.", ephemeral=True)
+            return None
+
+        if self.engine.runout_pending:
+            await interaction.response.send_message(f"{Emojis.error} Waiting for the run-it-twice vote.", ephemeral=True)
             return None
 
         player = self.engine.players[self.engine.player_index]

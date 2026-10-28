@@ -101,11 +101,15 @@ class _FakeStatus(DiscordStatusMixin):
     def __init__(self) -> None:  # skip the cog __init__ chain
         self._seen_updates = {}
         self.published: list[tuple[str, bool]] = []
+        self.posts: dict[str, tuple[int, str | None]] = {}
 
-    async def _publish(self, saved: Any, incident: Incident, *, edit: bool) -> bool:
+    async def _load_posts(self, saved: Any) -> dict[str, tuple[int, str | None]]:
+        return dict(self.posts)
+
+    async def _publish(self, saved: Any, incident: Incident, *, edit: bool, post: Any = None) -> bool:
         self.published.append((incident.id, edit))
-        saved.id, saved.status = incident.id, incident.status
-        self._seen_updates[saved.guild_id] = incident.latest_update_id
+        self.posts[incident.id] = (len(self.posts) + 1, incident.status)
+        self._seen_updates[(saved.guild_id, incident.id)] = incident.latest_update_id
         return True
 
 
@@ -130,6 +134,17 @@ async def test_sync_posts_new_and_edits_tracked_without_ping_pong() -> None:
     newer_update = _incident('new', status='resolved', updates=4, age=0)  # same status, new update
     assert await feed._sync_subscriber(saved, [newer_update, old])
     assert feed.published == [('new', True)]
+
+
+async def test_sync_keeps_updating_an_older_concurrent_incident() -> None:
+    feed = _FakeStatus()
+    saved: Any = SimpleNamespace(id=None, status=None, guild_id=1, message_id=None)
+    old, new = _incident('old', age=4), _incident('new', age=2)
+    await feed._sync_subscriber(saved, [new, old])
+    feed.published.clear()
+    resolved_old = _incident('old', status='resolved', updates=3, age=0)
+    assert await feed._sync_subscriber(saved, [new, resolved_old])
+    assert feed.published == [('old', True)]  # the older incident is still edited in place
 
 
 async def test_sync_ignores_stale_incidents_for_fresh_subscription() -> None:

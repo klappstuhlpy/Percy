@@ -7,7 +7,14 @@ import discord
 
 from app.cogs.modlog.models import CaseType, ModerationCase
 from app.cogs.modlog.ui import CaseHistoryView, build_case_view, build_warn_result_view, send_warn_dm
-from app.cogs.modlog.warns import THRESHOLD_ACTIONS, WarnThreshold, active_warn_count, select_threshold, warn_expiry
+from app.cogs.modlog.warns import (
+    MAX_EXPIRY_DAYS,
+    WarnThreshold,
+    active_warn_count,
+    select_threshold,
+    threshold_error,
+    warn_expiry,
+)
 from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.utils.checks import hierarchy_error
@@ -342,30 +349,11 @@ class ModLog(Cog):
     )
     async def warnpolicy_set(self, ctx: Context, count: int, action: str, duration: str | None = None) -> None:
         """Add or replace the rule for a warn count."""
-        from app.cogs.moderation.member_actions import (
-            MemberActionError,
-            validate_mute_duration,
-            validate_timeout_duration,
-        )
-
         assert ctx.guild is not None
         action = action.lower()
-        if count < 1 or action not in THRESHOLD_ACTIONS:
-            await ctx.send_error(f'Count must be 1 or more and action one of: {", ".join(THRESHOLD_ACTIONS)}.')
-            return
-        seconds: int | None = None
-        try:
-            if duration is not None:
-                seconds = int(ShortTime(duration, as_timedelta=True).dt.total_seconds())  # type: ignore[attr-defined]
-            if action == 'timeout':
-                validate_timeout_duration(seconds)
-            elif action == 'mute':
-                validate_mute_duration(seconds)
-            elif seconds is not None:
-                await ctx.send_error(f'`{action}` takes no duration.')
-                return
-        except MemberActionError as e:
-            await ctx.send_error(e.detail)
+        seconds = int(ShortTime(duration, as_timedelta=True).dt.total_seconds()) if duration is not None else None  # type: ignore[attr-defined]
+        if error := threshold_error(count, action, seconds):
+            await ctx.send_error(error)
             return
         await self.bot.db.cases.set_warn_threshold(ctx.guild.id, count, action, seconds)
         await ctx.send_success(f'At **{count}** active warns: **{action}**.')
@@ -391,8 +379,8 @@ class ModLog(Cog):
     async def warnpolicy_expiry(self, ctx: Context, days: int) -> None:
         """Set warn expiry."""
         assert ctx.guild is not None
-        if not 0 <= days <= 3650:
-            await ctx.send_error('Days must be between 0 and 3650.')
+        if not 0 <= days <= MAX_EXPIRY_DAYS:
+            await ctx.send_error(f'Days must be between 0 and {MAX_EXPIRY_DAYS}.')
             return
         await self.bot.db.cases.set_warn_expiry_days(ctx.guild.id, days or None)
         await ctx.send_success(f'New warns expire after **{days} days**.' if days else 'Warns no longer expire.')

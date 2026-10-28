@@ -16,7 +16,7 @@ import copy
 import enum
 import multiprocessing
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from itertools import chain, combinations
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
@@ -238,6 +238,7 @@ class HandHistoryEntry:
     winners: list[str]
     winning_hand: str | None = None
     blinds: tuple[int, int] = (0, 0)  # (small, big)
+    boards: list[list[tuple[int, int]]] = field(default_factory=list)  # every full board when run twice
 
 
 @dataclass
@@ -518,6 +519,11 @@ class TexasHoldem:
         self.run_it_twice_offered: bool = False  # Whether offer is pending
         self.run_it_twice_accepted: bool = False  # Whether both players agreed
         self.run_it_twice_boards: list[list[tuple[int, int]]] = []  # Multiple board runouts
+        self.run_it_twice_board_winners: list[list[Player]] = []
+        # When set (by the Discord bridge), an eligible all-in runout waits for a vote instead of dealing at once.
+        self.hold_runout_for_vote: bool = False
+        # Chips each member took from the pots this hand (display only; stacks are the source of truth).
+        self.payouts: dict[Any, int] = {}
 
         # Hand history
         self.hand_history: list[HandHistoryEntry] = []
@@ -710,6 +716,8 @@ class TexasHoldem:
         self.run_it_twice_offered = False
         self.run_it_twice_accepted = False
         self.run_it_twice_boards = []
+        self.run_it_twice_board_winners = []
+        self.payouts = {}
         self._current_hand_actions = []
         self.last_aggressor_index = None
         # Note: odds_mode, straddle_enabled, run_it_twice_enabled, hand_history persist across rounds
@@ -798,6 +806,7 @@ class TexasHoldem:
             total_won = 0
             for pot in [self.pot, *self.side_pots]:
                 winner.stack += pot.amount
+                self.payouts[winner.member] = self.payouts.get(winner.member, 0) + pot.amount
                 total_won += pot.amount
                 self.winners.append(([winner], pot))
             self._log_action(f"{self._get_player_name(winner)} wins {total_won} (others folded)")
@@ -875,6 +884,7 @@ class TexasHoldem:
         by_seat = sorted(winners, key=lambda p: (self.players.index(p) - dealer - 1) % n)
         for i, winner in enumerate(by_seat):
             winner.stack += share + (1 if i < odd else 0)
+            self.payouts[winner.member] = self.payouts.get(winner.member, 0) + share + (1 if i < odd else 0)
 
     def abort_hand(self) -> None:
         """Cancels a running hand and returns every chip put in this hand to its owner."""
@@ -1144,6 +1154,21 @@ class TexasHoldem:
         self.run_it_twice_accepted = True
         return True
 
+    @property
+    def runout_pending(self) -> bool:
+        """True while a held all-in runout waits for :meth:`resolve_runout`."""
+        return self.state == TableState.RUNNING and self.run_it_twice_offered and not self.run_it_twice_accepted
+
+    def resolve_runout(self, twice: bool) -> bool:
+        """Finishes a held runout: twice if the players agreed, once otherwise. False if nothing was pending."""
+        if not self.runout_pending:
+            return False
+        if not (twice and self.accept_run_it_twice()):
+            self.decline_run_it_twice()
+            self.__fill_left_community_cards()
+        self.end()
+        return True
+
     def decline_run_it_twice(self) -> None:
         """Declines the run it twice offer."""
         self.run_it_twice_offered = False
@@ -1210,6 +1235,7 @@ class TexasHoldem:
             ]
 
         community = [(int(c[0]), int(c[1])) for c in self.community_arr]
+        boards = [list(b) for b in self.run_it_twice_boards]
 
         winner_names = []
         winning_hand = None
@@ -1232,6 +1258,7 @@ class TexasHoldem:
             winners=winner_names,
             winning_hand=winning_hand,
             blinds=(self.small_blind, self.big_blind),
+            boards=boards,
         )
 
         self.hand_history.append(entry)
@@ -1248,6 +1275,9 @@ class TexasHoldem:
         # Track wins per player across all boards
         board_winners: list[list[Player]] = []
         all_board_ranks: list[list[tuple[Player, HandResult]]] = []
+
+        # Show (and record) the first full board as the table's community cards.
+        self.community_arr = np.array(self.run_it_twice_boards[0])
 
         for board in self.run_it_twice_boards:
             # Convert board to numpy array for evaluation
@@ -1270,6 +1300,8 @@ class TexasHoldem:
             # Store ranks for the first board (for display)
             if not self.ranks:
                 self.ranks = board_ranks
+
+        self.run_it_twice_board_winners = board_winners
 
         # Distribute pots based on board wins (best eligible hand per board, per pot)
         for pot in [self.pot, *self.side_pots]:
@@ -1420,6 +1452,8 @@ class TexasHoldem:
         max_bet = self.max_bet
         if all(p.checked and p.bet == max_bet for p in able):
             if len(self.community_arr) == 5 or len(able) <= 1:
+                if self.hold_runout_for_vote and self.offer_run_it_twice():
+                    return  # the bridge resolves the vote via resolve_runout()
                 self.__fill_left_community_cards()
                 self.end()
             else:

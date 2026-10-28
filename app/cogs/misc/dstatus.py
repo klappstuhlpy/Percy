@@ -297,9 +297,9 @@ class DiscordStatusMixin:
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)  # type: ignore[call-arg]
-        # guild_id -> latest incident update id already rendered. In-memory on purpose: after a
-        # restart the first poll re-edits a recent card once, which is idempotent.
-        self._seen_updates: dict[int, str | None] = {}
+        # (guild_id, incident_id) -> latest incident update id already rendered. In-memory on purpose:
+        # after a restart the first poll re-edits a recent card once, which is idempotent.
+        self._seen_updates: dict[tuple[int, str], str | None] = {}
 
     async def _setup_status(self) -> None:
         self.check_new_incident.start()
@@ -345,15 +345,22 @@ class DiscordStatusMixin:
         incidents.sort(key=lambda i: i.started_at or i.created_at or epoch, reverse=True)
         return incidents
 
-    async def _publish(self, saved: IncidentItem, incident: Incident, *, edit: bool) -> bool:
+    async def _load_posts(self, saved: IncidentItem) -> dict[str, tuple[int, str | None]]:
+        """The guild's posted cards: incident id -> (message id, status last rendered)."""
+        rows = await self.bot.db.incidents.get_posts(saved.guild_id)
+        return {r['incident_id']: (r['message_id'], r['status']) for r in rows}
+
+    async def _publish(
+        self, saved: IncidentItem, incident: Incident, *, edit: bool, post: tuple[int, str | None] | None = None
+    ) -> bool:
         """|coro|
 
-        Render ``incident`` into the subscriber's channel and record it as the tracked incident.
+        Render ``incident`` into the subscriber's channel and record the post.
 
-        ``edit`` re-renders the tracked message in place (legacy embed posts are converted by
-        clearing content/embeds; if Discord refuses, the old post is deleted and reposted).
-        Otherwise a fresh message is posted. State is only written once a message exists, so a
-        failed send is retried on the next poll rather than silently skipped.
+        ``edit`` re-renders the incident's own earlier message (``post``) in place (legacy embed
+        posts are converted by clearing content/embeds; if Discord refuses, the old post is deleted
+        and reposted). Otherwise a fresh message is posted. State is only written once a message
+        exists, so a failed send is retried on the next poll rather than silently skipped.
         """
         channel = saved.get_channel()
         if channel is None:
@@ -361,8 +368,8 @@ class DiscordStatusMixin:
 
         view = incident.build_view()
         message: discord.Message | None = None
-        if edit and saved.message_id:
-            partial = channel.get_partial_message(saved.message_id)
+        if edit and post is not None:
+            partial = channel.get_partial_message(post[0])
             try:
                 message = await partial.edit(content=None, embeds=[], attachments=[], view=view)
             except discord.HTTPException:
@@ -377,15 +384,19 @@ class DiscordStatusMixin:
                 return False
 
         incidents = self.bot.db.incidents
-        if saved.id != incident.id:
-            await incidents.set_incident_id(incident.id, saved.guild_id)
-        await incidents.set_status(incident.id, saved.guild_id, incident.status)
-        if message.id != saved.message_id:
-            await incidents.set_message_id(message.id, incident.id, saved.guild_id)
+        await incidents.upsert_post(saved.guild_id, incident.id, message.id, incident.status)
+        self._seen_updates[(saved.guild_id, incident.id)] = incident.latest_update_id
 
-        # Keep the (cached) row in step so later incidents in the same tick see the new state.
-        saved.id, saved.status, saved.message_id = incident.id, incident.status, message.id
-        self._seen_updates[saved.guild_id] = incident.latest_update_id
+        # The guild row mirrors the newest-posted incident (the `show`/subscribe checks read it); a
+        # concurrent older incident being edited must not rewind it.
+        if not edit or saved.id in (None, incident.id):
+            if saved.id != incident.id:
+                await incidents.set_incident_id(incident.id, saved.guild_id)
+            await incidents.set_status(incident.id, saved.guild_id, incident.status)
+            if message.id != saved.message_id:
+                await incidents.set_message_id(message.id, incident.id, saved.guild_id)
+            # Keep the (cached) row in step so later incidents in the same tick see the new state.
+            saved.id, saved.status, saved.message_id = incident.id, incident.status, message.id
         return True
 
     async def _sync_subscriber(self, saved: IncidentItem, incidents: list[Incident]) -> bool:
@@ -393,31 +404,22 @@ class DiscordStatusMixin:
 
         Bring one subscriber up to date. Returns whether anything was written.
 
-        Each guild tracks a single incident (one DB row). The tracked incident is edited in
-        place when its status or latest update changes; incidents *newer* than it that are
-        still active get their own fresh post, oldest first, and become the tracked one.
-        Incidents older than the tracked one are never re-posted, so two concurrent incidents
-        can no longer ping-pong over one message.
+        Every incident gets its own card, tracked per ``(guild, incident)``: an incident that was
+        already posted is edited in place when its status or latest update changes (however many
+        newer ones followed), and a still-active incident with no card gets a fresh post, oldest
+        first. Resolved incidents past the recency window are never re-posted.
         """
-        ids = [incident.id for incident in incidents]
-        if saved.id in ids:
-            index = ids.index(saved.id)
-            tracked: Incident | None = incidents[index]
-            newer = incidents[:index]
-        else:
-            tracked, newer = None, incidents
-
+        posts = await self._load_posts(saved)
         changed = False
-        if tracked is not None and (
-            tracked.status != saved.status
-            or (tracked.is_recent() and self._seen_updates.get(saved.guild_id) != tracked.latest_update_id)
-        ):
-            changed |= await self._publish(saved, tracked, edit=True)
-
-        # ponytail: one tracked row per guild, so an older concurrent incident stops updating once a
-        # newer one is posted; a per-incident table would lift that.
-        for incident in reversed(newer):
-            if incident.is_recent():
+        for incident in reversed(incidents):
+            post = posts.get(incident.id)
+            if post is not None:
+                if post[1] != incident.status or (
+                    incident.is_recent()
+                    and self._seen_updates.get((saved.guild_id, incident.id)) != incident.latest_update_id
+                ):
+                    changed |= await self._publish(saved, incident, edit=True, post=post)
+            elif incident.is_recent():
                 changed |= await self._publish(saved, incident, edit=False)
         return changed
 

@@ -566,6 +566,19 @@ class IncidentsRepository(BaseRepository):
         """Fetches every guild subscribed to the status feed."""
         return await self.fetch("SELECT * FROM discord_incidents;")
 
+    async def get_posts(self, guild_id: int) -> list[asyncpg.Record]:
+        """Every incident card a guild has been sent (``incident_id, message_id, status``)."""
+        return await self.fetch(
+            "SELECT incident_id, message_id, status FROM discord_incident_posts WHERE guild_id = $1;", guild_id)
+
+    async def upsert_post(self, guild_id: int, incident_id: str, message_id: int, status: str | None) -> None:
+        """Records (or updates) the message that shows one incident in a guild."""
+        await self.execute(
+            "INSERT INTO discord_incident_posts (guild_id, incident_id, message_id, status) VALUES ($1, $2, $3, $4) "
+            "ON CONFLICT (guild_id, incident_id) DO UPDATE SET message_id = $3, status = $4;",
+            guild_id, incident_id, message_id, status,
+        )
+
     async def get_subscriber(self, guild_id: int) -> asyncpg.Record | None:
         """Fetches a guild's subscription row, or ``None`` if it is not subscribed."""
         return await self.fetchrow("SELECT * FROM discord_incidents WHERE guild_id = $1;", guild_id)

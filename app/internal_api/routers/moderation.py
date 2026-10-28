@@ -57,6 +57,19 @@ class PatchCaseBody(BaseModel):
     moderator_id: str | int | None = None
 
 
+class WarnExpiryBody(BaseModel):
+    expiry_days: int | None = None
+
+
+class WarnThresholdBody(BaseModel):
+    action: str
+    duration_seconds: int | None = None
+
+
+class PardonBody(BaseModel):
+    moderator_id: str | int
+
+
 class BulkActionBody(BaseModel):
     user_ids: list[str | int]
     action: str
@@ -97,6 +110,72 @@ def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> dict:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+async def _warn_policy_payload(bot, guild_id: int) -> dict:
+    from app.cogs.modlog.warns import THRESHOLD_ACTIONS
+
+    rows = await bot.db.cases.get_warn_thresholds(guild_id)
+    return {
+        'expiry_days': await bot.db.cases.get_warn_expiry_days(guild_id),
+        'thresholds': [
+            {'warn_count': r['warn_count'], 'action': r['action'], 'duration_seconds': r['duration_seconds']}
+            for r in rows
+        ],
+        'actions': list(THRESHOLD_ACTIONS),
+    }
+
+
+@router.get("/warn-policy")
+async def get_warn_policy(bot: BotDep, guild: GuildDep) -> dict:
+    """Warn expiry and the escalation rules (the data behind ``warnpolicy show``)."""
+    return await _warn_policy_payload(bot, guild.id)
+
+
+@router.patch("/warn-policy")
+async def patch_warn_policy(bot: BotDep, guild: GuildDep, body: WarnExpiryBody) -> dict:
+    """Sets after how many days new warns stop counting; ``null``/``0`` means never."""
+    from app.cogs.modlog.warns import MAX_EXPIRY_DAYS
+
+    days = body.expiry_days or None
+    if days is not None and not 0 < days <= MAX_EXPIRY_DAYS:
+        raise HTTPException(status_code=400, detail=f'expiry_days must be between 0 and {MAX_EXPIRY_DAYS}')
+    await bot.db.cases.set_warn_expiry_days(guild.id, days)
+    return await _warn_policy_payload(bot, guild.id)
+
+
+@router.put("/warn-policy/thresholds/{warn_count}")
+async def put_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep, body: WarnThresholdBody) -> dict:
+    """Adds or replaces the rule for a warn count, under the rules `warnpolicy set` enforces."""
+    from app.cogs.modlog.warns import threshold_error
+
+    action = body.action.lower()
+    if error := threshold_error(warn_count, action, body.duration_seconds):
+        raise HTTPException(status_code=400, detail=error)
+    await bot.db.cases.set_warn_threshold(guild.id, warn_count, action, body.duration_seconds)
+    return await _warn_policy_payload(bot, guild.id)
+
+
+@router.delete("/warn-policy/thresholds/{warn_count}", status_code=204)
+async def delete_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep) -> None:
+    if not await bot.db.cases.remove_warn_threshold(guild.id, warn_count):
+        raise HTTPException(status_code=404, detail='no rule for that warn count')
+
+
+@router.post("/cases/{case_index}/pardon")
+async def pardon_case(case_index: int, bot: BotDep, guild: GuildDep, body: PardonBody) -> dict:
+    """Pardons one warn (kept in the history, no longer counts). Needs the moderator to hold Kick Members."""
+    from app.cogs.modlog.models import ModerationCase
+
+    moderator = await resolve_moderator(guild, body.moderator_id, 'kick_members')
+    record = await bot.db.cases.pardon_case(guild.id, case_index, moderator.id)
+    if record is None:
+        raise HTTPException(status_code=404, detail='not an active warning')
+    case = ModerationCase.from_record(record)
+    cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
+    if cog is not None:
+        await cog._edit_modlog_message(case)
+    return _case_payload(guild, case, bot)
 
 
 @router.get("/cases")

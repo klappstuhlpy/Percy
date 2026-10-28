@@ -134,4 +134,19 @@ async def test_open_bets_roundtrip_sql_shape() -> None:
     await repo.open_bet_add("roulette", 1, 2, 3, 50)
     await repo.open_bets_clear("roulette", 2)
     assert await repo.open_bets_take_all() == []
-    assert repo.execute.await_count == 2
+    assert await repo.open_bets_clear("roulette", 2) == 0
+    assert repo.execute.await_count == 1
+
+
+async def test_settle_bets_loses_the_claim_to_a_reload_refund() -> None:
+    from app.cogs.games.cog import Games
+
+    cog = Games.__new__(Games)
+    cog.bot = MagicMock()
+    clear = AsyncMock(return_value=0)  # cog_load's take-all already deleted the rows
+    cog.bot.db.game_stats.open_bets_clear = clear
+    assert await cog._settle_bets("horserace", 1) is False
+    clear.return_value = 2
+    assert await cog._settle_bets("horserace", 1) is True
+    clear.side_effect = RuntimeError("db down")
+    assert await cog._settle_bets("horserace", 1) is True

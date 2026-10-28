@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Poker: run it twice for heads-up all-ins before the river. Both players vote Yes/No (20 s, timeout or any No runs it once); each pot is split per board and both boards show in the result and hand history.
+
+- Internal API: warn policy (`GET`/`PATCH /warn-policy`, `PUT`/`DELETE /warn-policy/thresholds/{warn_count}`) and `POST /cases/{case_index}/pardon`, sharing their validation with the `warnpolicy` command.
+
 ### Fixed
+- Games: a hot reload during a horse race or roulette spin could pay the stakes twice (restart refund plus the old race); the payout now claims the persisted stakes first.
+- Discord status feed: every concurrent incident now keeps its own card and keeps updating, instead of an older one going silent once a newer one was posted.
 - Poker: a straddle could pass the turn to a folded or sitting-out seat and stall the table; players who left the hand could rebuy and lose the chips; the host leaving no longer leaves the table without a host; a double "Next Round" click no longer auto-starts the hand.
 - Blackjack: a 21 on a split hand loses to a dealer blackjack instead of pushing.
 - Polls: ending a poll without Manage Threads still updates the poll card. Poll numbers no longer repeat after a poll is deleted; a failed image upload cancels creation instead of posting the poll without its image.
@@ -17,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stats: command usage logged during a save was lost; background loops stopped for good on non-connection errors.
 - `settings` data export: an export too large to DM now reports the failure.
 - "tonight"/"morning" crashed on the last day of a month.
+
+### Migrations
+- `V65__dstatus_incidents.sql`: `discord_incident_posts` (one posted message per guild and incident), backfilled from `discord_incidents`.
 
 
 ## [2.21.0] - 2026-10-27
