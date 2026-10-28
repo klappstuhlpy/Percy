@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.23.0] - 2026-10-28
+
 ### Security
 - Internal API: `POST /rolemenus/{menu_id}/roles` requires `user_id`; a missing actor no longer skips the role-hierarchy check.
 
