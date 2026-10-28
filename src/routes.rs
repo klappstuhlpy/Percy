@@ -595,7 +595,26 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .nest_service("/static", tower_http::services::ServeDir::new("static"))
         // Every successful guild-scoped mutation lands in the change log (src/changes.rs).
         .layer(axum::middleware::from_fn_with_state(state.clone(), changes::record))
+        .layer(axum::middleware::from_fn(reject_encoded_separators))
         .with_state(state)
+}
+
+/// Path params (`:user_id`, `:trigger`, `:slug`, ...) arrive percent-decoded and percy-client
+/// splices them into Percy URLs unencoded, so `1%2F..%2F..%2F<other guild>%2F...` would walk
+/// out of the guild the gate just checked. No real id, slug or trigger needs these in its path.
+async fn reject_encoded_separators(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    if has_encoded_separator(req.uri().path()) {
+        return axum::response::IntoResponse::into_response(axum::http::StatusCode::BAD_REQUEST);
+    }
+    next.run(req).await
+}
+
+fn has_encoded_separator(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    ["%2f", "%5c", "%3f", "%23"].iter().any(|s| lower.contains(s))
 }
 
 /// Liveness probe that also confirms the kernel database is serving queries.
@@ -622,6 +641,14 @@ mod tests {
         build_state_with(Config::test_default(), Path::new(":memory:"))
             .await
             .expect("build state")
+    }
+
+    #[test]
+    fn encoded_separators_are_refused() {
+        assert!(has_encoded_separator("/dashboard/guild/1/members/1%2F..%2F..%2F2/action"));
+        assert!(has_encoded_separator("/comics/dc/a%2f..%5Cb"));
+        assert!(has_encoded_separator("/dashboard/guild/1/autoresponders/hi%3Fx"));
+        assert!(!has_encoded_separator("/dashboard/guild/1/autoresponders/hello%20world"));
     }
 
     /// The router must compose without panicking (route/state conflicts).

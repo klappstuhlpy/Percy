@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Requests whose path carries an encoded `/`, `\`, `?` or `#` are refused (400). Path parameters were spliced into Percy URLs decoded, so a crafted member id or trigger could reach another guild's endpoints past the manage check.
+
+### Fixed
+- Member and bulk actions: a non-object JSON body returns an error instead of crashing the handler.
+- "Sign in to track" keeps the page's query string, so login returns to the same filtered page.
+
 ## [0.18.0] - 2026-10-28
 
 ### Added
