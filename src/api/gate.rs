@@ -7,7 +7,7 @@
 //! token is charged to the client's IP bucket instead, which bounds token guessing.
 
 use axum::{
-    extract::{Request, State},
+    extract::{ConnectInfo, Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -19,6 +19,7 @@ use super::{
     tokens,
 };
 use crate::{db, AppState};
+use std::net::{IpAddr, SocketAddr};
 
 /// How long a guild-changing API call stays in the change log (same window as dashboard edits).
 const RETENTION_DAYS: u32 = crate::changes::RETENTION_DAYS;
@@ -180,13 +181,19 @@ pub(crate) fn required_scope(method: &Method, rest: &str) -> Option<Required> {
 
 // -- Middleware ------------------------------------------------------------------------------
 
-fn client_ip(headers: &HeaderMap) -> String {
-    // The reverse proxy appends the address it saw, so the *rightmost* entry is the one that
-    // cannot be forged by the client. Without a proxy header everyone shares one bucket.
+/// The client address for rate limiting. With `trusted_proxies = n > 0`, the entry `n` places
+/// from the right of `X-Forwarded-For` (each proxy appends the address it saw, so only the
+/// rightmost `n` are not client-forged), falling back to `X-Real-IP`. With `0`, headers are
+/// ignored and the socket peer is used.
+fn client_ip(headers: &HeaderMap, peer: Option<IpAddr>, trusted_proxies: u8) -> String {
+    let peer = || peer.map_or_else(|| "unknown".to_string(), |p| p.to_string());
+    if trusted_proxies == 0 {
+        return peer();
+    }
     headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.rsplit(',').next())
+        .and_then(|v| v.rsplit(',').nth(usize::from(trusted_proxies) - 1))
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .or_else(|| {
@@ -195,7 +202,15 @@ fn client_ip(headers: &HeaderMap) -> String {
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.trim().to_string())
         })
-        .unwrap_or_else(|| "unknown".to_string())
+        .unwrap_or_else(peer)
+}
+
+fn request_ip(app: &AppState, request: &Request) -> String {
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.ip());
+    client_ip(request.headers(), peer, app.config.trusted_proxies)
 }
 
 fn bearer(headers: &HeaderMap) -> Option<&str> {
@@ -236,7 +251,7 @@ fn unauthorized(code: &'static str, message: &'static str) -> Response {
 
 /// Token-authenticated routes under `/api/v1/guilds/{guild_id}`.
 pub(crate) async fn guild_gate(State(app): State<AppState>, mut request: Request, next: Next) -> Response {
-    let ip = client_ip(request.headers());
+    let ip = request_ip(&app, &request);
 
     let Some(plaintext) = bearer(request.headers()).map(str::to_owned) else {
         let v = app.limiter.check(&format!("ip:{ip}"), IP_RATE);
@@ -323,7 +338,7 @@ pub(crate) async fn guild_gate(State(app): State<AppState>, mut request: Request
 
 /// Open routes (`/api/v1/bot/stats`): per-IP limit only.
 pub(crate) async fn public_gate(State(app): State<AppState>, request: Request, next: Next) -> Response {
-    let ip = client_ip(request.headers());
+    let ip = request_ip(&app, &request);
     let verdict = app.limiter.check(&format!("ip:{ip}"), IP_RATE);
     if !verdict.allowed {
         return rate_limited(&verdict);
@@ -369,9 +384,16 @@ mod tests {
         assert!(bearer(&h).is_none());
 
         let mut h = HeaderMap::new();
-        assert_eq!(client_ip(&h), "unknown");
+        assert_eq!(client_ip(&h, None, 1), "unknown");
         h.insert("x-forwarded-for", HeaderValue::from_static("6.6.6.6, 203.0.113.9"));
-        assert_eq!(client_ip(&h), "203.0.113.9");
+        assert_eq!(client_ip(&h, None, 1), "203.0.113.9");
+        // Two proxies: the second from the right.
+        assert_eq!(client_ip(&h, None, 2), "6.6.6.6");
+        // Direct exposure: the forged header is ignored, the socket peer wins.
+        let peer: IpAddr = "198.51.100.7".parse().unwrap();
+        assert_eq!(client_ip(&h, Some(peer), 0), "198.51.100.7");
+        // Trusted but header absent: fall back to the peer.
+        assert_eq!(client_ip(&HeaderMap::new(), Some(peer), 1), "198.51.100.7");
     }
 
     #[test]

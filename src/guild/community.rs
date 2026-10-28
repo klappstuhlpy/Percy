@@ -118,11 +118,10 @@ pub async fn guild_role_menu_add_role(
         Ok(p) => p,
         Err(r) => return r,
     };
-    ok_or_err(
-        percy
-            .add_role_menu_role(guild_id, menu_id, &snowflakes(body, &["role_id"]))
-            .await,
-    )
+    // Always the session user (never a browser value): Percy refuses roles at/above their top role.
+    let mut body = snowflakes(body, &["role_id"]);
+    body["user_id"] = session.discord_user_id.clone().into();
+    ok_or_err(percy.add_role_menu_role(guild_id, menu_id, &body).await)
 }
 
 /// `POST /dashboard/guild/:guild_id/role-menus/:menu_id/roles/:role_id/delete`

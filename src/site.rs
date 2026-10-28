@@ -90,7 +90,7 @@ fn legal_doc_cache() -> &'static LegalDocCache {
 /// result for [`LEGAL_DOC_TTL`]. No local fallback — the page reflects the live
 /// source of truth, so a fetch failure surfaces to the caller.
 async fn cached_legal_doc(_app: &AppState, url: &'static str) -> Result<Arc<String>, reqwest::Error> {
-    if let Some((ts, html)) = legal_doc_cache().lock().unwrap().get(url) {
+    if let Some((ts, html)) = legal_doc_cache().lock().unwrap_or_else(|e| e.into_inner()).get(url) {
         if ts.elapsed() < LEGAL_DOC_TTL {
             return Ok(html.clone());
         }

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Member and bulk actions: a non-object JSON body returns an error instead of crashing the handler.
 - "Sign in to track" keeps the page's query string, so login returns to the same filtered page.
+- API rate limiting no longer trusts `X-Forwarded-For` blindly: new `trusted_proxies` config (default `1`, one reverse proxy) picks the entry that many hops from the right; `0` ignores the header and uses the socket peer.
+- API rate-limit key map is now hard-capped (least recently used evicted), so a flood of distinct keys cannot grow it unbounded.
+- A poisoned legal-document cache lock no longer panics the page.
 
 ## [0.18.0] - 2026-10-28
 

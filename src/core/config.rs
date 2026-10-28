@@ -39,6 +39,17 @@ pub struct Config {
     /// `GET /auth/handoff`). Unset → only the dashboard's own Discord login works.
     #[serde(default)]
     pub sso_secret: Option<SecretKey>,
+    /// Reverse proxies in front of the app that append to `X-Forwarded-For`. The API
+    /// rate limiter reads the client address that many entries from the right of the
+    /// header; `0` ignores the headers and uses the socket peer. Default `1` (one
+    /// reverse proxy, the production deploy). Set `0` when exposed directly, otherwise
+    /// clients can forge the header and dodge per-IP limits.
+    #[serde(default = "default_trusted_proxies")]
+    pub trusted_proxies: u8,
+}
+
+fn default_trusted_proxies() -> u8 {
+    1
 }
 
 /// Discord OAuth2 application credentials (from the Discord developer portal).
@@ -131,6 +142,7 @@ impl Config {
             discord: DiscordConfig::default(),
             percy: PercyConfig::default(),
             sso_secret: None,
+            trusted_proxies: default_trusted_proxies(),
         })
     }
 
@@ -245,6 +257,7 @@ impl Config {
                 ..PercyConfig::default()
             },
             sso_secret: None,
+            trusted_proxies: default_trusted_proxies(),
         }
     }
 }

@@ -27,7 +27,7 @@ pub(crate) const IP_RATE: Rate = Rate {
     burst: 20,
 };
 
-/// Soft cap on tracked keys; past it, idle full buckets are dropped.
+/// Cap on tracked keys; past it idle full buckets are dropped, then the least recently used.
 const MAX_KEYS: usize = 20_000;
 
 struct Bucket {
@@ -64,7 +64,14 @@ impl Limiter {
         let mut map = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
 
         if map.len() >= MAX_KEYS {
-            map.retain(|_, b| b.tokens + now.duration_since(b.last).as_secs_f64() * per_sec < burst);
+            map.retain(|_, b| b.tokens + now.saturating_duration_since(b.last).as_secs_f64() * per_sec < burst);
+            // Still full of busy keys (a flood of distinct ones): evict the least recent.
+            // ponytail: O(n) scan per insert while saturated, fine for a 20k cap.
+            if map.len() >= MAX_KEYS && !map.contains_key(key) {
+                if let Some(old) = map.iter().min_by_key(|(_, b)| b.last).map(|(k, _)| k.clone()) {
+                    map.remove(&old);
+                }
+            }
         }
 
         let bucket = map.entry(key.to_string()).or_insert(Bucket {
@@ -125,5 +132,16 @@ mod tests {
         }
         assert!(!limiter.check_at("a", TOKEN_RATE, t0).allowed);
         assert!(limiter.check_at("b", TOKEN_RATE, t0).allowed);
+    }
+
+    #[test]
+    fn key_map_is_hard_bounded() {
+        let limiter = Limiter::default();
+        let t0 = Instant::now();
+        for i in 0..MAX_KEYS + 50 {
+            // Each key spends a token so none is an idle full bucket.
+            limiter.check_at(&format!("k{i}"), TOKEN_RATE, t0 + Duration::from_millis(i as u64));
+        }
+        assert!(limiter.buckets.lock().unwrap().len() <= MAX_KEYS);
     }
 }

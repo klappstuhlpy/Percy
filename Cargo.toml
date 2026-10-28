@@ -27,7 +27,7 @@ serde_yaml = "0.9"
 pulldown-cmark = "0.10"
 kls-ui = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
 kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
-percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.16.0" }
+percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.17.0" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.
