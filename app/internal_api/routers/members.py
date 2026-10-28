@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.cogs.moderation.member_actions import MemberActionError, apply_member_action, scan_member_messages
 from app.services.notifications import ACTION_PERMISSIONS
+from app.utils.checks import hierarchy_error
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id, resolve_moderator, role_error
@@ -394,6 +395,11 @@ async def member_roles(
     moderator = None
     if body.moderator_id not in (None, ''):
         moderator = await resolve_moderator(guild, body.moderator_id, 'manage_roles')
+        # Discord's own rule: you cannot edit the roles of a member who outranks you (self excepted).
+        if moderator.id != member.id and (
+            error := hierarchy_error(moderator, member, guild.me, action='change the roles of', check_bot=False)
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
 
     add_ids = {parse_id(rid, 'add') for rid in body.add}
     remove_ids = {parse_id(rid, 'remove') for rid in body.remove}

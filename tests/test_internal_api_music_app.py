@@ -362,3 +362,13 @@ async def test_album_not_a_playlist_is_404() -> None:
     with patch('app.cogs.music.player.Player.search', AsyncMock(return_value=[_t('x', 'y', None)])), pytest.raises(HTTPException) as exc:
         await api.get_music_album(MagicMock(), 'https://x.test/a')
     assert exc.value.status_code == 404
+
+
+async def test_control_back_without_history_and_bad_loop_mode_are_400() -> None:
+    guild, player = _guild(member_vc=10, bot_vc=10), _player()
+    player.back = AsyncMock(return_value=False)
+    with patch.object(api, '_get_guild_player', return_value=(guild, player)):
+        for body in (api.ControlBody(action='back', user_id=5), api.ControlBody(action='loop', user_id=5, mode=7)):
+            with pytest.raises(HTTPException) as exc:
+                await api.post_music_control(guild, _bot(0), body)
+            assert exc.value.status_code == 400

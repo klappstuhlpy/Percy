@@ -195,7 +195,9 @@ async def list_news(
         _check_subject_type(media, subject_type)  # type: ignore[arg-type]
 
     items, total = await _page(bot, media, subject, source, since, search, page, per_page)
-    followed = await _followed(bot, discord_id, MAX_FOLLOWED) if discord_id is not None else ()
+    # The personalised head leads the *first* page only: prepended to page 2 it would repeat the
+    # same dozen stories at the top of every page.
+    followed = await _followed(bot, discord_id, MAX_FOLLOWED) if discord_id is not None and page == 1 else ()
     return browse_payload(
         items,
         total=total,

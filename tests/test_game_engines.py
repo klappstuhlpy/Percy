@@ -203,6 +203,9 @@ def test_horserace_parimutuel_split() -> None:
     assert horserace.parimutuel_multiplier(300, 100) == pytest.approx(2.7)
     # nobody on the winner -> house keeps the pool.
     assert horserace.parimutuel_multiplier(300, 0) == 0.0
+    # a sole (or lopsided) winner gets the stake back, never less.
+    assert horserace.parimutuel_multiplier(100, 100) == 1.0
+    assert horserace.parimutuel_multiplier(110, 100) == 1.0
 
 
 # -- Trivia -----------------------------------------------------------------

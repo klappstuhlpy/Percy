@@ -240,3 +240,14 @@ def test_an_undeclared_entity_is_recovered_rather_than_losing_the_feed() -> None
     document = RSS.replace('A new run starts in October.', 'A new&nbsp;run starts in October.')
     feed = parse_feed(document)
     assert len(feed.items) == 2
+
+
+def test_an_aware_since_filter_is_made_naive_for_the_timestamp_column() -> None:
+    import datetime
+
+    from app.database.repositories.news import NewsRepository
+
+    aware = datetime.datetime(2026, 8, 4, 14, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+    _, args = NewsRepository._filters(media=None, subject=None, source=None, since=aware, search=None)
+
+    assert args == [datetime.datetime(2026, 8, 4, 12, 0)]

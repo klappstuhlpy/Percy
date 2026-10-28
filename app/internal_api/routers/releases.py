@@ -206,6 +206,9 @@ async def put_subscription(bot: BotDep, discord_id: int, body: Annotated[Subscri
     without a round trip, so re-subscribing is an upsert rather than a conflict.
     """
     _check_subject_type(body.media, body.subject_type)
+    if not body.subject_value.strip():
+        # A blank key normalises to '' and stores a follow the fan-out can never match.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="subject_value must not be blank")
     # The raw value goes down: the repository normalises every subject value it writes, and it
     # falls back to this string for a missing label -- normalising here first would casefold
     # the display name a picker-less caller (a Discord command) never sent one for.

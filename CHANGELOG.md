@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Leveling: rank and leaderboard order by level, then XP (was message count / XP within the level), and include voice-only and `level set` members.
+
+### Fixed
+- Internal API: `PATCH /members/{uid}/roles` refuses to change the roles of a member who outranks the moderator.
+- Economy: two simultaneous `daily`/`weekly`/`monthly` claims could both pay out; lottery tickets bought as the lottery ended lost the cash (now refunded); the jackpot was not paid when the announcement channel was gone; a negative debit is refused.
+- Leveling: reward roles stack when role stacking is on; reaching exactly the XP threshold levels up; negative XP can no longer drop below level 0; special level-up messages match their level; `level config unignore` no longer errors; level-up messages cannot ping @everyone or roles; a closed DM no longer raises from the message listener; no role edit when nothing changed.
+- Internal API: the leveling config PATCH validates factor, base, gain bounds and XP values (bad values broke XP on every message); level roles are bounded to 0–500.
+- Music API: `back` with no history, a `loop` mode outside 0–2 and a non-finite volume/seek return 400 instead of `ok` or 500.
+- News: `GET /news?since=…Z` no longer 500s; followed stories lead page 1 only instead of every page; a feed with a mis-declared charset updates its status instead of staying stale.
+- Releases: `unsubscribe` shows the subject's name instead of the lowercased key; a blank `subject_value` is a 400 instead of a follow that never matches.
+- Games: a lone or lopsided horse-race winner gets at least their stake back; tic-tac-toe shows the winner past the daily reward cap instead of "It's a tie!"; a timed-out roulette bet modal no longer errors.
+- Tags: an all-digit name no longer 500s dashboard create/import (new all-digit names are refused, as they read back as tag IDs).
+- Highlights: a whitespace-only trigger is refused instead of matching every message.
+- Starboard: a whitespace-only emoji is a 400 instead of saving an empty emoji.
+- Warn policy: escalation counts are capped at 1000 instead of 500ing past the integer column.
+
 ## [2.22.3] - 2026-10-28
 
 ### Fixed

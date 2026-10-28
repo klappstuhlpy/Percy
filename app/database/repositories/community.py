@@ -336,7 +336,7 @@ class TagsRepository(BaseRepository):
             form['owner_id'] = owner_id
 
         if _is_id(name_or_id):
-            form['tags.id'] = name_or_id
+            form['tags.id'] = int(name_or_id)
         else:
             assert isinstance(name_or_id, str)
             form['LOWER(tags.name)'] = name_or_id.lower()

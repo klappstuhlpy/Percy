@@ -41,8 +41,10 @@ def simulate_race(rng: random.Random | None = None) -> tuple[int, list[list[int]
 def parimutuel_multiplier(total_pool: int, total_on_winner: int, *, edge: float = HOUSE_EDGE) -> float:
     """Payout multiplier applied to each winning stake.
 
-    Returns ``0.0`` when nobody backed the winning horse (the house keeps the pool).
+    Returns ``0.0`` when nobody backed the winning horse (the house keeps the pool), and
+    never less than ``1.0`` otherwise: the edge comes out of the losers' stakes, so a sole
+    or lopsided winner is not charged for winning.
     """
     if total_on_winner <= 0:
         return 0.0
-    return (total_pool * edge) / total_on_winner
+    return max(1.0, (total_pool * edge) / total_on_winner)

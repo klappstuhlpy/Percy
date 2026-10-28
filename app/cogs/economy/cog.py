@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import random
 import time
+import weakref
 from contextlib import nullcontext
 from typing import Annotated, Any, Literal
 
@@ -141,6 +142,12 @@ class Economy(Cog):
         super().__init__(bot)
         self._last_drop: dict[int, datetime.datetime] = {}
         self._drops_cache: dict[int, tuple[float, bool]] = {}
+        # ponytail: one lock per claimer, never pruned (a few bytes each); stops two racing claims both paying out.
+        # Weak values: a lock disappears once no claim holds it, so the map never outgrows active claims.
+        self._claim_locks: weakref.WeakValueDictionary[tuple[int, int], asyncio.Lock] = weakref.WeakValueDictionary()
+
+    def _claim_lock(self, user_id: int, guild_id: int) -> asyncio.Lock:
+        return self._claim_locks.setdefault((user_id, guild_id), asyncio.Lock())
 
     def _effect_line(self, guild: discord.Guild, item: Any) -> str | None:
         """A display line for an item's use-effect, resolving role mentions where possible."""
@@ -597,26 +604,27 @@ class Economy(Cog):
     async def daily(self, ctx: Context) -> None:
         """Claim your daily reward. Claim on consecutive days to grow your streak bonus."""
         assert ctx.guild is not None
-        record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
+        async with self._claim_lock(ctx.author.id, ctx.guild.id):
+            record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
 
-        last_claim = record["last_claim"].replace(tzinfo=datetime.UTC) if record and record["last_claim"] else None
-        streak = record["streak"] if record else 0
-        now = ctx.message.created_at
+            last_claim = record["last_claim"].replace(tzinfo=datetime.UTC) if record and record["last_claim"] else None
+            streak = record["streak"] if record else 0
+            now = ctx.message.created_at
 
-        settings = await self._settings(ctx.guild.id)
-        result = compute_daily(last_claim, streak, now=now, base=settings.daily_base)
-        if not result.claimed:
-            assert result.next_available is not None
-            await ctx.send_error(
-                f"You've already claimed your daily reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
-            )
-            return
+            settings = await self._settings(ctx.guild.id)
+            result = compute_daily(last_claim, streak, now=now, base=settings.daily_base)
+            if not result.claimed:
+                assert result.next_available is not None
+                await ctx.send_error(
+                    f"You've already claimed your daily reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
+                )
+                return
 
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id, settings=settings)
-        amount = round(result.amount * scale)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount, bank_space=roll_bank_space())
-        await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now, result.streak)
+            scale = await self._payout_scale(ctx.author.id, ctx.guild.id, settings=settings)
+            amount = round(result.amount * scale)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=amount, bank_space=roll_bank_space())
+            await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now, result.streak)
 
         await ctx.send_success(
             f"You claimed {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)} "
@@ -628,23 +636,24 @@ class Economy(Cog):
     async def weekly(self, ctx: Context) -> None:
         """Claim your weekly reward — a bigger payout on a 7-day cooldown."""
         assert ctx.guild is not None
-        record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
-        last = record["last_weekly"].replace(tzinfo=datetime.UTC) if record and record["last_weekly"] else None
-        now = ctx.message.created_at
+        async with self._claim_lock(ctx.author.id, ctx.guild.id):
+            record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
+            last = record["last_weekly"].replace(tzinfo=datetime.UTC) if record and record["last_weekly"] else None
+            now = ctx.message.created_at
 
-        result = compute_periodic(last, now=now, cooldown=WEEKLY_COOLDOWN)
-        if not result.claimed:
-            assert result.next_available is not None
-            await ctx.send_error(
-                f"You've already claimed your weekly reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
-            )
-            return
+            result = compute_periodic(last, now=now, cooldown=WEEKLY_COOLDOWN)
+            if not result.claimed:
+                assert result.next_available is not None
+                await ctx.send_error(
+                    f"You've already claimed your weekly reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
+                )
+                return
 
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        amount = round(WEEKLY_AMOUNT * scale)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
-        await self.bot.db.economy.set_weekly(ctx.author.id, ctx.guild.id, now)
+            scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
+            amount = round(WEEKLY_AMOUNT * scale)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=amount)
+            await self.bot.db.economy.set_weekly(ctx.author.id, ctx.guild.id, now)
         await ctx.send_success(
             f"You claimed your weekly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
         )
@@ -653,23 +662,24 @@ class Economy(Cog):
     async def monthly(self, ctx: Context) -> None:
         """Claim your monthly reward — the biggest fixed payout, once every 30 days."""
         assert ctx.guild is not None
-        record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
-        last = record["last_monthly"].replace(tzinfo=datetime.UTC) if record and record["last_monthly"] else None
-        now = ctx.message.created_at
+        async with self._claim_lock(ctx.author.id, ctx.guild.id):
+            record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
+            last = record["last_monthly"].replace(tzinfo=datetime.UTC) if record and record["last_monthly"] else None
+            now = ctx.message.created_at
 
-        result = compute_periodic(last, now=now, cooldown=MONTHLY_COOLDOWN)
-        if not result.claimed:
-            assert result.next_available is not None
-            await ctx.send_error(
-                f"You've already claimed your monthly reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
-            )
-            return
+            result = compute_periodic(last, now=now, cooldown=MONTHLY_COOLDOWN)
+            if not result.claimed:
+                assert result.next_available is not None
+                await ctx.send_error(
+                    f"You've already claimed your monthly reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
+                )
+                return
 
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        amount = round(MONTHLY_AMOUNT * scale)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
-        await self.bot.db.economy.set_monthly(ctx.author.id, ctx.guild.id, now)
+            scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
+            amount = round(MONTHLY_AMOUNT * scale)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=amount)
+            await self.bot.db.economy.set_monthly(ctx.author.id, ctx.guild.id, now)
         await ctx.send_success(
             f"You claimed your monthly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
         )
@@ -1754,6 +1764,10 @@ class Economy(Cog):
             return
 
         total = await self.bot.db.economy.add_lottery_tickets(ctx.guild.id, ctx.author.id, amount, cost)
+        if total is None:  # the lottery ended between the check and the purchase
+            await balance.add(cash=cost)
+            await ctx.send_error("The lottery just ended - you were not charged.")
+            return
         await ctx.send_success(
             f"Bought **{pluralize(amount):ticket}** for {Emojis.Economy.cash} **{fnumb(cost)}**. "
             f"You now hold **{fnumb(total)}**."
@@ -1785,10 +1799,13 @@ class Economy(Cog):
         channel = self.bot.get_channel(record["channel_id"])
         await self.bot.db.economy.delete_lottery(guild_id)
 
+        winner_id = pick_weighted_winner([(e["user_id"], e["tickets"]) for e in entries])
+        if winner_id is not None and jackpot > 0:
+            # Pay first: a deleted announcement channel must not burn the jackpot.
+            balance = await self.bot.db.get_user_balance(winner_id, guild_id)
+            await balance.add(cash=jackpot)
         if not isinstance(channel, discord.abc.Messageable):
             return
-
-        winner_id = pick_weighted_winner([(e["user_id"], e["tickets"]) for e in entries])
         if winner_id is None or jackpot <= 0:
             view = make_notice(
                 "Lottery Ended",
@@ -1798,8 +1815,6 @@ class Economy(Cog):
             await channel.send(view=view)
             return
 
-        balance = await self.bot.db.get_user_balance(winner_id, guild_id)
-        await balance.add(cash=jackpot)
         # The mention lives inside the container's text display, which still pings.
         view = make_notice(
             "\N{PARTY POPPER} Lottery Winner!",

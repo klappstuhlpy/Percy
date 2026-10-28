@@ -228,7 +228,7 @@ class EconomyRepository(BaseRepository):
         The ``cash >= $3`` guard is the check, so two concurrent spends can never both pass a stale read.
         """
         return await self.fetchval(
-            'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND cash >= $3 RETURNING cash;',
+            'UPDATE economy SET cash = cash - $3 WHERE user_id = $1 AND guild_id = $2 AND $3 >= 0 AND cash >= $3 RETURNING cash;',
             user_id, guild_id, amount,
         )
 
@@ -1015,11 +1015,16 @@ class EconomyRepository(BaseRepository):
         """
         return await self.fetchrow(query, guild_id, channel_id, ticket_price, jackpot, ensure_utc(ends_at).replace(tzinfo=None))
 
-    async def add_lottery_tickets(self, guild_id: int, user_id: int, tickets: int, cost: int) -> int:
-        """Adds tickets for a member and grows the jackpot; returns the member's new ticket total."""
+    async def add_lottery_tickets(self, guild_id: int, user_id: int, tickets: int, cost: int) -> int | None:
+        """Adds tickets for a member and grows the jackpot; returns the member's new ticket total.
+
+        ``None`` when the lottery is gone (ended meanwhile): nothing is written, so the caller can refund.
+        """
         async with self.acquire() as conn, conn.transaction():
-            await conn.execute(
-                'UPDATE economy_lottery SET jackpot = jackpot + $2 WHERE guild_id = $1;', guild_id, cost)
+            if await conn.fetchval(
+                'UPDATE economy_lottery SET jackpot = jackpot + $2 WHERE guild_id = $1 RETURNING 1;', guild_id, cost
+            ) is None:
+                return None
             return await conn.fetchval(
                 """
                 INSERT INTO economy_lottery_entries (guild_id, user_id, tickets)
@@ -1105,12 +1110,12 @@ class LevelingRepository(BaseRepository):
         return await self.fetch("SELECT * FROM levels WHERE guild_id = $1;", guild_id)
 
     async def get_leaderboard(self, guild_id: int, *, limit: int = 10) -> list[asyncpg.Record]:
-        """Fetches the top members of a guild ordered by message count."""
+        """Fetches the top members of a guild, highest level (then XP) first."""
         query = """
             SELECT user_id, level, xp, messages
             FROM levels
-            WHERE guild_id = $1 AND messages > 0
-            ORDER BY messages DESC
+            WHERE guild_id = $1 AND (messages > 0 OR level > 0 OR xp > 0)
+            ORDER BY level DESC, xp DESC, user_id
             LIMIT $2;
         """
         return await self.fetch(query, guild_id, limit)
@@ -1121,7 +1126,7 @@ class LevelingRepository(BaseRepository):
         """Returns a member's XP rank within their guild, or ``0`` if they have none."""
         query = """
             SELECT rank
-            FROM (SELECT user_id, guild_id, row_number() OVER (ORDER BY xp DESC) AS rank
+            FROM (SELECT user_id, guild_id, row_number() OVER (ORDER BY level DESC, xp DESC, user_id) AS rank
                   FROM levels
                   WHERE guild_id = $2) AS rank
             WHERE user_id = $1

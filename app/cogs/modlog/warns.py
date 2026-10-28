@@ -68,8 +68,9 @@ def threshold_error(count: int, action: str, seconds: int | None) -> str | None:
         validate_timeout_duration,
     )
 
-    if count < 1 or action not in THRESHOLD_ACTIONS:
-        return f'Count must be 1 or more and action one of: {", ".join(THRESHOLD_ACTIONS)}.'
+    # 1000 keeps the count inside the int column; no real policy escalates that far.
+    if not 1 <= count <= 1000 or action not in THRESHOLD_ACTIONS:
+        return f'Count must be 1 to 1000 and action one of: {", ".join(THRESHOLD_ACTIONS)}.'
     try:
         if action == 'timeout':
             validate_timeout_duration(seconds)

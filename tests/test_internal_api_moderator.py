@@ -380,3 +380,11 @@ async def test_a_bad_config_value_in_a_batch_applies_nothing() -> None:
         await guild_api.batch_guild_config(guild, bot, body)  # type: ignore[arg-type]
     assert _status(exc) == 400
     config.update.assert_not_awaited()
+
+
+async def test_roles_of_a_member_who_outranks_the_moderator_are_refused() -> None:
+    guild, _, target = _setup(mod_top=5, target_top=8, manage_roles=True)
+    with pytest.raises(HTTPException) as exc:
+        await _roles(guild, add=[str(_role_at(guild, 4).id)])
+    assert _status(exc) == 403
+    target.add_roles.assert_not_awaited()

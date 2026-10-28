@@ -13,6 +13,7 @@ signals. The internal API's own 300 s TTL is what bounds staleness on the read s
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING, Any
 
 import asyncpg
@@ -21,7 +22,6 @@ from app.database.repositories.base import BaseRepository, escape_like
 from app.services.releases import normalise
 
 if TYPE_CHECKING:
-    import datetime
     from collections.abc import Sequence
 
 __all__ = ('NewsRepository',)
@@ -261,6 +261,10 @@ class NewsRepository(BaseRepository):
         if source is not None:
             clauses.append(f'source_slug = {placeholder(source)}')
         if since is not None:
+            # ``published_at`` is a naive TIMESTAMP; asyncpg raises on an aware value, and a client's
+            # ISO string with a ``Z`` offset parses as aware.
+            if since.tzinfo is not None:
+                since = since.astimezone(datetime.UTC).replace(tzinfo=None)
             clauses.append(f'published_at >= {placeholder(since)}')
         if search:
             clauses.append(f'headline ILIKE {placeholder(f"%{escape_like(search)}%")}')

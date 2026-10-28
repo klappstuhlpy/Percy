@@ -91,6 +91,8 @@ async def patch_starboard(guild: GuildDep, bot: BotDep, body: PatchStarboardBody
         updates['ignored_channel_ids'] = sorted(set(updates['ignored_channel_ids'] or ()))
     if 'emoji' in updates:
         updates['emoji'] = updates['emoji'].strip()
+        if not updates['emoji']:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pick a star emoji.")
 
     current = await cog.get_config(guild.id)
     channel_after = updates.get('channel_id', current.channel_id if current else None)

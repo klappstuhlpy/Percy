@@ -955,14 +955,15 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
     elif action == 'skip':
         await player.skip()
     elif action == 'back':
-        await player.back()
+        if not await player.back():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='there is no previous track')
     elif action == 'stop':
         player.queue.reset()
         await player.disconnect()
     elif action == 'volume':
         try:
             value = int(body.value)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'value' (0-100) is required")
         await player.set_volume(max(0, min(value, 100)))
         refresh_panel = True
@@ -971,14 +972,16 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='this track cannot be seeked')
         try:
             position = int(body.position)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'position' (milliseconds) is required")
         position = max(0, min(position, player.current.length))
         await player.seek(position)
         refresh_panel = True
     elif action == 'loop':
         mode = body.mode
-        if mode in (0, 1, 2):
+        if mode is not None and mode not in (0, 1, 2):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'mode' must be 0, 1 or 2")
+        if mode is not None:
             player.queue.mode = {0: QueueMode.normal, 1: QueueMode.loop, 2: QueueMode.loop_all}[mode]
         else:
             cycle = {

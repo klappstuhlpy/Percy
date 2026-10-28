@@ -155,6 +155,14 @@ class GuildLevelConfig(BaseRecord, table="level_config", pk="id"):
         self.level_roles = sanitize_snowflakes(self.level_roles)
         self.multiplier_roles = sanitize_snowflakes(self.multiplier_roles)
         self.multiplier_channels = sanitize_snowflakes(self.multiplier_channels)
+        # Arrays come back as lists (and the channel/user ones may be NULL); the commands do set maths on them.
+        self.blacklisted_roles = set(self.blacklisted_roles or ())
+        self.blacklisted_channels = set(self.blacklisted_channels or ())
+        self.blacklisted_users = set(self.blacklisted_users or ())
+        # JSONB object keys are always strings, but levels are looked up as ints.
+        self.special_level_up_messages = {
+            int(k): v for k, v in (self.special_level_up_messages or {}).items() if str(k).isdigit()
+        }
 
     def __bool__(self) -> bool:
         return self.enabled
@@ -265,7 +273,10 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
                 user = self.user
                 if user is None:
                     return
-                dm_channel = await user.create_dm()
+                try:
+                    dm_channel = await user.create_dm()
+                except discord.HTTPException:
+                    return
                 func = dm_channel.send
             case custom:
                 channel = self.cog.bot.get_channel(custom)
@@ -276,7 +287,8 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         template = self.config.special_level_up_messages.get(level, self.config.level_up_message)
         content = render_level_up(template, level_up_values(self.user, level))
         with suppress(discord.HTTPException):
-            await func(content)
+            # Names are user-controlled: never let a nickname like "@everyone" ping.
+            await func(content, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
     async def process_invoke(self, message: discord.Message) -> None:
         if not self.can_gain(message):
@@ -319,7 +331,7 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
 
         self.xp += xp
         leveled = False
-        while self.xp > self.max_xp:
+        while self.xp >= self.max_xp:
             self.xp -= self.max_xp
             self.level += 1
             leveled = True
@@ -349,7 +361,10 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
                 user = self.user
                 if user is None:
                     return
-                dm_channel = await user.create_dm()
+                try:
+                    dm_channel = await user.create_dm()
+                except discord.HTTPException:
+                    return
                 func = dm_channel.send
             case custom:
                 target = self.cog.bot.get_channel(custom)
@@ -360,7 +375,8 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         template = self.config.special_level_up_messages.get(level, self.config.level_up_message)
         content = render_level_up(template, level_up_values(self.user, level))
         with suppress(discord.HTTPException):
-            await func(content)
+            # Names are user-controlled: never let a nickname like "@everyone" ping.
+            await func(content, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
     async def update_roles(self, level: int) -> None:
         user = self.user
@@ -371,17 +387,18 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         if not roles:
             return
 
-        _new = [(k, v) for k, v in roles.items() if level >= v]
-        if _new:
-            _new = max(_new, key=lambda r: r[1]),
+        earned = [(k, v) for k, v in roles.items() if level >= v]
+        if earned and not self.config.role_stack:
+            earned = [max(earned, key=lambda r: r[1])]
 
-        _new_ids: set[int] = {int(k) for k, v in _new}
+        _new_ids: set[int] = {int(k) for k, v in earned}
         _old: set[int] = set(user._roles)
 
         new: set[int] = _old | _new_ids
         new.difference_update(int(role) for role in roles if role not in _new_ids)
 
-        if new == {r.id for r in user.roles}:
+        # ``user.roles`` includes @everyone, ``_roles`` does not: compare like with like.
+        if new == _old:
             return
 
         reason = f'Overwriting roles for level {level}.'
@@ -393,8 +410,8 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         self.messages += 1
         __tasks = []
 
-        if xp > 0 and self.xp > self.max_xp:
-            while self.xp > self.max_xp:
+        if xp > 0 and self.xp >= self.max_xp:
+            while self.xp >= self.max_xp:
                 self.xp -= self.max_xp
                 self.level += 1
 
@@ -404,9 +421,10 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
             ))
 
         elif xp < 0:
-            while self.xp < 0 <= self.level:
-                self.xp += self.max_xp
+            while self.xp < 0 < self.level:
                 self.level -= 1
+                self.xp += self.max_xp
+            self.xp = max(self.xp, 0)
 
         await self.update(xp=self.xp, level=self.level, messages=self.messages)
         await asyncio.gather(*__tasks)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.rendering.card_style import clean_style, style_options
 from app.services.level_message import LEVEL_UP_VARIABLES, level_up_values, render_level_up
@@ -44,17 +44,17 @@ class PatchLevelingUserBody(BaseModel):
 class PatchLevelingConfigBody(BaseModel):
     enabled: bool | None = None
     voice_enabled: bool | None = None
-    voice_xp: int | None = None
-    level_up_message: str | None = None
-    level_up_channel: int | None = None
+    voice_xp: int | None = Field(default=None, ge=0, le=1000)
+    level_up_message: str | None = Field(default=None, max_length=1500)
+    level_up_channel: int | None = Field(default=None, ge=0)
     role_stack: bool | None = None
-    factor: float | None = None
+    factor: float | None = Field(default=None, gt=0, le=10)
     delete_after_leave: bool | None = None
-    base: int | None = None
-    min_gain: int | None = None
-    max_gain: int | None = None
-    cooldown_per: int | None = None
-    special_level_up_messages: dict | None = None
+    base: int | None = Field(default=None, ge=1, le=1_000_000)
+    min_gain: int | None = Field(default=None, ge=0, le=100_000)
+    max_gain: int | None = Field(default=None, ge=0, le=100_000)
+    cooldown_per: int | None = Field(default=None, ge=0, le=86_400)
+    special_level_up_messages: dict[str, str] | None = None
     card_style: dict | None = None
     card_locked: bool | None = None
 
@@ -66,7 +66,7 @@ class LevelUpTestBody(BaseModel):
 
 
 class PostLevelingRolesBody(BaseModel):
-    level: int
+    level: int = Field(ge=0, le=500)
     role_id: int | None = None
 
 
@@ -219,6 +219,18 @@ async def patch_leveling_config(guild: GuildDep, bot: BotDep, body: PatchLevelin
     if record is None:
         await bot.db.leveling.create_guild_config(guild.id, updates.get('enabled', False))
         record = await bot.db.leveling.get_guild_config_record(guild.id)
+
+    # min_gain > max_gain would make random.randint raise on every message.
+    low = updates.get('min_gain', record['min_gain'])
+    high = updates.get('max_gain', record['max_gain'])
+    if low > high:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='min_gain must not exceed max_gain')
+    if 'special_level_up_messages' in updates:
+        specials = updates['special_level_up_messages']
+        if any(not k.isdigit() or len(v) > 1500 for k, v in specials.items()):  # type: ignore[union-attr]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail='special messages are keyed by level, max 1500 characters'
+            )
 
     await bot.db.leveling.update_guild_config(guild.id, updates)
     invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)

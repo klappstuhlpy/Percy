@@ -95,7 +95,7 @@ class NewsClient(BaseHTTPClient):
         client needs both halves: XML must not go through a JSON decoder, and the caller has to
         write the status to ``news_sources.last_status`` even on success.
         """
-        return _Body(response.status, await response.text())
+        return _Body(response.status, await response.text(errors='replace'))
 
     def _build_error(self, response: aiohttp.ClientResponse, payload: Any) -> HTTPClientError:
         """Builds the non-2xx error from the body *text*.

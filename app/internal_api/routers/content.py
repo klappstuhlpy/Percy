@@ -585,7 +585,7 @@ async def export_tags(guild: GuildDep, bot: BotDep) -> dict:
     return {'tags': tags}
 
 
-def _tag_problem(name: str, content: str, reserved: set[str]) -> str | None:
+def _tag_problem(name: str, content: str, reserved: set[str], *, new: bool = True) -> str | None:
     """Why a tag cannot be stored as given, or ``None``; shared by create, edit and import."""
     if not name or not content:
         return 'name and content are required'
@@ -595,6 +595,8 @@ def _tag_problem(name: str, content: str, reserved: set[str]) -> str | None:
         return 'content exceeds 2000 characters'
     if name.lower().partition(' ')[0] in reserved:
         return 'that name is reserved for a tag subcommand'
+    if new and name.isdigit():  # lookups read an all-digit name as a tag ID
+        return 'name cannot consist only of digits'
     return None
 
 
@@ -633,7 +635,7 @@ async def edit_tag(guild: GuildDep, bot: BotDep, tag_id: int, body: PatchTagBody
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='tag not found')
     content = body.content.strip()
-    error = _tag_problem(record['name'], content, set())
+    error = _tag_problem(record['name'], content, set(), new=False)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.capitalize() + '.')
     await bot.db.tags.update_tag(record['id'], {'content': content})

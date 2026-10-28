@@ -286,6 +286,8 @@ class RouletteView(LayoutView):
         modal = PlaceBetModal()
         await interaction.response.send_modal(modal)
         await modal.wait()
+        if not hasattr(modal, "interaction"):  # the modal timed out unsubmitted
+            return
         interaction = modal.interaction
 
         try:

@@ -217,6 +217,10 @@ class Highlights(Cog):
     @highlight.command("add", aliases=["+"], description="Adds a highlight word or phrase.")
     @describe(trigger="The word or phrase to highlight. Not case-sensitive.")
     async def highlight_add(self, ctx: Context, *, trigger: str) -> None:
+        trigger = trigger.strip()
+        if not trigger:  # an empty trigger is a substring of every message
+            await ctx.send_error("The highlight can't be empty.")
+            return
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         if trigger.casefold() in highlight.lookup:  # type: ignore[union-attr]
             await ctx.send_error("This highlight already exists.")
@@ -228,6 +232,7 @@ class Highlights(Cog):
     @highlight.command("remove", aliases=["rm", "-"], description="Removes a highlight word or phrase.")
     @describe(trigger="The word or phrase to remove.")
     async def highlight_remove(self, ctx: Context, *, trigger: str) -> None:
+        trigger = trigger.strip()
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         if trigger.casefold() not in highlight.lookup:  # type: ignore[union-attr]
             await ctx.send_error("Such a highlight does not exist.")

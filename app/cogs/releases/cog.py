@@ -47,6 +47,7 @@ from app.services.releases import (
     build_digest,
     comic_releasable,
     match,
+    normalise,
     title_releasable,
 )
 from app.services.watchlist.ingest import WatchlistIngest
@@ -271,7 +272,9 @@ class Releases(Cog):
             row = await self.bot.db.watchlist.get_person(value)
             return row['name'] if row else value
         for candidate in await catalogue_subjects(self.bot):
-            if (candidate.media, candidate.subject_type, candidate.value) == (media, subject_type, value):
+            # Stored values are normalised but the pool carries raw names, so compare normalised.
+            if (candidate.media, candidate.subject_type, normalise(candidate.value)) == (
+                    media, subject_type, normalise(value)):
                 return candidate.label
         return value
 

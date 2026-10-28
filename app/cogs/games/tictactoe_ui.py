@@ -179,12 +179,14 @@ class TicTacToe(LayoutView):
             description = f"Challenge accepted! {next_player.member.mention} goes first and {last_player.member.mention} goes second.\n\n" + description
 
         if winner:
-            if isinstance(winner, Player) and amount:
+            if isinstance(winner, Player):
                 loser = self.current_player  # the turn already passed to the side that just lost
 
                 container.accent_colour = kind_colour(winner.kind)
+                # A win past the daily reward cap pays nothing, but it is still a win, not a tie.
+                earned = f" and earned {Emojis.Economy.cash} **{fnumb(amount)}**" if amount else ""
                 description = (
-                    f"{kind_emoji(winner.kind)} {winner.member.mention} won and earned {Emojis.Economy.cash} **{fnumb(amount)}**!\n"
+                    f"{kind_emoji(winner.kind)} {winner.member.mention} won{earned}!\n"
                     f"*Maybe next time, {loser.member.mention}!*"
                 )
             else:
