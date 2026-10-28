@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.0] - 2026-10-28
+
 ### Added
 - Poker: run it twice for heads-up all-ins before the river. Both players vote Yes/No (20 s, timeout or any No runs it once); each pot is split per board and both boards show in the result and hand history.
-
 - Internal API: warn policy (`GET`/`PATCH /warn-policy`, `PUT`/`DELETE /warn-policy/thresholds/{warn_count}`) and `POST /cases/{case_index}/pardon`, sharing their validation with the `warnpolicy` command.
 
 ### Fixed
@@ -27,7 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migrations
 - `V65__dstatus_incidents.sql`: `discord_incident_posts` (one posted message per guild and incident), backfilled from `discord_incidents`.
-
 
 ## [2.21.0] - 2026-10-27
 
