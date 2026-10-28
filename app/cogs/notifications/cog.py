@@ -173,7 +173,9 @@ class Notifications(Cog):
             ctx.guild.id, request_id, status='cancelled', decided_by=ctx.author.id, note=None
         )
         if claimed is None:
-            await ctx.send_error(f'That request is already {row["status"]}.')
+            # Still 'pending' but past its deadline: the expiry loop just hasn't swept it yet.
+            expired = row['status'] in ('pending', 'expired')
+            await ctx.send_error('That request has already expired.' if expired else f'That request is already {row["status"]}.')
             return
         await edit_request_message(ctx.guild, dict(claimed))
         await ctx.send_success(f'Request #{request_id} cancelled.')

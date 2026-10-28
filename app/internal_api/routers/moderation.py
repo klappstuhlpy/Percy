@@ -255,6 +255,9 @@ async def create_case(
     target_id = parse_id(body.target_id, 'target_id')
 
     moderator_id = parse_id(body.moderator_id, 'moderator_id') if body.moderator_id else None
+    if moderator_id is not None:
+        # Same bar as editing or closing a case; a missing id stays allowed for older dashboards.
+        await resolve_moderator(guild, moderator_id, 'manage_guild')
     reason = body.reason or None
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
@@ -407,7 +410,11 @@ async def bulk_member_action(
                     await member.remove_roles(*roles, reason=reason or 'Dashboard bulk role update')
 
             if body.action in BULK_CASE_ACTIONS:
-                bot.dispatch('mod_action', guild.id, body.action, uid_int, moderator_id, reason)
+                # A timeout case carries its expiry, as the single-member path does.
+                expiry = (
+                    (datetime.datetime.now(datetime.UTC) + timeout_for,) if body.action == 'timeout' and timeout_for else ()
+                )
+                bot.dispatch('mod_action', guild.id, body.action, uid_int, moderator_id, reason, *expiry)
             successes.append(uid)
         except Exception as e:
             failures.append({'user_id': uid, 'error': str(e)})

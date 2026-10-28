@@ -8,6 +8,7 @@ tracking a bounded occurrence count. Kept unit-testable without a bot instance.
 
 from __future__ import annotations
 
+import calendar
 import datetime
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -66,18 +67,27 @@ def interval_too_short(data: Mapping[str, int], *, reference: datetime.datetime)
 
 
 def next_occurrence(
-    last: datetime.datetime, data: Mapping[str, int], *, now: datetime.datetime
+    last: datetime.datetime, data: Mapping[str, int], *, now: datetime.datetime, anchor_day: int | None = None
 ) -> datetime.datetime:
     """Advance ``last`` by the interval until it is strictly after ``now``.
 
     Skipping missed occurrences (rather than firing each one) avoids a burst of
     catch-up reminders after downtime. The interval is assumed validated as positive,
-    so the loop always terminates.
+    so the loop always terminates. ``anchor_day`` is the day-of-month the series
+    started on: month/year steps re-clamp to it so Jan 31 -> Feb 28 -> Mar 31 (not 28).
     """
     delta = _to_relativedelta(data)
-    upcoming = last + delta
+    monthly = bool(data.get('months') or data.get('years'))
+
+    def step(value: datetime.datetime) -> datetime.datetime:
+        value += delta
+        if anchor_day and monthly:
+            value = value.replace(day=min(anchor_day, calendar.monthrange(value.year, value.month)[1]))
+        return value
+
+    upcoming = step(last)
     while upcoming <= now:
-        upcoming += delta
+        upcoming = step(upcoming)
     return upcoming
 
 
@@ -95,6 +105,7 @@ def advance_recurrence(
     *,
     now: datetime.datetime,
     remaining: int | None = None,
+    anchor_day: int | None = None,
 ) -> RecurrenceResult | None:
     """Compute the next run after a reminder fires, or ``None`` if the series is over.
 
@@ -105,7 +116,7 @@ def advance_recurrence(
         return None
 
     next_remaining = None if remaining is None else remaining - 1
-    return RecurrenceResult(next_occurrence(last, data, now=now), next_remaining)
+    return RecurrenceResult(next_occurrence(last, data, now=now, anchor_day=anchor_day), next_remaining)
 
 
 def describe_interval(data: Mapping[str, int]) -> str:

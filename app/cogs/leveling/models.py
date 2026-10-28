@@ -78,6 +78,13 @@ class LevelingSpec(NamedTuple):
     def get_total_xp(self, level: int, xp: int, /) -> int:
         return xp + self.level_requirement_for(level)
 
+    def split_total_xp(self, total: int, /) -> tuple[int, int]:
+        """Inverse of :meth:`get_total_xp`: ``(level, within-level xp)`` for a total XP amount."""
+        level = self.xp_requirement_for(total)
+        while level > 0 and self.level_requirement_for(level) > total:  # the requirement is rounded up to 10
+            level -= 1
+        return level, total - self.level_requirement_for(level)
+
     def get_xp_gain(self, multiplier: float = 1.0) -> int:
         return round(random.randint(*self.gain) * multiplier)
 
@@ -329,14 +336,15 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         if xp <= 0:
             return self.level, self.xp
 
-        self.xp += xp
+        await self._bump(xp)
+        old_level, old_xp = self.level, self.xp
         leveled = False
         while self.xp >= self.max_xp:
             self.xp -= self.max_xp
             self.level += 1
             leveled = True
 
-        await self.update(xp=self.xp, level=self.level)
+        await self._carry(old_level, old_xp)
         if leveled:
             await self.update_roles(self.level)
             await self._announce_voice_level_up(self.level, channel)
@@ -405,9 +413,19 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         with suppress(discord.HTTPException):
             await user.edit(roles=list(map(discord.Object, new)), reason=reason)
 
+    async def _bump(self, xp: int, messages: int = 0) -> None:
+        """Adds XP/messages in one SQL statement and refreshes this record from the row it returns."""
+        row = await self.bot.db.leveling.add_xp(self.user_id, self.guild_id, xp, messages)
+        self.xp, self.level, self.messages = row['xp'], row['level'], row['messages']
+
+    async def _carry(self, old_level: int, old_xp: int) -> None:
+        """Persists a level change computed on the row ``_bump`` returned, as a delta (no-op if nothing moved)."""
+        if (self.level, self.xp) != (old_level, old_xp):
+            await self.bot.db.leveling.shift_level(self.user_id, self.guild_id, old_level, self.level, self.xp - old_xp)
+
     async def add_xp(self, xp: int, *, message: discord.Message) -> tuple[int, int]:
-        self.xp += xp
-        self.messages += 1
+        await self._bump(xp, 1)
+        old_level, old_xp = self.level, self.xp
         __tasks = []
 
         if xp > 0 and self.xp >= self.max_xp:
@@ -426,7 +444,7 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
                 self.xp += self.max_xp
             self.xp = max(self.xp, 0)
 
-        await self.update(xp=self.xp, level=self.level, messages=self.messages)
+        await self._carry(old_level, old_xp)
         await asyncio.gather(*__tasks)
 
         return self.level, self.xp

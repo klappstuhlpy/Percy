@@ -149,6 +149,7 @@ class TableView(LayoutView):
             winner = self.table.get_winner(hand)
             amount: int | None = None
             insurance_result = ""
+            insurance_payout = 0
             hand_num = f" #{i + 1}" if len(self.table.player_hands) > 1 else ""
 
             # Handle insurance payout
@@ -214,7 +215,7 @@ class TableView(LayoutView):
                 Game.BLACKJACK,
                 game_result,
                 wagered=bet,
-                profit=(amount or 0) - bet,
+                profit=(amount or 0) + insurance_payout - bet,
             )
 
         # Determine overall colour

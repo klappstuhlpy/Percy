@@ -41,3 +41,19 @@ async def test_edit_passes_only_what_changed() -> None:
     guild = MagicMock()
     await api.patch_role_menu(guild, _bot(cog), 3, api.PatchRoleMenuBody(unique=True))
     cog.edit_menu.assert_awaited_once_with(guild, 3, title=None, description=None, unique=True)
+
+
+async def test_add_role_refuses_a_role_above_the_dashboard_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    actor = MagicMock(id=5)
+    actor.top_role = 10
+    role = MagicMock()
+    role.__ge__ = lambda self, other: True  # role >= actor.top_role
+    guild = MagicMock(owner_id=1)
+    guild.get_role = MagicMock(return_value=role)
+    monkeypatch.setattr(api, 'resolve_moderator', AsyncMock(return_value=actor))
+    cog = MagicMock()
+    cog.add_role = AsyncMock()
+    with pytest.raises(HTTPException) as exc:
+        await api.add_role_menu_role(guild, _bot(cog), 3, api.AddRoleMenuRoleBody(role_id=9, user_id='5'))
+    assert exc.value.status_code == 403
+    cog.add_role.assert_not_awaited()

@@ -461,16 +461,11 @@ class Economy(Cog):
             await ctx.send_error("Cannot remove from a bot's balance.")
             return
 
-        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
-
-        if (to == "bank" and balance.bank < amount) or (to == "cash" and balance.cash < amount):
+        # One guarded UPDATE: a concurrent spend cannot push the wallet negative between check and write.
+        deltas = {to: -amount}
+        if await self.bot.db.users.adjust_balance(member.id, ctx.guild.id, **deltas) is None:  # type: ignore[union-attr]
             await ctx.send_error("Cannot remove more than the user's balance.")
             return
-
-        if to == "bank":
-            await balance.remove(bank=amount)
-        else:
-            await balance.remove(cash=amount)
 
         await ctx.send_success(
             f"Successfully removed {Emojis.Economy.cash} **{fnumb(amount)}** from **{member.display_name}'s** {to}."
@@ -1465,9 +1460,7 @@ class Economy(Cog):
             outcome = resolve_search(location)
             balance = await ctx.db.get_user_balance(ctx.author.id, guild_id)
             if outcome.injured:
-                fine = min(outcome.fine, max(balance.cash, 0))
-                if fine:
-                    await balance.remove(cash=fine)
+                fine = await self.bot.db.economy.fine_cash(ctx.author.id, guild_id, outcome.fine)
                 text = (
                     f'{location.emoji} **{location.name}** — {outcome.flavor}\n'
                     f'You lost {Emojis.Economy.cash} **{fnumb(fine)}**.'
@@ -1505,9 +1498,7 @@ class Economy(Cog):
             outcome = resolve_search(meme)
             balance = await ctx.db.get_user_balance(ctx.author.id, guild_id)
             if outcome.injured:
-                fine = min(outcome.fine, max(balance.cash, 0))
-                if fine:
-                    await balance.remove(cash=fine)
+                fine = await self.bot.db.economy.fine_cash(ctx.author.id, guild_id, outcome.fine)
                 text = (
                     f'{meme.emoji} **{meme.name}** flopped — {outcome.flavor}\n'
                     f'You lost {Emojis.Economy.cash} **{fnumb(fine)}**.'
@@ -1722,7 +1713,8 @@ class Economy(Cog):
             await ctx.send_error("A lottery is already running. End it before starting another.")
             return
 
-        await self.bot.timers.create(when, "lottery", ctx.guild.id)
+        # ends_at identifies this lottery: a timer left over from a deleted one must not end its successor.
+        await self.bot.timers.create(when, "lottery", ctx.guild.id, record["ends_at"].isoformat())
         await ctx.send_success(
             f"Lottery started! Tickets are {Emojis.Economy.cash} **{fnumb(int(ticket_price))}** each. "
             f"Drawing {discord.utils.format_dt(when, 'R')}."
@@ -1793,6 +1785,8 @@ class Economy(Cog):
         record = await self.bot.db.economy.get_lottery(guild_id)
         if record is None:
             return
+        if len(timer.args) > 1 and timer.args[1] != record["ends_at"].isoformat():
+            return  # stale timer from an earlier lottery
 
         entries = await self.bot.db.economy.get_lottery_entries(guild_id)
         jackpot: int = record["jackpot"]

@@ -388,3 +388,18 @@ async def test_roles_of_a_member_who_outranks_the_moderator_are_refused() -> Non
         await _roles(guild, add=[str(_role_at(guild, 4).id)])
     assert _status(exc) == 403
     target.add_roles.assert_not_awaited()
+
+
+async def test_create_case_checks_the_moderator_when_sent(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    import pytest
+    from fastapi import HTTPException
+
+    from app.internal_api.routers import moderation as mod
+
+    monkeypatch.setattr(mod, 'resolve_moderator', AsyncMock(side_effect=HTTPException(status_code=403)))
+    body = mod.CreateCaseBody(action='warn', target_id='7', moderator_id='5')
+    with pytest.raises(HTTPException) as exc:
+        await mod.create_case(MagicMock(), MagicMock(), body)
+    assert exc.value.status_code == 403

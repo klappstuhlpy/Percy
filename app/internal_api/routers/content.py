@@ -352,6 +352,13 @@ async def _patch_poll(guild: discord.Guild, bot: Any, poll_id: int, body: PatchP
         new_options = body.options
         if isinstance(new_options, list) and len(new_options) >= 2:
             existing = kwargs.get('options', [])
+            # Options are matched by position, so adding/removing one once votes exist would
+            # silently relabel or drop an option's votes.
+            if record.get('entries') and len([o for o in new_options if o]) != len(existing):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail='cannot add or remove options once votes exist',
+                )
             updated = []
             for i, opt_text in enumerate(new_options):
                 if not opt_text:

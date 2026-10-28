@@ -386,7 +386,7 @@ class Giveaway(BaseRecord, table="giveaways", pk="id"):
     async def get_winners(self) -> list[discord.Member]:
         """Draws up to ``winner_count`` distinct winners and removes them from the pool (so a reroll can't repeat them).
 
-        Entrants who left the server, bots and the host are discarded without consuming a winner slot.
+        Entrants who left the server, bots, the host and entrants failing the entry requirements are discarded without consuming a winner slot.
         """
         guild = self.guild
         if guild is None:  # unavailable guild: draw nothing rather than burn the whole pool
@@ -401,7 +401,8 @@ class Giveaway(BaseRecord, table="giveaways", pk="id"):
             if user_id == self.author_id:
                 continue
             member = await self.bot.get_or_fetch_member(guild, user_id)
-            if member is not None and not member.bot:
+            # Requirements are re-checked at draw time (end and reroll): roles can be lost after entering.
+            if member is not None and not member.bot and requirement_error(self.kwargs, member) is None:
                 winners.append(member)
 
         await self.bot.db.giveaways.set_entries(self.id, self.entries)

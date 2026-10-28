@@ -328,19 +328,18 @@ class Leveling(Cog):
                 await ctx.send_error(f"You can't set more than **Level {_MAX_LEVEL}**.")
                 return
 
-            level = flags.level
-            xp = guild_config.spec.level_requirement_for(flags.level)
+            level, xp = flags.level, 0
         else:
             if flags.xp > _MAX_XP:
                 await ctx.send_error(f"Sorry. You can't set more than **{fnumb(_MAX_XP)} XP**. (Level **{_MAX_LEVEL}**)")
                 return
 
-            level = guild_config.spec.xp_requirement_for(flags.xp)
-            xp = flags.xp
+            level, xp = guild_config.spec.split_total_xp(flags.xp)
 
+        # ``xp`` is progress within the level, so the total is converted rather than stored as-is.
         await config.update(xp=xp, level=level)
 
-        await ctx.send(f"**{target}** is now level **{level}** with **{fnumb(xp)}** total XP. {self.emoji}")
+        await ctx.send(f"**{target}** is now level **{level}** with **{fnumb(guild_config.spec.get_total_xp(level, xp))}** total XP. {self.emoji}")
 
     @level.group("config", fallback="view", description="Leveling Configuration Commands.", guild_only=True, hybrid=True)
     async def level_config(self, ctx: Context) -> None:

@@ -269,8 +269,8 @@ class ReleasesRepository(BaseRepository):
 
     # -- Dispatch (read) ---------------------------------------------------
 
-    async def recent_comic_releases(self, since: datetime.datetime, *, limit: int = 500) -> list[asyncpg.Record]:
-        """Fetches releases first seen since ``since``, newest first.
+    async def recent_comic_releases(self, since: datetime.datetime, *, limit: int | None = 500) -> list[asyncpg.Record]:
+        """Fetches releases first seen since ``since``, newest first. ``limit=None`` is unbounded (``LIMIT NULL``), which the dispatcher uses so a burst never drops rows.
 
         ``first_seen`` rather than ``release_date``: the dispatcher asks "what did we learn about
         recently", which is not the same question as "what comes out recently" -- a book solicited

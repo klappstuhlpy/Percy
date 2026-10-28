@@ -95,8 +95,9 @@ class RoleMenuButton(discord.ui.DynamicItem[discord.ui.Button], template=r'rolem
             )
             return
 
-        # The role's permissions may have been raised since it was added to the menu.
-        if is_elevated(role):
+        # The role's permissions may have been raised since it was added to the menu. Only
+        # adding is blocked: a member must still be able to drop a role they already hold.
+        if is_elevated(role) and role not in member.roles:
             await interaction.response.send_message(
                 f'{Emojis.error} {role.mention} has moderation or admin permissions, so it is not self-assignable.',
                 ephemeral=True,

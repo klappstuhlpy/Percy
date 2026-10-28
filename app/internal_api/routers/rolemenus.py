@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import resolve_channel
+from ..helpers import resolve_channel, resolve_moderator
 
 if TYPE_CHECKING:
     from app.cogs.rolemenu.cog import RoleMenus
@@ -39,6 +39,8 @@ class AddRoleMenuRoleBody(BaseModel):
     role_id: int
     emoji: str | None = Field(default=None, max_length=64)
     label: str | None = Field(default=None, max_length=80)
+    #: The signed-in dashboard user (set by the BFF, never the browser); older dashboards omit it.
+    user_id: str | int | None = None
 
 
 def _cog(bot: Bot) -> RoleMenus:
@@ -116,6 +118,11 @@ async def add_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, body: A
     role = guild.get_role(body.role_id)
     if role is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That role no longer exists.")
+    if body.user_id not in (None, ''):
+        # Manage Server gates the command; like it, never offer a role above your own top role.
+        actor = await resolve_moderator(guild, body.user_id, 'manage_guild')
+        if actor.id != guild.owner_id and role >= actor.top_role:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f'{role.name} is not below your highest role.')
     try:
         await _cog(bot).add_role(guild, menu_id, role, body.emoji, body.label)
     except RoleMenuError as exc:

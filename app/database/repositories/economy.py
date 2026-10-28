@@ -232,6 +232,18 @@ class EconomyRepository(BaseRepository):
             user_id, guild_id, amount,
         )
 
+    async def fine_cash(self, user_id: int, guild_id: int, amount: int) -> int:
+        """Atomically takes up to ``amount`` cash, clamped at what the member holds; returns what was taken."""
+        return await self.fetchval(
+            """
+            WITH old AS (SELECT cash FROM economy WHERE user_id = $1 AND guild_id = $2 FOR UPDATE)
+            UPDATE economy SET cash = economy.cash - LEAST(GREATEST(old.cash, 0), GREATEST($3, 0)) FROM old
+            WHERE user_id = $1 AND guild_id = $2
+            RETURNING LEAST(GREATEST(old.cash, 0), GREATEST($3, 0));
+            """,
+            user_id, guild_id, amount,
+        ) or 0
+
     async def transfer_cash(self, from_user_id: int, to_user_id: int, guild_id: int, amount: int) -> int | None:
         """Atomically moves ``amount`` cash between members; returns the giver's cash left, or ``None`` if short.
 
@@ -1036,6 +1048,11 @@ class EconomyRepository(BaseRepository):
                 guild_id, user_id, tickets,
             )
 
+    async def count_balances(self, guild_id: int) -> int:
+        """Counts the wallets the balances leaderboard lists (non-empty)."""
+        return await self.fetchval(
+            'SELECT count(*) FROM economy WHERE guild_id = $1 AND (cash + bank) > 0;', guild_id)
+
     async def get_lottery_entries(self, guild_id: int) -> list[asyncpg.Record]:
         """Fetches every (user_id, tickets) entry for a guild's lottery."""
         return await self.fetch(
@@ -1099,6 +1116,26 @@ class LevelingRepository(BaseRepository):
                 "ON CONFLICT (guild_id, user_id) DO UPDATE SET user_id = EXCLUDED.user_id RETURNING *;",
                 user_id, guild_id)
         return record
+
+    async def add_xp(self, user_id: int, guild_id: int, xp: int, messages: int = 0) -> asyncpg.Record:
+        """Atomically adds XP / messages and returns the row, so concurrent gains never overwrite each other."""
+        return await self.fetchrow(
+            "UPDATE levels SET xp = xp + $3, messages = messages + $4 WHERE user_id = $1 AND guild_id = $2 RETURNING *;",
+            user_id, guild_id, xp, messages)
+
+    async def shift_level(
+            self, user_id: int, guild_id: int, from_level: int, to_level: int, xp_delta: int
+    ) -> asyncpg.Record | None:
+        """Persists a level-up/down carry as a delta; a no-op (``None``) if the level moved meanwhile."""
+        return await self.fetchrow(
+            "UPDATE levels SET level = $4, xp = GREATEST(xp + $5, 0) "
+            "WHERE user_id = $1 AND guild_id = $2 AND level = $3 RETURNING *;",
+            user_id, guild_id, from_level, to_level, xp_delta)
+
+    async def count_leaderboard(self, guild_id: int) -> int:
+        """Counts the members :meth:`get_leaderboard` ranks."""
+        return await self.fetchval(
+            "SELECT count(*) FROM levels WHERE guild_id = $1 AND (messages > 0 OR level > 0 OR xp > 0);", guild_id)
 
     async def get_user_level(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
         """Fetches a member's level row without creating one, or ``None`` if absent."""

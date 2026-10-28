@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Highlights: a whitespace-only trigger is refused instead of matching every message.
 - Starboard: a whitespace-only emoji is a 400 instead of saving an empty emoji.
 - Warn policy: escalation counts are capped at 1000 instead of 500ing past the integer column.
+- Economy: `search`/`postmemes` fines and admin `remove_money` are single guarded updates (the fine clamps at your cash); a deleted lottery's old timer no longer ends the next one early; `GET /economy/balances` reports the real total and `PATCH /economy/balances/{uid}` returns 400 for an out-of-range user id.
+- Leveling: `level set` stores within-level XP (was total XP, which inflated the level); `PATCH /leveling/users/{uid}` with a level resets within-level XP; message/voice XP gains are atomic so concurrent gains no longer lose XP; leaderboard `total` is the real count.
+- Reminders: a monthly repeat keeps its original day (Jan 31 -> Feb 28 -> Mar 31, not 28); older timers behave as before.
+- Polls: the dashboard edit refuses adding/removing options once votes exist (it relabelled options and dropped the last one's votes).
+- Giveaways: winners (end and reroll) must still meet the role / account-age / join-age requirements.
+- Notifications: `request cancel` on an expired request says it expired instead of "already pending".
+- Role menus: a member can remove an elevated role they already hold; only adding is blocked.
+- Blackjack: stats profit includes the insurance payout.
+- Releases: the dispatcher reads every recent comic/news row, so a burst over 500 no longer drops older undispatched ones.
 
 ## [2.22.3] - 2026-10-28
 

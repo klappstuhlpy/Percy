@@ -95,6 +95,7 @@ class GiveItemBody(BaseModel):
 
 #: Sanity cap on a single delta/grant so a typo cannot overflow the BIGINT columns.
 _MAX_DELTA = 10**12
+_MAX_ID = 2**63 - 1
 
 
 class CreateLotteryBody(BaseModel):
@@ -292,6 +293,7 @@ async def get_economy_balances(
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     records = await bot.db.users.get_top_balance_records(guild.id, limit + offset)
+    total = await bot.db.economy.count_balances(guild.id)
     entries = []
     for r in records:
         member = guild.get_member(r['user_id'])
@@ -303,7 +305,6 @@ async def get_economy_balances(
             'bank': r['bank'],
             'total': r['total'],
         })
-    total = len(entries)
     entries = entries[offset:offset + limit]
     return {'entries': entries, 'total': total}
 
@@ -313,6 +314,8 @@ async def patch_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, body
     if body.cash is None and body.bank is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify cash or bank')
 
+    if not 0 < user_id <= _MAX_ID:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid user_id')
     # A negative wallet breaks every spend check; past BIGINT asyncpg answers with a 500.
     if any(v is not None and not 0 <= v <= _MAX_DELTA for v in (body.cash, body.bank)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'cash and bank must be between 0 and {_MAX_DELTA}')
@@ -352,7 +355,7 @@ async def create_lottery(guild: GuildDep, bot: BotDep, body: CreateLotteryBody) 
     if result is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='a lottery is already active')
     # The draw is timer-driven (on_lottery_timer_complete); without this the lottery never ends.
-    await bot.timers.create(when, "lottery", guild.id)
+    await bot.timers.create(when, "lottery", guild.id, result["ends_at"].isoformat())
 
     # Deferred import: app.core pulls in Bot -> InternalAPI, so importing it at
     # module load time would create a circular import during startup.

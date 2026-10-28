@@ -349,7 +349,7 @@ class Releases(Cog):
         dates move and a title is only news on the day it is actually out.
         """
         repo = self.bot.db.releases
-        rows = await repo.recent_comic_releases(now - COMIC_WINDOW)
+        rows = await repo.recent_comic_releases(now - COMIC_WINDOW, limit=None)
         release_ids = [row['id'] for row in rows]
         creators = _group_by(await repo.credits_for_releases(release_ids), 'release_id')
         characters = _group_by(await repo.characters_for_releases(release_ids), 'release_id')
@@ -389,7 +389,7 @@ class Releases(Cog):
         today must not strip the attribution from the stories it already delivered.
         """
         repo = self.bot.db.news
-        rows = await repo.recent_news(now - NEWS_WINDOW)
+        rows = await repo.recent_news(now - NEWS_WINDOW, limit=None)
         if not rows:
             return []
 

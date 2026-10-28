@@ -143,7 +143,7 @@ async def get_leveling_leaderboard(
             'total_xp': record.get('total_xp', record['xp']),
         })
 
-    total = len(entries)
+    total = await bot.db.leveling.count_leaderboard(guild.id)
     entries = entries[offset:offset + limit]
     return {'entries': entries, 'total': total}
 
@@ -195,6 +195,7 @@ async def patch_leveling_user(guild: GuildDep, bot: BotDep, user_id: int, body: 
     updates: dict[str, object] = {}
     if body.level is not None:
         updates['level'] = body.level
+        updates['xp'] = 0  # xp is progress within the level; a new level starts it afresh unless xp is also sent
     if body.xp is not None:
         updates['xp'] = body.xp
 

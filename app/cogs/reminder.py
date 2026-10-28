@@ -228,6 +228,7 @@ class Reminder(Cog):
             recur=recur,
             recur_label=recur_label,
             recur_remaining=recur_remaining,
+            recur_anchor_day=prompt.dt.day if recur else None,
             shared=shared_ids or None,
         )
 
@@ -389,7 +390,9 @@ class Reminder(Cog):
 
         now = discord.utils.utcnow()
         last = timer.expires.replace(tzinfo=datetime.UTC)
-        result = advance_recurrence(last, recur, now=now, remaining=timer.get("recur_remaining"))
+        result = advance_recurrence(
+            last, recur, now=now, remaining=timer.get("recur_remaining"), anchor_day=timer.get("recur_anchor_day")
+        )
         if result is None:
             return
 
@@ -405,6 +408,7 @@ class Reminder(Cog):
             recur=recur,
             recur_label=timer.get("recur_label"),
             recur_remaining=result.remaining,
+            recur_anchor_day=timer.get("recur_anchor_day"),
             shared=timer.shared or None,
         )
 

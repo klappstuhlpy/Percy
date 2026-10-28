@@ -109,3 +109,16 @@ def test_bounded_series_counts_down_then_stops() -> None:
 def test_describe_interval_singular_and_plural() -> None:
     assert describe_interval({'days': 1}) == '1 day'
     assert describe_interval({'weeks': 2, 'hours': 3}) == '2 weeks, 3 hours'
+
+
+def test_monthly_anchor_does_not_drift_past_short_month() -> None:
+    import datetime
+
+    from app.services.recurrence import next_occurrence
+
+    jan = datetime.datetime(2026, 1, 31, 9)
+    feb = next_occurrence(jan, {'months': 1}, now=jan, anchor_day=31)
+    mar = next_occurrence(feb, {'months': 1}, now=feb, anchor_day=31)
+    assert (feb.day, mar.day) == (28, 31)
+    # Legacy timers without an anchor keep the old behaviour.
+    assert next_occurrence(feb, {'months': 1}, now=feb).day == 28

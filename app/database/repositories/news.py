@@ -355,8 +355,8 @@ class NewsRepository(BaseRepository):
             [normalise(item[2]) for item in subjects],
             since, limit)
 
-    async def recent_news(self, since: datetime.datetime, *, limit: int = 500) -> list[asyncpg.Record]:
-        """Fetches stories *fetched* since ``since``, newest first.
+    async def recent_news(self, since: datetime.datetime, *, limit: int | None = 500) -> list[asyncpg.Record]:
+        """Fetches stories *fetched* since ``since``, newest first. ``limit=None`` is unbounded (``LIMIT NULL``), which the dispatcher uses so a burst never drops rows.
 
         ``fetched_at`` rather than ``published_at``: a dispatcher asks "what did we learn about
         recently", and a feed that back-fills a week-old story is new to us today. The same
