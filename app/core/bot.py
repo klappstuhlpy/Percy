@@ -381,7 +381,17 @@ class Bot(commands.Bot):
             self.log.info('Applied native slash-command permissions to %d command(s).', gated)
 
             if test_guild_id is not None:
-                self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
+                test_guild = discord.Object(id=test_guild_id)
+                try:
+                    self.tree.copy_global_to(guild=test_guild)
+                except discord.app_commands.CommandLimitReached:
+                    # Globals plus the guild's own commands exceed Discord's 100 per guild; the copy is a
+                    # dev convenience (instant guild sync), so skip it rather than fail the setup task.
+                    self.log.warning(
+                        'Skipped copying global slash commands to test guild %s: %d global + %d guild '
+                        'commands exceed the 100 per-guild limit.',
+                        test_guild_id, len(self.tree.get_commands()), len(self.tree.get_commands(guild=test_guild)),
+                    )
         except Exception as exc:
             self.log.critical('Setup task failed:', exc_info=exc)
         finally:

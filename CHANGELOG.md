@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.3] - 2026-10-28
+
+### Fixed
+- Startup logged a critical "Setup task failed" when copying global slash commands into the test guild exceeded Discord's 100-per-guild limit; the copy is now skipped with a warning.
+
+
 ## [2.22.2] - 2026-10-28
 
 ### Changed
