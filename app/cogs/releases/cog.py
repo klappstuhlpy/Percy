@@ -407,11 +407,11 @@ class Releases(Cog):
         back is new to this user, and anything not sent is handed straight back, or a DM that
         never arrived would count as delivered and the release would be lost for good.
 
-        ``stories`` is the news half, and it is capped at :data:`NEWS_LIMIT` *before* anything is
-        claimed -- so what does not fit is still unclaimed and leads the next run's digest rather
-        than being dropped (§4.4: a busy news week must never crowd out the release someone
-        actually subscribed for). ``match`` hands the stories back oldest-first, so the slice is
-        FIFO and a backlog drains in order; the digest re-sorts them newest-first for display.
+        ``stories`` is the news half, capped at :data:`NEWS_LIMIT` (§4.4: a busy news week must
+        never crowd out the release someone actually subscribed for). Both caps apply to what is
+        *newly claimed*, and whatever they drop is released again, so it leads the next run's
+        digest rather than being dropped. ``match`` hands the stories back oldest-first, so the
+        slice is FIFO and a backlog drains in order; the digest re-sorts them newest-first.
         Both halves render into **one** embed, so a subscriber still gets one DM per run.
 
         A blocked DM (:class:`discord.Forbidden`) mutes *every* subscription this user has, per

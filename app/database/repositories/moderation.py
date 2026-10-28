@@ -355,12 +355,18 @@ class CasesRepository(BaseRepository):
 
     # -- warn policy ------------------------------------------------------
 
-    async def get_warn_rows(self, guild_id: int, target_id: int) -> list[asyncpg.Record]:
-        """A target's un-pardoned warns (``expires_at``/``pardoned_at`` only), for active counting."""
+    async def get_warn_rows(
+        self, guild_id: int, target_id: int, *, up_to_index: int | None = None
+    ) -> list[asyncpg.Record]:
+        """A target's un-pardoned warns (``expires_at``/``pardoned_at`` only), for active counting.
+
+        ``up_to_index`` counts only warns up to and including that case, so two warns recorded at
+        once each see their own count instead of both seeing the later one.
+        """
         return await self.fetch(
             "SELECT expires_at FROM mod_cases WHERE guild_id = $1 AND target_id = $2 AND action = 'warn' "
-            'AND pardoned_at IS NULL;',
-            guild_id, target_id,
+            'AND pardoned_at IS NULL AND ($3::int IS NULL OR case_index <= $3);',
+            guild_id, target_id, up_to_index,
         )
 
     async def pardon_case(self, guild_id: int, case_index: int, moderator_id: int) -> asyncpg.Record | None:

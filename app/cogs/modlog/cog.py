@@ -169,9 +169,9 @@ class ModLog(Cog):
 
     # -- warn policy ------------------------------------------------------
 
-    async def active_warns(self, guild_id: int, target_id: int) -> int:
+    async def active_warns(self, guild_id: int, target_id: int, *, up_to_index: int | None = None) -> int:
         """Warns that are neither pardoned nor expired."""
-        rows = await self.bot.db.cases.get_warn_rows(guild_id, target_id)
+        rows = await self.bot.db.cases.get_warn_rows(guild_id, target_id, up_to_index=up_to_index)
         return active_warn_count(row['expires_at'] for row in rows)
 
     async def escalate(self, case: ModerationCase) -> str | None:
@@ -186,7 +186,7 @@ class ModLog(Cog):
         if guild is None:
             return None
         rows = await self.bot.db.cases.get_warn_thresholds(case.guild_id)
-        count = await self.active_warns(case.guild_id, case.target_id)
+        count = await self.active_warns(case.guild_id, case.target_id, up_to_index=case.index)
         rule = select_threshold(
             (WarnThreshold(r['warn_count'], r['action'], r['duration_seconds']) for r in rows), count
         )

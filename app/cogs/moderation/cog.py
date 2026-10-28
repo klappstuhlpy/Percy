@@ -1442,6 +1442,12 @@ class Moderation(Cog):
 
         assert ctx.guild is not None
         success, failures = await start_lockdown(ctx, channels)
+        if not success:
+            await ctx.send_error(
+                f"Could not lock down any of the channels. Give the bot Manage Roles permissions in "
+                f"{', '.join(c.mention for c in failures)} and try again."
+            )
+            return
         timer = await self.bot.timers.create(
             duration.dt,
             "lockdown",

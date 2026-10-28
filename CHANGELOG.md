@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Poker: a straddle could pass the turn to a folded or sitting-out seat and stall the table; players who left the hand could rebuy and lose the chips; the host leaving no longer leaves the table without a host; a double "Next Round" click no longer auto-starts the hand.
+- Blackjack: a 21 on a split hand loses to a dealer blackjack instead of pushing.
+- Polls: ending a poll without Manage Threads still updates the poll card.
+- Moderation: the AI-alert Ban button cancels a pending tempban; its Warn button refuses bots; `lockdown for` no longer sets a timer when no channel was locked; two simultaneous warns can no longer trigger the same warn threshold twice.
+- Releases: digest items over the cap were marked delivered but never sent; news beyond the first five stories could starve.
+- Reminders: a reminder whose channel is gone is sent by DM instead of being dropped.
+- Stats: command usage logged during a save was lost; background loops stopped for good on non-connection errors.
+- `settings` data export: an export too large to DM now reports the failure.
+- "tonight"/"morning" crashed on the last day of a month.
+
+
 ## [2.21.0] - 2026-10-27
 
 ### Added

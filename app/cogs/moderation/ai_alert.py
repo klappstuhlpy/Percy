@@ -197,6 +197,9 @@ class AIModerationButton(
         if error or not isinstance(target, discord.Member):
             await interaction.response.send_message(f'{Emojis.error} {error}', ephemeral=True)
             return
+        if target.bot:
+            await interaction.response.send_message(f'{Emojis.error} You cannot warn a bot.', ephemeral=True)
+            return
 
         interaction.client.dispatch('mod_action', interaction.guild.id, 'warn', self.target_id, moderator.id,
                                     _reason_from(interaction.message))
