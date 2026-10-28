@@ -424,7 +424,13 @@ class Reminder(Cog):
         try:
             channel = self.bot.get_channel(timer.channel_id) or (await self.bot.fetch_channel(timer.channel_id))
         except discord.HTTPException:
-            return
+            # Channel deleted or no longer visible: fall back to the author's DMs rather than
+            # silently dropping the reminder (and ending a recurring series).
+            try:
+                author = self.bot.get_user(timer.author_id) or await self.bot.fetch_user(timer.author_id)
+                channel = await author.create_dm()
+            except discord.HTTPException:
+                return
 
         # Schedule the next occurrence before sending so a transient send failure
         # doesn't break the series (a permanently missing channel already returned above).

@@ -442,10 +442,10 @@ def test_kicker_detail_and_deciding_card() -> None:
     """Board 2h 10h Jh 5s 2d: AQ beats A8 on the queen kicker, and the name shows the kickers."""
     from app.cogs.games.engine.poker import Card, Hand, deciding_card
 
-    def evaluate(*cards: tuple[int, int]):
+    def evaluate(*cards: tuple[int, int]) -> Hand:
         hand = Hand()
         for value, suit in cards:
-            hand.add_card(Card(suit=suit, value=value))
+            hand.add(np.array([[value, suit]]))
         return hand
 
     board_cards = [Card(suit=2, value=2), Card(suit=2, value=10), Card(suit=2, value=11), Card(suit=1, value=5), Card(suit=3, value=2)]
@@ -459,3 +459,35 @@ def test_kicker_detail_and_deciding_card() -> None:
     assert deciding_card(aq.value, a8.value) == "Queen kicker"
     # A higher pair is already in the name: no extra detail.
     assert deciding_card(aq.value, aq.value) is None
+
+
+def test_straddle_passes_action_past_sitting_out_seat() -> None:
+    e = table(1000, 1000, 1000, 1000)
+    e.players[0].sitting_out = True
+    e.start()
+    assert e.post_straddle(e.current_player.member)
+    assert not e.current_player.folded
+
+
+def test_rebuy_refused_for_player_who_left_the_hand() -> None:
+    e = table(1000, 1000)
+    e.start()
+    e.leave_hand('p0')  # type: ignore[arg-type]
+    assert not e.rebuy('p0', 100)  # type: ignore[arg-type]
+
+
+def test_host_passes_on_when_host_leaves() -> None:
+    e = table(1000, 1000, 1000)
+    e.host = 'p0'
+    e.remove_player('p0')  # type: ignore[arg-type]
+    assert e.host == 'p1'
+
+
+def test_host_passes_on_when_host_left_mid_hand() -> None:
+    e = table(1000, 1000, 1000)
+    e.host = 'p0'
+    e.start()
+    e.leave_hand('p0')  # type: ignore[arg-type]
+    e.state = TableState.FINISHED
+    e.prepare_next_game()
+    assert e.host in ('p1', 'p2')

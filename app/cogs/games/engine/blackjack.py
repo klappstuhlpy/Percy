@@ -317,7 +317,8 @@ class BlackjackGame:
 
         if player_value == 21 and len(hand) == 2:
             if dealer_value == 21 and len(self.dealer) == 2:
-                return WinningType.PUSH
+                # A 21 made after a split is not a natural, so a dealer blackjack beats it.
+                return WinningType.DEALER_BLACKJACK if hand.splitted else WinningType.PUSH
             if hand.splitted:
                 return WinningType.PLAYER_WIN
             return WinningType.PLAYER_BLACKJACK

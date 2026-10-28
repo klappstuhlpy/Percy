@@ -339,7 +339,7 @@ class UserFriendlyTime(commands.Converter):
             dt = dt + datetime.timedelta(days=1)
 
         if status.accuracy == pdt.pdtContext.ACU_HALFDAY:
-            dt = dt.replace(day=now.day + 1)
+            dt = dt + datetime.timedelta(days=1)  # replace(day=now.day + 1) raised on month end
 
         result = FriendlyTimeResult(dt)
         remaining = ""

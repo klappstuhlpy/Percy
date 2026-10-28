@@ -345,6 +345,12 @@ class SettingsView(LayoutView):
                 ephemeral=True,
             )
             return
+        except discord.HTTPException:
+            await interaction.followup.send(
+                f"{Emojis.error} I couldn't send your export (it may exceed Discord's file size limit). Try again later.",
+                ephemeral=True,
+            )
+            return
 
         await interaction.followup.send(
             f"{Emojis.success} I've sent a copy of your stored data to your DMs.", ephemeral=True
@@ -599,6 +605,12 @@ class UserSettings(Cog, name="User Settings"):
         except discord.Forbidden:
             await ctx.send_error(
                 "I couldn't DM you — enable direct messages from server members and run this again.",
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException:
+            await ctx.send_error(
+                "I couldn't send your export (it may exceed Discord's file size limit). Try again later.",
                 ephemeral=True,
             )
             return

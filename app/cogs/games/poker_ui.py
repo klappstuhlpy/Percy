@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from contextlib import suppress
 from itertools import zip_longest
 from typing import TYPE_CHECKING, cast
@@ -109,6 +110,7 @@ class TableView(LayoutView):
     def __init__(self, session: PokerSession) -> None:
         self.session: PokerSession = session
         self.engine: TexasHoldem = session.engine
+        self._prepared_at: float = 0.0
         super().__init__(timeout=500.0, members=[p.member for p in session.players])
 
         self.join = discord.ui.Button(label="Join", style=discord.ButtonStyle.grey)
@@ -393,6 +395,11 @@ class TableView(LayoutView):
         # later fire and close the table mid-game.
         if self.engine.state == TableState.FINISHED:
             await self.session.prepare_next_game()
+            self._prepared_at = time.monotonic()
+        elif time.monotonic() - self._prepared_at < 2:
+            # ponytail: time debounce; the second click of a double "Next Round" lands on PREPARED
+            # and would auto-start the hand. A deliberate "Start" within 2 s just needs a re-click.
+            return
         else:
             self.engine.start()
             self.session.restart_timer()

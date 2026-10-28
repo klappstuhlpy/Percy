@@ -420,17 +420,25 @@ class Releases(Cog):
         and loses nothing.
         """
         repo = self.bot.db.releases
-        offered = [*items, *stories[:NEWS_LIMIT]]
+        offered = [*items, *stories]
         claimed = await repo.claim_deliveries([(user.id, item.media, item.key) for item in offered])
         if not claimed:
             return False
 
-        claims = sorted(claimed)
+        # Caps apply to what is *newly claimed*: capping the offer first would let items already
+        # delivered on an earlier run fill the slots forever and starve the new ones. Whatever
+        # the caps drop is handed back so it leads the next run instead of being lost.
         kept = [item for item in offered if (user.id, item.media, item.key) in claimed]
+        news_kept = [item for item in kept if item.media == NEWS_MEDIA][:NEWS_LIMIT]
         digest = build_digest(user.id, [item for item in kept if item.media != NEWS_MEDIA])
-        news = build_digest(user.id, [item for item in kept if item.media == NEWS_MEDIA], limit=NEWS_LIMIT)
-        if not digest.groups and not news.groups:
-            await repo.release_claims(claims)
+        news = build_digest(user.id, news_kept, limit=NEWS_LIMIT)
+        shown = {(item.media, item.key) for d in (digest, news) for g in d.groups for item in g.items}
+        claims = sorted(claimed)
+        dropped = [claim for claim in claims if claim[1:] not in shown]
+        if dropped:
+            await repo.release_claims(dropped)
+            claims = [claim for claim in claims if claim[1:] in shown]
+        if not claims:
             return False
 
         try:

@@ -236,6 +236,8 @@ class AIModerationButton(
         except discord.HTTPException as exc:
             await interaction.response.send_message(f'{Emojis.error} Couldn\'t ban them: {exc}', ephemeral=True)
             return
+        # A permanent ban replaces any tempban, so its expiry must not lift this one later.
+        await interaction.client.timers.delete_member_timer('tempban', interaction.guild.id, self.target_id)  # type: ignore[attr-defined]
         interaction.client.dispatch('mod_action', interaction.guild.id, 'ban', self.target_id, moderator.id,
                                     _reason_from(interaction.message))
         await self._resolve(interaction, f'\N{HAMMER} Banned by {moderator.mention}', _RESOLVED_COLOUR)

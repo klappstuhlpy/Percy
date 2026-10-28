@@ -359,7 +359,10 @@ class Stats(Cog):
 
         A task that automatically clears all presence history entries that are older than 30 days.
         """
-        await self.bot.db.stats.delete_old_presence_history()
+        try:
+            await self.bot.db.stats.delete_old_presence_history()
+        except Exception:
+            log.exception("Presence history cleanup failed.")
 
     @tasks.loop(seconds=10.0)
     async def command_insert(self) -> None:
@@ -369,12 +372,20 @@ class Stats(Cog):
 
         This task is automatically started after the cog is loaded.
         """
-        if self._command_data_batch:
-            await self.bot.db.stats.insert_commands(self._command_data_batch)
-            total = len(self._command_data_batch)
-            if total > 1:
-                log.info("Registered %s commands to the database.", total)
-            self._command_data_batch.clear()
+        if not self._command_data_batch:
+            return
+        # Snapshot first: rows appended while the insert is awaited must not be cleared unsent.
+        batch = self._command_data_batch[:]
+        del self._command_data_batch[:len(batch)]
+        try:
+            await self.bot.db.stats.insert_commands(batch)
+        except Exception:
+            # Keep the rows for the next tick; an uncaught error would stop the loop for good.
+            self._command_data_batch[:0] = batch
+            log.exception("Failed to insert command stats batch.")
+            return
+        if len(batch) > 1:
+            log.info("Registered %s commands to the database.", len(batch))
 
     @tasks.loop(seconds=10.0)
     async def avatar_insert(self) -> None:
@@ -384,9 +395,13 @@ class Stats(Cog):
 
         This task is automatically started after the cog is loaded.
         """
-        for data in self._avatar_data_batch:
-            await self.bot.db.stats.insert_avatar(data["user_id"], data["name"], data["image"])
-        self._avatar_data_batch.clear()
+        while self._avatar_data_batch:
+            data = self._avatar_data_batch[0]
+            try:
+                await self.bot.db.stats.insert_avatar(data["user_id"], data["name"], data["image"])
+            except Exception:
+                log.exception("Failed to insert avatar; dropping it.")
+            self._avatar_data_batch.pop(0)
 
     def cog_unload(self) -> None:
         for _task in self.__LOOPS:

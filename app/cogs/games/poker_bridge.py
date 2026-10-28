@@ -425,9 +425,9 @@ class PokerSession:
                     if not self.tie
                     else "**Tie**"
                 )
-                if position == 1 and not self.tie and len(self.ranks) > 1:
-                    if reason := deciding_card(hand.value, self.ranks[1][1].value):
-                        hand_suffix += f" — wins on the **{reason}**"
+                if (position == 1 and not self.tie and len(self.ranks) > 1
+                        and (reason := deciding_card(hand.value, self.ranks[1][1].value))):
+                    hand_suffix += f" — wins on the **{reason}**"
                 text += f"{cards[0].top} {cards[1].top} {hand.name}\n{cards[0].bottom} {cards[1].bottom} {hand_suffix}"
         return text
 

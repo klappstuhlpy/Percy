@@ -447,16 +447,16 @@ class Polls(Cog):
 
         if poll.message:
             try:
+                # ``poll`` is already running=False, so the rebuilt CV2 card shows
+                # "Poll finished" and drops the voting controls. Done before the thread, so a
+                # thread the bot may not archive can't leave the card showing live buttons.
+                await poll.message.edit(view=create_view(poll))
+                if poll.ping_message:
+                    await poll.ping_message.delete()
                 # Any discussion thread on the poll closes with it (older polls stored the
                 # thread question under ``thread_question``, so don't key this off the kwarg).
                 if poll.message.thread is not None:
                     await poll.message.thread.edit(archived=True, locked=True)
-
-                # ``poll`` is already running=False, so the rebuilt CV2 card shows
-                # "Poll finished" and drops the voting controls.
-                await poll.message.edit(view=create_view(poll))
-                if poll.ping_message:
-                    await poll.ping_message.delete()
             except discord.Forbidden:
                 # No invoking user here (may be a scheduled ending) — surface it to admins.
                 guild_config = await self.bot.db.get_guild_config(poll.guild_id)

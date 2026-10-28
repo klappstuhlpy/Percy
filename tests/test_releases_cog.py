@@ -431,24 +431,34 @@ async def test_the_news_cap_holds_while_the_release_half_still_gets_through() ->
 
     assert await cog_with(bot).deliver_to(fake_user(send=send), [releasable('Uncanny')], stories) is True
 
-    offered = [key for _, media, key in repo.requested if media == 'news']
-    assert len(offered) == cog_module.NEWS_LIMIT == 5
-    body = '\n'.join(field.value or '' for field in send.await_args.kwargs['embed'].fields)
+    body = ' '.join(field.value or '' for field in send.await_args.kwargs['embed'].fields)
     assert 'Uncanny' in body
-    assert body.count('Story ') == cog_module.NEWS_LIMIT
+    assert body.count('Story ') == cog_module.NEWS_LIMIT == 5
 
 
-async def test_uncapped_stories_are_never_claimed_so_they_lead_the_next_run() -> None:
-    """The slice happens before the claim, or the overflow would be lost rather than deferred."""
+async def test_stories_over_the_cap_are_handed_back_so_they_lead_the_next_run() -> None:
+    """The cap applies to *newly claimed* stories; the overflow is released, not lost or starved."""
     stories = [story(index) for index in range(12)]
     repo = FakeReleasesRepository(set())
-    repo.claimed = {(7, 'news', item.key) for item in stories[:cog_module.NEWS_LIMIT]}
+    repo.claimed = {(7, 'news', item.key) for item in stories}
 
     bot = MagicMock(name='Bot')
     bot.db.releases = repo
     await cog_with(bot).deliver_to(fake_user(send=AsyncMock()), [], stories)
 
-    assert (7, 'news', 'news/11') not in repo.requested
+    released = {claim for batch in repo.released for claim in batch}
+    assert len(released) == 12 - cog_module.NEWS_LIMIT
+    assert all(media == 'news' for _, media, _ in released)
+
+
+async def test_releases_over_the_digest_cap_are_handed_back() -> None:
+    items = [releasable(f'Book {index}') for index in range(15)]
+    repo = FakeReleasesRepository({(7, item.media, item.key) for item in items})
+    bot = MagicMock(name='Bot')
+    bot.db.releases = repo
+    await cog_with(bot).deliver_to(fake_user(send=AsyncMock()), items)
+
+    assert sum(len(batch) for batch in repo.released) == 15 - 12
 
 
 async def test_a_blocked_dm_hands_back_the_news_claims_too_and_mutes_once() -> None:

@@ -348,3 +348,16 @@ def test_heist_split_conserves_coins() -> None:
             assert result.fine_fraction == 0.0
         else:
             assert result.loot == 0 and 0.1 <= result.fine_fraction <= 0.25
+
+
+def test_blackjack_split_21_loses_to_dealer_blackjack() -> None:
+    """A 21 made after a split is not a natural: a dealer blackjack beats it, it is no push."""
+    from app.cogs.games.engine.blackjack import BlackjackGame, WinningType
+
+    game = BlackjackGame(10)
+    game.dealer = _hand(14, 13)
+    player = _hand(14, 13)
+    player.splitted = True
+    assert game.get_winner(player) is WinningType.DEALER_BLACKJACK
+    player.splitted = False
+    assert game.get_winner(player) is WinningType.PUSH

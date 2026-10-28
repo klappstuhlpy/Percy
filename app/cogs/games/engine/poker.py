@@ -921,8 +921,8 @@ class TexasHoldem:
             return False
 
         player = next((p for p in self.players if p.member == member), None)
-        if player is None:
-            return False
+        if player is None or player.left:
+            return False  # a player who left is cashed out; chips added now would vanish with the seat
 
         # Enforce max buy-in limit
         if player.stack + amount > self.max_buy_in:
@@ -1071,7 +1071,7 @@ class TexasHoldem:
         self.last_raise_size = straddle_amount
 
         # Action moves to player after straddler
-        self.player_index = (player_index + 1) % len(self.players)
+        self.player_index = self._next_to_act(player_index)
 
         return True
 
@@ -1337,7 +1337,14 @@ class TexasHoldem:
         if self.dealer_index is not None and self.players.index(player) < self.dealer_index:
             self.dealer_index -= 1
         self.players.remove(player)
+        self._pass_host()
         return player.stack
+
+    def _pass_host(self) -> None:
+        """Hands the host role to the first remaining seat when the host is gone,
+        otherwise nobody could start the next hand."""
+        if self.players and all(p.member != self.host for p in self.players):
+            self.host = self.players[0].member
 
     def prepare_next_game(self) -> list[Player]:
         """Prepares the next round.
@@ -1379,6 +1386,7 @@ class TexasHoldem:
                     break
         # Clear blind_index so start() recalculates from new dealer position
         self.blind_index = None
+        self._pass_host()
         return removed
 
     def __fill_left_community_cards(self) -> None:
