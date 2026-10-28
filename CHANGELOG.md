@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Poker: a straddle could pass the turn to a folded or sitting-out seat and stall the table; players who left the hand could rebuy and lose the chips; the host leaving no longer leaves the table without a host; a double "Next Round" click no longer auto-starts the hand.
 - Blackjack: a 21 on a split hand loses to a dealer blackjack instead of pushing.
-- Polls: ending a poll without Manage Threads still updates the poll card.
+- Polls: ending a poll without Manage Threads still updates the poll card. Poll numbers no longer repeat after a poll is deleted; a failed image upload cancels creation instead of posting the poll without its image.
 - Moderation: the AI-alert Ban button cancels a pending tempban; its Warn button refuses bots; `lockdown for` no longer sets a timer when no channel was locked; two simultaneous warns can no longer trigger the same warn threshold twice.
 - Releases: digest items over the cap were marked delivered but never sent; news beyond the first five stories could starve.
 - Reminders: a reminder whose channel is gone is sent by DM instead of being dropped.

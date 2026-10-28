@@ -343,7 +343,7 @@ class Polls(Cog):
             thread_message = await thread.send(thread_question)
             await thread_message.pin(reason="Poll Discussion")
 
-        new_index = len(await self.get_guild_polls(guild.id)) + 1  # type: ignore[misc]
+        new_index = max((p.index for p in await self.get_guild_polls(guild.id)), default=0) + 1  # type: ignore[misc]
 
         poll = await self.create_poll(
             channel.id,
@@ -526,15 +526,15 @@ class Polls(Cog):
             response = await self.bot.klappstuhlme_internal_client.upload_guild_images(ctx.guild.id, flags.image)
             if response.errors != 0 or not response.raw_links:
                 await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
-            else:
-                image_url = response.raw_links[0]
+                return
+            image_url = response.raw_links[0]
 
         message = await channel.send(content="*Preparing Poll...*")
         ping_message = None
         if flags.ping:
             ping_message = await channel.send("*...*")
 
-        new_index = len(await self.get_guild_polls(ctx.guild.id)) + 1  # type: ignore[misc]
+        new_index = max((p.index for p in await self.get_guild_polls(ctx.guild.id)), default=0) + 1  # type: ignore[misc]
 
         if flags.thread_question:
             # Discord caps thread names at 100 characters.
@@ -666,8 +666,8 @@ class Polls(Cog):
             response = await self.bot.klappstuhlme_internal_client.upload_guild_images(ctx.guild.id, image)
             if response.errors != 0 or not response.raw_links:
                 await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
-            else:
-                image_url = response.raw_links[0]
+                return
+            image_url = response.raw_links[0]
 
         to_options: dict[str, str] = {f"opt_{i}": content for i, content in enumerate(request.options, start=1)}
 
