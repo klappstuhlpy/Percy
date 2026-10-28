@@ -475,7 +475,11 @@ pub async fn guild_giveaways(State(app): State<AppState>, session: Session, Path
     };
     let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
 
-    let (giveaways, channels) = tokio::join!(percy.get_giveaways(guild_id), percy.get_guild_channels(guild_id));
+    let (giveaways, channels, roles) = tokio::join!(
+        percy.get_giveaways(guild_id),
+        percy.get_guild_channels(guild_id),
+        percy.get_guild_roles(guild_id),
+    );
     let giveaways = giveaways.unwrap_or(GiveawaysResponse {
         giveaways: Vec::new(),
         total: 0,
@@ -491,6 +495,7 @@ pub async fn guild_giveaways(State(app): State<AppState>, session: Session, Path
         page_title: "Giveaways",
         giveaways,
         channels: channels.unwrap_or_default(),
+        roles: roles.unwrap_or_default(),
         active_count,
         ended_count,
     }

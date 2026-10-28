@@ -65,6 +65,13 @@
                         <br><span class="text-muted fs-xs">{{ desc }}</span>
                         {% when None %}
                         {% endmatch %}
+                        {% if giveaway.required_role_id.is_some() || giveaway.min_account_days > 0 || giveaway.min_join_days > 0 %}
+                        <br><span class="text-muted fs-xs">Requires:
+                            {% match giveaway.required_role_id %}{% when Some with (rid) %}<span class="pill">@{% for role in roles %}{% if role.id == rid.as_str() %}{{ role.name }}{% endif %}{% endfor %}</span> {% when None %}{% endmatch %}
+                            {% if giveaway.min_account_days > 0 %}<span class="pill">account {{ giveaway.min_account_days }}d+</span> {% endif %}
+                            {% if giveaway.min_join_days > 0 %}<span class="pill">member {{ giveaway.min_join_days }}d+</span>{% endif %}
+                        </span>
+                        {% endif %}
                     </td>
                     <td data-label="Status">
                         {% if giveaway.ended %}
@@ -118,6 +125,20 @@
 
             <label class="config-label" for="gw_winners">Winners</label>
             <input type="number" id="gw_winners" class="config-input" min="1" max="100" value="1">
+
+            <label class="config-label" for="gw_role">Required role <span class="text-muted fs-xs">(optional)</span></label>
+            <select id="gw_role" class="config-select">
+                <option value="">Anyone can enter</option>
+                {% for role in roles %}
+                <option value="{{ role.id }}">@{{ role.name }}</option>
+                {% endfor %}
+            </select>
+
+            <label class="config-label" for="gw_min_account">Minimum account age <span class="text-muted fs-xs">(days, 0 = none)</span></label>
+            <input type="number" id="gw_min_account" class="config-input" min="0" max="3650" value="0">
+
+            <label class="config-label" for="gw_min_join">Minimum server age <span class="text-muted fs-xs">(days, 0 = none)</span></label>
+            <input type="number" id="gw_min_join" class="config-input" min="0" max="3650" value="0">
 
             <label class="config-label" for="gw_description">Description <span class="text-muted fs-xs">(optional)</span></label>
             <textarea id="gw_description" class="config-input" rows="3" maxlength="1000" placeholder="Details about the giveaway…"></textarea>

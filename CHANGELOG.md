@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-28
+
+### Added
+- Polls: "Hide results until the poll ends" and a voting role, on create and edit.
+- Giveaways: required role, minimum account age and minimum server age; requirements show in the list.
+- Audit log: a warn policy card (expiry days, escalation rules by warn count) and a Pardon button on warn cases.
+
 ## [0.17.2] - 2026-10-26
 
 ### Changed

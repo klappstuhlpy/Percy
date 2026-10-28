@@ -197,6 +197,8 @@ pub async fn guild_poll_create(
     let mut thread_question = String::new();
     let mut color = String::new();
     let mut image_url = String::new();
+    let mut hide_results = false;
+    let mut role_id = String::new();
     let mut duration_seconds: i64 = 0;
     let mut options: Vec<String> = Vec::new();
     let mut file_data: Option<Vec<u8>> = None;
@@ -219,6 +221,8 @@ pub async fn guild_poll_create(
             "thread_question" => thread_question = value,
             "color" => color = value,
             "image_url" => image_url = value,
+            "hide_results" => hide_results = value == "true",
+            "role_id" => role_id = value.trim().to_string(),
             "duration_seconds" => duration_seconds = value.trim().parse().unwrap_or(0),
             "options" => {
                 let v = value.trim().to_string();
@@ -251,6 +255,8 @@ pub async fn guild_poll_create(
         "color": color,
         "image_url": image_url,
         "thread_question": thread_question,
+        "hide_results": hide_results,
+        "role_id": role_id,
     });
 
     let mime = file_data.as_deref().map(detect_mime);

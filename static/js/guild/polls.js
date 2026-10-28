@@ -14,6 +14,8 @@ function openEditPoll(pollId) {
     document.getElementById('edit-poll-description').value = poll.description || '';
     document.getElementById('edit-poll-image').value = poll.image_url || '';
     document.getElementById('edit-poll-color').value = poll.color || '';
+    document.getElementById('edit-poll-hide').checked = !!poll.hide_results;
+    document.getElementById('edit-poll-role').value = poll.role_id || '';
 
     const optionsContainer = document.getElementById('edit-poll-options');
     optionsContainer.innerHTML = '';
@@ -84,7 +86,11 @@ document.getElementById('poll-save-btn').addEventListener('click', async () => {
         return;
     }
 
-    const body = { question, description, image_url, color, options };
+    const body = {
+        question, description, image_url, color, options,
+        hide_results: document.getElementById('edit-poll-hide').checked,
+        role_id: document.getElementById('edit-poll-role').value,
+    };
 
     const btn = document.getElementById('poll-save-btn');
     btn.disabled = true;
@@ -197,6 +203,8 @@ function openCreatePoll() {
     document.getElementById('create-poll-image').value = '';
     document.getElementById('create-poll-image-file').value = '';
     document.getElementById('create-poll-color').value = '';
+    document.getElementById('create-poll-hide').checked = false;
+    document.getElementById('create-poll-role').value = '';
     document.getElementById('create-poll-duration-amount').value = '1';
     document.getElementById('create-poll-duration-unit').value = '86400';
     const urlRadio = document.querySelector('input[name="create-poll-image-source"][value="url"]');
@@ -252,6 +260,9 @@ document.getElementById('poll-create-btn').addEventListener('click', async () =>
         if (color) fd.append('color', color);
         if (channel_id) fd.append('channel_id', channel_id);
         if (thread_question) fd.append('thread_question', thread_question);
+        if (document.getElementById('create-poll-hide').checked) fd.append('hide_results', 'true');
+        const votingRole = document.getElementById('create-poll-role').value;
+        if (votingRole) fd.append('role_id', votingRole);
         if (useFile && bannerFile) {
             fd.append('file', bannerFile);
         } else if (!useFile && urlValue) {

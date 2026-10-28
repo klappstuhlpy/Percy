@@ -35,6 +35,9 @@
             duration_seconds: amount * unit,
             winners,
             description: description || null,
+            required_role_id: document.getElementById('gw_role').value || null,
+            min_account_days: parseInt(document.getElementById('gw_min_account').value, 10) || 0,
+            min_join_days: parseInt(document.getElementById('gw_min_join').value, 10) || 0,
         };
 
         confirmBtn.disabled = true;

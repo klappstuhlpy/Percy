@@ -62,6 +62,42 @@
         </div>
     </form>
 
+    {# ─── Warn policy ─────────────────────────────────────────────── #}
+    <section class="config-card" id="warn-policy-card">
+        <h3>Warn policy</h3>
+        <p class="text-muted">Warns can expire, and reaching a warn count can trigger an automatic action.</p>
+        <div class="config-field">
+            <label class="config-label" for="warn-expiry">Warns expire after (days)</label>
+            <span class="config-description">Leave empty to keep warns forever.</span>
+            <input type="number" id="warn-expiry" class="config-input" min="1" max="3650"
+                   value="{% match warn_policy.expiry_days %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %}">
+        </div>
+        <div class="data-table-wrap">
+            <table class="data-table" id="warn-thresholds">
+                <thead><tr><th>Warns</th><th>Action</th><th>Duration</th><th></th></tr></thead>
+                <tbody>
+                    {% for t in warn_policy.thresholds %}
+                    <tr>
+                        <td data-label="Warns">{{ t.warn_count }}</td>
+                        <td data-label="Action"><span class="action-pill {{ t.action }}">{{ t.action }}</span></td>
+                        <td data-label="Duration">{% match t.duration_seconds %}{% when Some with (s) %}{{ s / 60 }} min{% when None %}—{% endmatch %}</td>
+                        <td><button type="button" class="button small danger outline warn-rule-remove" data-count="{{ t.warn_count }}">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if warn_policy.thresholds.is_empty() %}<p class="text-muted fs-xs">No rules yet.</p>{% endif %}
+        <div class="warn-rule-add">
+            <input type="number" id="warn-rule-count" class="config-input" min="1" max="100" placeholder="Warn count" aria-label="Warn count">
+            <select id="warn-rule-action" class="config-select" aria-label="Action">
+                {% for a in warn_policy.actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+            </select>
+            <input type="number" id="warn-rule-minutes" class="config-input" min="1" placeholder="Minutes (optional)" aria-label="Duration in minutes">
+            <button type="button" class="button small primary" id="warn-rule-add">Add rule</button>
+        </div>
+    </section>
+
     {# ─── Cases Table ─────────────────────────────────────────────── #}
     {% if cases.cases.is_empty() %}
     <div class="empty-state">
@@ -97,6 +133,7 @@
                     <td class="member-joined" data-label="Date"><time class="js-ts">{{ case.created_at.as_deref().unwrap_or("—") }}</time></td>
                     <td class="case-actions">
                         <button type="button" class="button small" onclick="editCase({{ case.case_index }})">Edit</button>
+                        {% if case.action == "warn" && !case.pardoned %}<button type="button" class="button small outline" onclick="pardonCase({{ case.case_index }})">Pardon</button>{% endif %}
                         <button type="button" class="button small danger outline" onclick="closeCase({{ case.case_index }})">Close</button>
                     </td>
                 </tr>
@@ -119,4 +156,5 @@
 {% block page_js %}
 <script>const GUILD_ID = '{{ guild_id }}';</script>
 <script src="/static/js/guild/audit_log.js"></script>
+<script src="/static/js/guild/warn_policy.js"></script>
 {% endblock %}

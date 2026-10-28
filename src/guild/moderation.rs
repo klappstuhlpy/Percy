@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     Json,
 };
-use percy_client::{CasesResponse, LeaderboardResponse, PercyError};
+use percy_client::{CasesResponse, LeaderboardResponse, PercyError, WarnPolicy};
 use serde::Deserialize;
 
 use crate::{
@@ -81,8 +81,11 @@ pub async fn guild_audit_log(
         cases: Vec::new(),
         total: 0,
     });
+    // Degrades to an empty policy card when Percy has none / is behind.
+    let warn_policy = percy.get_warn_policy(guild_id).await.unwrap_or_default();
 
     AuditLogTemplate {
+        warn_policy,
         account: Some(Viewer::from_session(&session)),
         guild_id,
         guild_name: guild.name,
@@ -387,5 +390,100 @@ pub async fn guild_custom_bot_reset(
     match percy.reset_custom_bot(guild_id).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "message": "Bot profile reset to defaults"})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
+    }
+}
+
+// -- Warn policy + pardon ------------------------------------------------------
+
+fn err_json(e: &PercyError) -> Response {
+    Json(serde_json::json!({"ok": false, "error": percy_message(e)})).into_response()
+}
+
+fn policy_json(p: &WarnPolicy) -> Response {
+    Json(serde_json::json!({"ok": true, "policy": p})).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct WarnExpiryBody {
+    expiry_days: Option<u32>,
+}
+
+/// `PATCH /dashboard/guild/:guild_id/warn-policy`
+pub async fn guild_warn_expiry(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<WarnExpiryBody>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy.set_warn_expiry(guild_id, body.expiry_days).await {
+        Ok(p) => policy_json(&p),
+        Err(e) => err_json(&e),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct WarnThresholdBody {
+    action: String,
+    #[serde(default)]
+    duration_seconds: Option<u64>,
+}
+
+/// `PUT /dashboard/guild/:guild_id/warn-policy/thresholds/:warn_count`
+pub async fn guild_warn_threshold_put(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, warn_count)): Path<(u64, u32)>,
+    Json(body): Json<WarnThresholdBody>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy
+        .put_warn_threshold(guild_id, warn_count, &body.action, body.duration_seconds)
+        .await
+    {
+        Ok(p) => policy_json(&p),
+        Err(e) => err_json(&e),
+    }
+}
+
+/// `DELETE /dashboard/guild/:guild_id/warn-policy/thresholds/:warn_count`
+pub async fn guild_warn_threshold_delete(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, warn_count)): Path<(u64, u32)>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy.delete_warn_threshold(guild_id, warn_count).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => err_json(&e),
+    }
+}
+
+/// `POST /dashboard/guild/:guild_id/cases/:case_index/pardon` — the moderator is
+/// always the session user, never a value from the browser.
+pub async fn guild_case_pardon(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, case_index)): Path<(u64, u64)>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy.pardon_case(guild_id, case_index, &session.discord_user_id).await {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(PercyError::NotFound) => {
+            Json(serde_json::json!({"ok": false, "error": "That case is not an active warn."})).into_response()
+        }
+        Err(e) => err_json(&e),
     }
 }

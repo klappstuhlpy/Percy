@@ -2,7 +2,7 @@
 
 use axum::{
     extract::State,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 
@@ -329,6 +329,18 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/cases/:case_index",
             patch(moderation::guild_case_update).delete(moderation::guild_case_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/cases/:case_index/pardon",
+            post(moderation::guild_case_pardon),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/warn-policy",
+            patch(moderation::guild_warn_expiry),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/warn-policy/thresholds/:warn_count",
+            put(moderation::guild_warn_threshold_put).delete(moderation::guild_warn_threshold_delete),
         )
         .route(
             "/dashboard/guild/:guild_id/members/bulk-action",

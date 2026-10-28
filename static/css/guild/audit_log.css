@@ -108,3 +108,12 @@
     background: var(--success-text);
     animation: pulse 2s infinite;
 }
+
+.warn-rule-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+.warn-rule-add .config-input { width: 9rem; }
+.warn-rule-add .config-select { width: auto; }

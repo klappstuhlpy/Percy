@@ -25,6 +25,7 @@
             <td class="member-joined"><time class="js-ts">${c.created_at || '—'}</time></td>
             <td class="case-actions">
                 <button type="button" class="button small" onclick="editCase(${c.case_index})">Edit</button>
+                ${c.action === 'warn' ? `<button type="button" class="button small outline" onclick="pardonCase(${c.case_index})">Pardon</button>` : ''}
                 <button type="button" class="button small danger outline" onclick="closeCase(${c.case_index})">Close</button>
             </td>
         `;
@@ -55,6 +56,19 @@
             showToast('success', `Case #${idx} updated`);
         } catch {
             showToast('error', 'Failed to update case');
+        }
+    };
+
+    window.pardonCase = async function(idx) {
+        if (!(await PercyConfirm.ask({ title: `Pardon warn #${idx}?`, consequence: "The warn stops counting toward automatic escalation. The case stays in the log.", undo: null, confirmLabel: "Pardon" }))) return;
+        try {
+            const resp = await fetch(`/dashboard/guild/${GUILD_ID}/cases/${idx}/pardon`, { method: 'POST', headers: { 'Accept': 'application/json' } });
+            const data = await resp.json();
+            if (!data.ok) { showToast('error', data.error || 'Failed to pardon'); return; }
+            caseRow(idx)?.querySelector('button[onclick^="pardonCase"]')?.remove();
+            showToast('success', `Warn #${idx} pardoned`);
+        } catch {
+            showToast('error', 'Failed to pardon');
         }
     };
 

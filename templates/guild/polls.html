@@ -183,6 +183,22 @@
             </div>
 
             <div class="config-field mb-sm">
+                <label class="config-label"><input type="checkbox" id="edit-poll-hide"> Hide results until the poll ends</label>
+                <span class="config-description">Voters do not see the running tally.</span>
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="edit-poll-role">Voting role</label>
+                <span class="config-description">Only members with this role can vote.</span>
+                <select id="edit-poll-role" class="config-select">
+                    <option value="">Everyone</option>
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">@{{ role.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="config-field mb-sm">
                 <label class="config-label">Options</label>
                 <span class="config-description">Poll choices (minimum 2). Leave blank to keep unchanged, clear all text to remove.</span>
                 <div id="edit-poll-options" class="option-list"></div>
@@ -263,6 +279,22 @@
                 <input type="text" id="create-poll-color" class="config-input" placeholder="#d97757"
                        pattern="^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
                        title="Please enter a valid hex color (e.g. #ff5733)">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label"><input type="checkbox" id="create-poll-hide"> Hide results until the poll ends</label>
+                <span class="config-description">Voters do not see the running tally.</span>
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="create-poll-role">Voting role</label>
+                <span class="config-description">Only members with this role can vote.</span>
+                <select id="create-poll-role" class="config-select">
+                    <option value="">Everyone</option>
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">@{{ role.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="config-field mb-sm">
