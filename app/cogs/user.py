@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import gzip
 import importlib.resources
 import io
 import json
@@ -333,11 +334,11 @@ class SettingsView(LayoutView):
         await interaction.response.defer(ephemeral=True, thinking=True)
         data = await interaction.client.db.users.export_all_user_data(self.user.id)
         payload = json.dumps(data, indent=2, default=str, ensure_ascii=False)
-        file = discord.File(io.BytesIO(payload.encode("utf-8")), filename=f"percy-data-{self.user.id}.json")
+        file = discord.File(io.BytesIO(gzip.compress(payload.encode("utf-8"))), filename=f"percy-data-{self.user.id}.json.gz")
 
         try:
             await self.user.send(
-                "Here is a copy of all the personal data Percy has stored about you.", file=file
+                "Here is a copy of all the personal data Percy has stored about you (gzip-compressed JSON).", file=file
             )
         except discord.Forbidden:
             await interaction.followup.send(
@@ -595,11 +596,11 @@ class UserSettings(Cog, name="User Settings"):
         await ctx.defer(ephemeral=True)
         data = await self.bot.db.users.export_all_user_data(ctx.author.id)
         payload = json.dumps(data, indent=2, default=str, ensure_ascii=False)
-        file = discord.File(io.BytesIO(payload.encode("utf-8")), filename=f"percy-data-{ctx.author.id}.json")
+        file = discord.File(io.BytesIO(gzip.compress(payload.encode("utf-8"))), filename=f"percy-data-{ctx.author.id}.json.gz")
 
         try:
             await ctx.author.send(
-                "Here is a copy of all the personal data Percy has stored about you.",
+                "Here is a copy of all the personal data Percy has stored about you (gzip-compressed JSON).",
                 file=file,
             )
         except discord.Forbidden:

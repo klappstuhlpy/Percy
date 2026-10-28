@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.2] - 2026-10-28
+
+### Changed
+- `settings` data export is sent as gzip-compressed JSON (`percy-data-<id>.json.gz`), so large exports fit Discord's attachment limit.
+
+
 ## [2.22.1] - 2026-10-28
 
 ### Fixed
