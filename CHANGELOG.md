@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.1] - 2026-10-28
+
+### Fixed
+- Internal API: `GET /giveaways` returns `required_role_id`, `min_account_days` and `min_join_days`, so the dashboard can show entry requirements.
+
+
 ## [2.22.0] - 2026-10-28
 
 ### Added

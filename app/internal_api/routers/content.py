@@ -432,6 +432,9 @@ async def get_giveaways(
                 < datetime.datetime.now(datetime.UTC)
             ),
             'ends_at': _kwargs.get('expires'),
+            'required_role_id': str(_kwargs['required_role_id']) if _kwargs.get('required_role_id') else None,
+            'min_account_days': _kwargs.get('min_account_days') or 0,
+            'min_join_days': _kwargs.get('min_join_days') or 0,
         })
 
     total = len(giveaways)
