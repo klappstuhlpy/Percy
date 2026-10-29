@@ -140,7 +140,7 @@ def build_warn_dm_view(
     container = discord.ui.Container(accent_colour=Accent.warning.colour)
     name = discord.utils.escape_markdown(guild.name)
     container.add_item(
-        _header(f'## \N{WARNING SIGN} You were warned\nA moderator of **{name}** issued you a warning.',
+        _header(f'## \N{TRIANGULAR FLAG ON POST} You were warned\nA moderator of **{name}** issued you a warning.',
                 guild.icon.url if guild.icon else None)
     )
     container.add_item(discord.ui.Separator())
@@ -181,7 +181,7 @@ def build_warn_result_view(
     container = discord.ui.Container(accent_colour=Accent.warning.colour)
     container.add_item(
         _header(
-            f'### \N{WARNING SIGN} Warned {member.mention}\n'
+            f'### \N{TRIANGULAR FLAG ON POST} Warned {member.mention}\n'
             f'Case #{case_index} · **{ordinal(warn_count)}** warning on record',
             member.display_avatar.url,
         )
@@ -215,10 +215,11 @@ class CaseHistoryView(BasePaginatorV2[ModerationCase]):
         for case in entries:
             emoji, label = _labels(case)
             by = f' · by <@{case.moderator_id}>' if case.moderator_id else ''
+            pardoned = ' · `Pardoned`' if case.pardoned_at is not None else ''
             items.append(discord.ui.Separator())
             items.append(
                 discord.ui.TextDisplay(
-                    f'{emoji} **Case #{case.index} · {label}** · {_ts(case.created_at, "R")}{by}\n'
+                    f'{emoji} **Case #{case.index} · {label}**{pardoned} · {_ts(case.created_at, "R")}{by}\n'
                     f'{_quote(case.reason, EXCERPT_LIMIT)}'
                 )
             )

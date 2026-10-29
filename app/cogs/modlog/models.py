@@ -82,7 +82,7 @@ _COLOURS: dict[CaseType, int] = {
 }
 
 _EMOJIS: dict[CaseType, str] = {
-    CaseType.WARN: '\N{WARNING SIGN}',
+    CaseType.WARN: '\N{TRIANGULAR FLAG ON POST}',
     CaseType.BAN: '\N{HAMMER}',
     CaseType.TEMPBAN: '\N{HAMMER}',
     CaseType.KICK: '\N{WOMANS BOOTS}',
