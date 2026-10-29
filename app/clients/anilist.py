@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from app.clients import BaseHTTPClient, HTTPClientError
+from app.clients.base import BaseHTTPClient, HTTPClientError
 from app.utils import cache
 
 if TYPE_CHECKING:
@@ -30,9 +30,10 @@ _MEDIA_ROW = '''
 
 _MEDIA_SEARCH_QUERY = '''
 query ($page: Int, $perPage: Int, $type: MediaType, $search: String, $season: MediaSeason,
-       $seasonYear: Int, $sort: [MediaSort]) {
+       $seasonYear: Int, $status: [MediaStatus], $sort: [MediaSort]) {
   Page(page: $page, perPage: $perPage) {
-    media(type: $type, search: $search, season: $season, seasonYear: $seasonYear, isAdult: false, sort: $sort) {
+    media(type: $type, search: $search, season: $season, seasonYear: $seasonYear, status_in: $status,
+          isAdult: false, sort: $sort) {
 ''' + _MEDIA_ROW + '''
     }
   }
@@ -148,6 +149,9 @@ query ($page: Int, $perPage: Int, $from: Int, $to: Int) {
       episode
       media {
 ''' + _MEDIA_ROW + '''
+        siteUrl
+        coverImage { large }
+        studios(isMain: true) { nodes { id name } }
       }
     }
   }

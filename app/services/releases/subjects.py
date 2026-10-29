@@ -25,11 +25,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
 __all__ = (
+    'ANIME_SUBJECT_TYPES',
     'COMIC_SUBJECT_TYPES',
     'STREAMS',
     'TITLE_SUBJECT_TYPES',
     'Releasable',
     'Subject',
+    'anime_releasable',
     'comic_releasable',
     'match',
     'normalise',
@@ -40,6 +42,9 @@ __all__ = (
 #: this (a cross-column constraint ages badly), so these live with the code that derives them.
 COMIC_SUBJECT_TYPES = ('brand', 'series', 'creator', 'character')
 TITLE_SUBJECT_TYPES = ('universe', 'franchise', 'person', 'character')
+#: Anime is followed by AniList id -- a show (``series``) or the studio making it. Ids rather
+#: than names because AniList titles have romaji/English/native forms and studios get renamed.
+ANIME_SUBJECT_TYPES = ('series', 'studio')
 
 #: Stream values a subscription can carry. ``both`` matches whichever stream is dispatched.
 STREAMS = ('releases', 'news', 'both')
@@ -76,7 +81,7 @@ class Subject:
 
 @dataclass(frozen=True, slots=True)
 class Releasable:
-    """The shared shape comics and titles both expose to the subscription layer.
+    """The shared shape comics, titles and anime episodes expose to the subscription layer.
 
     ``key`` is the ``release_key`` used for delivery idempotency and progress, namespaced by
     ``media``: ``{brand}/{slug}`` for comics, ``{universe}/{slug}`` for titles.
@@ -183,6 +188,35 @@ def title_releasable(title: Mapping[str, Any], credits: Iterable[Any] = ()) -> R
         cover_url=_column(title, 'poster_path'),
         url=None,
         subjects=_subjects('title', pairs),
+    )
+
+
+def anime_releasable(schedule: Mapping[str, Any]) -> Releasable:
+    """Maps one AniList ``airingSchedules`` entry (episode + its media) onto a releasable.
+
+    Anime has no catalogue table: episodes are read live from AniList on each dispatch run, and
+    ``release_deliveries`` is what stops a re-read episode being told twice. The key is
+    ``{media_id}/{episode}``; ``first_seen`` is the moment the episode aired, so following a show
+    today never replays the episodes that aired before it.
+
+    Subjects: the show's AniList id as ``series`` and each main studio's id as ``studio``.
+    """
+    media = _column(schedule, 'media') or {}
+    title = _column(media, 'title') or {}
+    name = _text(_column(title, 'romaji')) or _text(_column(title, 'english')) or '?'
+    aired = datetime.datetime.fromtimestamp(int(schedule['airingAt']), datetime.UTC).replace(tzinfo=None)
+    studios = (_column(media, 'studios') or {}).get('nodes') or []
+    pairs = [('series', _text(_column(media, 'id')))]
+    pairs += [('studio', _text(_column(studio, 'id'))) for studio in studios]
+    return Releasable(
+        media='anime',
+        key=f'{_text(_column(media, "id"))}/{_text(schedule["episode"])}',
+        name=f'{name} — Episode {schedule["episode"]}',
+        release_date=aired.date(),
+        first_seen=aired,
+        cover_url=(_column(media, 'coverImage') or {}).get('large'),
+        url=_column(media, 'siteUrl'),
+        subjects=_subjects('anime', pairs),
     )
 
 

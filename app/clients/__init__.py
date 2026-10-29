@@ -1,3 +1,4 @@
+from app.clients.anilist import AniListClient
 from app.clients.base import BaseHTTPClient, CircuitBreakerOpen, HTTPClientError, TransportError
 from app.clients.lyrics import LRCLibClient
 from app.clients.news import FeedResponse, NewsClient
@@ -7,6 +8,7 @@ from app.clients.tmdb import image_url as tmdb_image_url
 from app.clients.translate import TranslateClient, Translation, TranslationError
 
 __all__ = (
+    'AniListClient',
     'BaseHTTPClient',
     'CircuitBreakerOpen',
     'FeedResponse',

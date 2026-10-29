@@ -10,10 +10,10 @@ from discord.app_commands import Choice
 from discord.ext import commands, tasks
 from discord.ext.commands import Range  # noqa: TC002 -- flag/command param annotations are evaluated at runtime
 
+from app.clients import AniListClient
 from app.core import Bot, Cog, Context, Flags, describe, flag, group
 from app.utils import fuzzy
 
-from .client import AniListClient
 from .ui import AniListBrowser, Kind, media_title, month_to_season
 
 log = logging.getLogger(__name__)

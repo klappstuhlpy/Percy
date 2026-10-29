@@ -16,11 +16,13 @@ from app.services.releases.overview import (
 )
 from app.services.releases.progress import PROGRESS_STATUSES, check_status, progress_payload
 from app.services.releases.subjects import (
+    ANIME_SUBJECT_TYPES,
     COMIC_SUBJECT_TYPES,
     STREAMS,
     TITLE_SUBJECT_TYPES,
     Releasable,
     Subject,
+    anime_releasable,
     comic_releasable,
     match,
     normalise,
@@ -28,6 +30,7 @@ from app.services.releases.subjects import (
 )
 
 __all__ = (
+    'ANIME_SUBJECT_TYPES',
     'BRAND_LABELS',
     'COMIC_SUBJECT_TYPES',
     'DEFAULT_LIMIT',
@@ -40,6 +43,7 @@ __all__ = (
     'Entry',
     'Releasable',
     'Subject',
+    'anime_releasable',
     'build_digest',
     'build_overview',
     'check_status',

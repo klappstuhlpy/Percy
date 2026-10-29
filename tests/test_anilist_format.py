@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.cogs.anilist.ui import format_date, month_to_season, related_media, sanitize_description
+from app.cogs.anilist.ui import follow_target, format_date, month_to_season, related_media, sanitize_description
 
 
 def test_cut_inside_spoiler_closes_it() -> None:
@@ -42,3 +42,12 @@ def test_related_media_dedupes_and_drops_adult_and_self() -> None:
 def test_people_link_their_works() -> None:
     staff = {'id': 2, 'staffMedia': {'nodes': [{'id': 2, 'format': 'MOVIE', 'title': {'romaji': 'Film'}}]}}
     assert related_media('staff', staff) == [('Film', 'Known for · Movie', 2)]
+
+
+def test_only_airing_anime_and_studios_are_followable() -> None:
+    show = {'id': 5, 'type': 'ANIME', 'status': 'RELEASING', 'title': {'romaji': 'Show'}}
+    assert follow_target('media', show) == ('series', '5', 'Show')
+    assert follow_target('media', {**show, 'status': 'FINISHED'}) is None
+    assert follow_target('media', {**show, 'type': 'MANGA'}) is None
+    assert follow_target('studio', {'id': 9, 'name': 'Madhouse'}) == ('studio', '9', 'Madhouse')
+    assert follow_target('character', {'id': 1}) is None

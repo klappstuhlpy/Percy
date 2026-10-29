@@ -13,9 +13,8 @@ from config import Emojis
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from app.core import Context
-
-    from .client import AniListClient
+    from app.clients import AniListClient
+    from app.core import Bot, Context
 
 ANILIST_BLUE = discord.Colour.from_str('#02A9FF')
 
@@ -169,6 +168,23 @@ def related_media(kind: Kind, data: dict[str, Any]) -> list[tuple[str, str, int]
         description = f'{reason} · {format_media_format(node.get("format"))}'
         options.append((media_title(node)[:100], description[:100], int(media_id)))
     return options[:25]
+
+
+def follow_target(kind: Kind, data: dict[str, Any]) -> tuple[str, str, str] | None:
+    """The ``(subject_type, subject_value, label)`` a card's Follow button subscribes to, if any.
+
+    Only what can still produce an episode is followable: an anime that is airing, upcoming or on
+    hiatus (a finished show would be a subscription that never fires), and any studio. The keys
+    are AniList ids -- the same ones :func:`app.services.releases.anime_releasable` derives.
+    """
+    if kind == 'studio' and data.get('id'):
+        return 'studio', str(data['id']), str(data.get('name') or data['id'])
+    if (
+        kind in ('media', 'airing') and data.get('id') and data.get('type') == 'ANIME'
+        and data.get('status') in ('RELEASING', 'NOT_YET_RELEASED', 'HIATUS')
+    ):
+        return 'series', str(data['id']), media_title(data)
+    return None
 
 
 # ─── List rows ───────────────────────────────────────────────────────────────
@@ -473,6 +489,10 @@ class AniListBrowser(BasePaginatorV2[dict[str, Any]]):
             back = discord.ui.Button(label='Back', style=discord.ButtonStyle.grey)
             back.callback = self._back  # type: ignore[assignment]
             buttons.append(back)
+        if follow_target(kind, data):
+            follow = discord.ui.Button(label='Follow', emoji='🔔', style=discord.ButtonStyle.primary)
+            follow.callback = self._follow  # type: ignore[assignment]
+            buttons.append(follow)
         if url := data.get('siteUrl'):
             buttons.append(discord.ui.Button(label='View on AniList', style=discord.ButtonStyle.link, url=url))
         if buttons:
@@ -506,6 +526,23 @@ class AniListBrowser(BasePaginatorV2[dict[str, Any]]):
             self.history.append(self.current)
         self.current = ('media', data)
         await self.refresh(interaction)
+
+    async def _follow(self, interaction: discord.Interaction) -> None:
+        target = follow_target(*self.current) if self.current else None
+        if target is None:
+            return
+        subject_type, value, label = target
+        bot: Bot = interaction.client  # type: ignore[assignment]
+        await bot.db.releases.subscribe(
+            interaction.user.id, 'anime', subject_type, value,
+            label=label, guild_id=interaction.guild_id,
+        )
+        what = 'new episodes air' if subject_type == 'series' else 'one of their shows airs a new episode'
+        await interaction.response.send_message(
+            f'{Emojis.success} Following **{discord.utils.escape_markdown(label)}** — I will DM you when {what}. '
+            'Manage it with `/subscriptions`.',
+            ephemeral=True,
+        )
 
     async def _back(self, interaction: discord.Interaction) -> None:
         self.current = self.history.pop() if self.history else None

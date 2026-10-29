@@ -31,6 +31,7 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
+from app.clients.anilist import AniListClient
 from app.clients.news import NewsClient
 from app.clients.tmdb import TMDBClient
 from app.core import Bot, Cog, Context, command, describe
@@ -45,6 +46,7 @@ from app.services.news import (
 from app.services.releases import (
     NEWS_LIMIT,
     Releasable,
+    anime_releasable,
     build_digest,
     comic_releasable,
     match,
@@ -119,6 +121,13 @@ MAX_SOURCES_PER_RUN = 8
 #: when the digest that should carry it is built.
 POLL_INTERVAL = datetime.timedelta(minutes=15)
 
+#: How far back a dispatch run asks AniList for aired episodes. Two days rides out a restart or
+#: an AniList outage; as everywhere else, the delivery claim -- not this window -- stops repeats.
+ANIME_WINDOW = datetime.timedelta(days=2)
+
+#: How many airing/upcoming shows AniList contributes to the picker (two pages, by popularity).
+ANIME_POOL_PAGES = (('RELEASING', 1), ('RELEASING', 2), ('NOT_YET_RELEASED', 1))
+
 Streams = Literal['releases', 'news', 'both']
 
 
@@ -168,6 +177,22 @@ async def catalogue_subjects(bot: Bot) -> list[Candidate]:
         Candidate(row['title_count'], 'title', 'universe', row['slug'], row['name'])
         for row in await bot.db.watchlist.list_universes()
     )
+
+    # Shows airing now or soon, read live from AniList: only those can still produce an episode.
+    # Weightless, like brands -- AniList popularity is in the hundreds of thousands and would
+    # outrank every catalogue subject on a tie. An unreachable AniList just leaves them out.
+    client = AniListClient(bot.session)
+    try:
+        for status, page in ANIME_POOL_PAGES:
+            rows = await client.search_media(page=page, perPage=50, type='ANIME', status=[status],
+                                             sort=['POPULARITY_DESC'])
+            candidates.extend(
+                Candidate(0, 'anime', 'series', str(row['id']),
+                          row['title'].get('romaji') or row['title'].get('english') or str(row['id']))
+                for row in rows if row.get('title')
+            )
+    except Exception:
+        log.warning('AniList is unreachable; the picker offers no anime this time.', exc_info=True)
     return candidates
 
 
@@ -218,6 +243,7 @@ class Releases(Cog):
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
+        self.anilist = AniListClient(bot.session)
         self.dispatch_releases.add_exception_type(asyncpg.PostgresConnectionError)
         self.dispatch_releases.start()
         self.refresh_release_dates.start()
@@ -283,7 +309,7 @@ class Releases(Cog):
 
     @command(
         'subscribe',
-        description='Follow a comic series, creator, character, film universe or person.',
+        description='Follow a comic series, creator, character, film universe, person or airing anime.',
         hybrid=True,
     )
     @describe(
@@ -370,6 +396,20 @@ class Releases(Cog):
             await self.bot.db.watchlist.list_credits([row['parent_id'] or row['id'] for row in titles]), 'title_id')
         items += [title_releasable(row, credits.get(row['parent_id'] or row['id'], ())) for row in titles]
         return items
+
+    async def gather_anime(self, now: datetime.datetime) -> list[Releasable]:
+        """Episodes that aired within :data:`ANIME_WINDOW`, read live from AniList.
+
+        Isolated from the other gathers on purpose: AniList is an external service, and its
+        outage must cost subscribers their anime episodes, not their comics and films too.
+        """
+        end = int(now.replace(tzinfo=datetime.UTC).timestamp())
+        start = end - int(ANIME_WINDOW.total_seconds())
+        try:
+            return [anime_releasable(row) for row in await self.anilist.airing(start, end)]
+        except Exception:
+            log.warning('AniList airing fetch failed; this run carries no anime.', exc_info=True)
+            return []
 
     async def gather_news(self, now: datetime.datetime) -> list[Releasable]:
         """Recently *fetched* stories, as releasables the same matcher understands.
@@ -483,7 +523,7 @@ class Releases(Cog):
         # Wrapped like the other two loops: only PostgresConnectionError is a registered retry
         # type, so anything else raised here (a missing table, a bad row) would stop the loop.
         try:
-            releasables = await self.gather_releasables(now)
+            releasables = [*await self.gather_releasables(now), *await self.gather_anime(now)]
             stories = await self.gather_news(now)
             subjects = sorted({(subject.media, subject.type, subject.value)
                                for item in (*releasables, *stories) for subject in item.subjects})

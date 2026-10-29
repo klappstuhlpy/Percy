@@ -21,7 +21,7 @@ from discord import app_commands
 
 from app.clients.tmdb import image_url
 from app.core.views import View
-from app.services.releases import COMIC_SUBJECT_TYPES, TITLE_SUBJECT_TYPES
+from app.services.releases import ANIME_SUBJECT_TYPES, COMIC_SUBJECT_TYPES, TITLE_SUBJECT_TYPES
 from app.utils import helpers, truncate
 
 if TYPE_CHECKING:
@@ -51,14 +51,19 @@ __all__ = (
 MAX_VALUE_LEN = 100
 
 #: Which subject types each medium accepts, taken from the service that derives them so the two
-#: cannot drift. Mirrors ``app/internal_api/routers/releases.py``'s ``SUBJECT_TYPES``.
-SUBJECT_TYPES: dict[str, tuple[str, ...]] = {'comic': COMIC_SUBJECT_TYPES, 'title': TITLE_SUBJECT_TYPES}
+#: cannot drift. Mirrors ``app/internal_api/routers/releases.py``'s ``SUBJECT_TYPES``, except
+#: ``anime``, which is Discord-only until the dashboard learns the medium.
+SUBJECT_TYPES: dict[str, tuple[str, ...]] = {
+    'comic': COMIC_SUBJECT_TYPES,
+    'title': TITLE_SUBJECT_TYPES,
+    'anime': ANIME_SUBJECT_TYPES,
+}
 
 #: Display names for the media a digest can group by. ``news`` is not a subscribable medium --
 #: it is the pseudo-medium news travels under in ``release_deliveries`` (see
 #: ``app/services/news/dispatch.py``) -- but a digest groups by exactly this key, so it needs a
 #: heading like the other two.
-MEDIA_LABELS = {'comic': 'Comics', 'title': 'Film & TV', 'news': 'News'}
+MEDIA_LABELS = {'comic': 'Comics', 'title': 'Film & TV', 'anime': 'Anime', 'news': 'News'}
 
 #: What each ``streams`` value promises, in the second person.
 STREAM_LABELS = {
@@ -199,11 +204,11 @@ def build_subscriptions_embed(user: discord.abc.User, rows: list[asyncpg.Record]
         embed.description = (
             'You are not following anything yet.\n'
             'Use **/subscribe** to follow a comic series, a creator, a character, '
-            'a film universe or a person — I will DM you when something lands.'
+            'a film universe, a person or an airing anime — I will DM you when something lands.'
         )
         return embed
 
-    for media in ('comic', 'title'):
+    for media in ('comic', 'title', 'anime'):
         lines = [
             f'· **{_row_label(row)}** — {row["subject_type"]} · '
             f'{STREAM_LABELS.get(row["streams"], row["streams"])}'
