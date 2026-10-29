@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.24.0] - 2026-10-29
+
+### Added
+- AniList: `anilist staff` and `anilist studio` searches, and `anilist anime airing [days]` (episodes airing in the next 1-7 days).
+- AniList: `anilist anime seasonal` takes an optional season and year.
+- Releases: anime is a third subscribable medium. Follow an airing or upcoming show (or a studio) from `/subscribe` or the new **Follow** button on AniList cards, and new episodes arrive in the same hourly DM digest. Episodes are read live from AniList; migration V67 widens the subscription media check. Discord-only for now: the dashboard does not list anime subscriptions yet.
+- AniList: every card has a select that opens related titles (sequels, prequels, ...), AniList's recommendations, or the works a character, person or studio is known for; Back walks the trail.
+
+### Changed
+- The AniList client moved to `app/clients/anilist.py`, shared by the AniList and Releases cogs.
+- AniList results are one Components V2 message: a paged list with a select that opens a card in place (the embed paginator is gone).
+- AniList queries are cached for 5 minutes, so repeat lookups do not spend AniList's rate limit.
+- AniList autocomplete refreshes every 6 hours and covers trending plus all-time popular titles; anime search no longer suggests manga titles.
+- `anilist anime seasonal` lists the whole season instead of the first 3 titles.
+
+### Removed
+- AniList account linking (`anilist link`/`unlink`/`profile`/`favourites`/`list`/`update` and the card's list buttons). Stored tokens are dropped by migration V66, and `ANILIST_CLIENT_ID`/`ANILIST_CLIENT_SECRET` are no longer read.
+- `linked_accounts` from the personal data export.
+
 ### Fixed
 - Docs: an unreachable inventory is retried twice (after 2 and 5 minutes) and then given up with one error naming the URL, instead of six retries that restarted on every refresh.
 - Docs: `docs set` on an existing package replaces its inventory and cancels the pending retry for the old URL, instead of merging into the old symbols and retrying the stale link.
