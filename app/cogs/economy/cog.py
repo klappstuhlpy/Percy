@@ -1251,7 +1251,7 @@ class Economy(Cog):
             return
         view = TradeView(self, ctx.author, member)
         await view.build()
-        view.message = await ctx.send(view=view)
+        view.message = await ctx.send(view=view, allowed_mentions=discord.AllowedMentions(users=[member]))
 
     # Text-only group: the bot sits at the 99/100 global slash-command budget, so no new slash slot.
     @group("market", fallback="browse", description="Buy and sell items with other members.", guild_only=True)

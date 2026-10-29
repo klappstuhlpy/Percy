@@ -81,7 +81,7 @@ owners: Collection[int] | int = 991398932397703238
 test_guild_id: int = 1062074624935993424
 main_guild_id: int = 1066703165669515264
 default_prefix: Collection[str] | str = '?'
-allowed_mentions: AllowedMentions = AllowedMentions(everyone=False, users=True, roles=False, replied_user=False)
+allowed_mentions: AllowedMentions = AllowedMentions(everyone=False, users=False, roles=False, replied_user=False)
 stats_webhook: tuple[int, str | None] = (1085947117140463708, env('STATS_WEBHOOK_TOKEN'))
 
 token: str | None = env('DISCORD_TOKEN')

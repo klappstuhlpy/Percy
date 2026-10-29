@@ -237,7 +237,7 @@ class Games(Cog):
             return
 
         prompt = tictactoe_ui.Prompt(ctx.author, other)
-        msg = await ctx.send(view=prompt)
+        msg = await ctx.send(view=prompt, allowed_mentions=discord.AllowedMentions(users=[other]))
 
         await prompt.wait()
         await ctx.maybe_delete(msg, delay=1)
@@ -453,7 +453,7 @@ class Games(Cog):
 
             # Nobody is debited yet; the prompt re-validates and takes both stakes on accept.
             prompt = coinflip_ui.DuelPrompt(self, ctx, opponent, bet, side)
-            prompt.message = await ctx.send(view=prompt)
+            prompt.message = await ctx.send(view=prompt, allowed_mentions=discord.AllowedMentions(users=[opponent]))
             return
 
         if not await self._take_bet(ctx, bet, minimum=10):
@@ -1051,7 +1051,7 @@ class Games(Cog):
                     await ctx.send_error(f"**{fighter.display_name}** doesn't have {Emojis.Economy.cash} **{fnumb(bet)}** in cash.")
                     return
         view = fight_ui.FightView(self.bot, cast("discord.Member", ctx.author), member, bet)
-        view.message = await ctx.send(view=view)
+        view.message = await ctx.send(view=view, allowed_mentions=discord.AllowedMentions(users=[member]))
 
     @command("heist", aliases=["bankrob"], description="Rally a crew and rob a member's bank.", guild_only=True, hybrid=True)
     @cooldown(1, 7200, commands.BucketType.member)
