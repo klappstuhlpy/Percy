@@ -34,7 +34,6 @@ jobs:
     env:
       DISCORD_TOKEN: ci-dummy-token
       DISCORD_BETA_TOKEN: ci-dummy-token
-      ANILIST_CLIENT_ID: "0"
       INTERNAL_API_PORT: "8090"
 
     steps:

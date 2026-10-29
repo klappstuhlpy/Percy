@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     import asyncpg
 
 __all__ = (
-    'AniListRepository',
     'PlaylistsRepository',
     'UsersRepository',
     'VotesRepository',
@@ -83,10 +82,9 @@ class UsersRepository(BaseRepository):
         the categories in the Privacy Policy: settings and consent-tracked history
         (presence, name/nickname, avatar), leveling/activity counts, game statistics,
         economy, content the user created (tags, notes, reminders, playlists, giveaways,
-        poll answers, highlights), linked accounts, vote rewards, and the moderation cases
-        that reference them. Sensitive credentials (the AniList access token) and bulky
-        blobs (avatar image bytes — only the format and timestamp are exported) are
-        deliberately excluded to keep the payload safe and portable.
+        poll answers, highlights), vote rewards, and the moderation cases that reference
+        them. Bulky blobs (avatar image bytes — only the format and timestamp are exported)
+        are deliberately excluded to keep the payload portable.
 
         Reaches across domains by design: this is the single aggregation point for a user's
         data, so it queries tables owned by other cogs rather than fanning out to their
@@ -178,9 +176,6 @@ class UsersRepository(BaseRepository):
             tracks = await self.fetch("SELECT name, url FROM playlist_lookup WHERE playlist_id = $1;", playlist['id'])
             playlists.append({**dict(playlist), 'tracks': [dict(track) for track in tracks]})
 
-        # Linked accounts — the access token is intentionally NOT exported.
-        anilist = await self.fetchrow("SELECT expires_at FROM anilist_users WHERE user_id = $1;", user_id)
-
         votes = await self.fetchrow(
             "SELECT multiplier, expires_at, last_source, last_voted_at, total_votes "
             "FROM vote_rewards WHERE user_id = $1;",
@@ -230,9 +225,6 @@ class UsersRepository(BaseRepository):
             'giveaways': [dict(row) for row in giveaways],
             'poll_answers': [dict(row) for row in poll_answers],
             'playlists': playlists,
-            'linked_accounts': {
-                'anilist': {'linked': anilist is not None, 'expires_at': anilist['expires_at'] if anilist else None},
-            },
             'vote_rewards': dict(votes) if votes is not None else None,
             'moderation_cases': {
                 'against_you': [dict(row) for row in cases_against],
@@ -384,36 +376,6 @@ class PlaylistsRepository(BaseRepository):
         """Deletes a playlist together with all of its tracks."""
         await self.delete_where("playlist", ("id",), (playlist_id,))
         await self.delete_where("playlist_lookup", ("playlist_id",), (playlist_id,))
-
-
-# -- AniList ---------------------------------------------------------------
-
-
-class AniListRepository(BaseRepository):
-    """Persistent storage for AniList OAuth tokens."""
-
-    async def get_token(self, user_id: int) -> tuple[str, datetime.datetime] | None:
-        row = await self.fetchrow(
-            'SELECT access_token, expires_at FROM anilist_users WHERE user_id = $1',
-            user_id,
-        )
-        if row is None:
-            return None
-        return row['access_token'], row['expires_at']
-
-    async def upsert_token(self, user_id: int, access_token: str, expires_at: datetime.datetime) -> None:
-        await self.execute(
-            '''INSERT INTO anilist_users (user_id, access_token, expires_at)
-               VALUES ($1, $2, $3)
-               ON CONFLICT (user_id) DO UPDATE
-               SET access_token = EXCLUDED.access_token,
-                   expires_at = EXCLUDED.expires_at''',
-            user_id, access_token, ensure_utc(expires_at),
-        )
-
-    async def delete_token(self, user_id: int) -> bool:
-        result = await self.delete_where("anilist_users", ("user_id",), (user_id,))
-        return result == 'DELETE 1'
 
 
 # -- Vote rewards (bot-list upvotes -> renewable global XP boost) ------------

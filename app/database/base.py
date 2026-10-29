@@ -18,7 +18,6 @@ from discord.utils import MISSING
 
 from app.database.repositories import (
     AdminRepository,
-    AniListRepository,
     AutoRespondersRepository,
     CasesRepository,
     ComicsRepository,
@@ -309,7 +308,6 @@ class Database(_Database):
     rolemenu: RoleMenusRepository
     autoresponders: AutoRespondersRepository
     stat_counters: StatCountersRepository
-    anilist: AniListRepository
     votes: VotesRepository
     event_webhooks: EventWebhooksRepository
     templates: GuildTemplatesRepository
@@ -344,7 +342,6 @@ class Database(_Database):
         self.rolemenu = RoleMenusRepository(self)
         self.autoresponders = AutoRespondersRepository(self)
         self.stat_counters = StatCountersRepository(self)
-        self.anilist = AniListRepository(self)
         self.votes = VotesRepository(self)
         self.event_webhooks = EventWebhooksRepository(self)
         self.templates = GuildTemplatesRepository(self)

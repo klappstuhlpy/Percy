@@ -229,11 +229,6 @@ def _optional_int(value: str | None) -> int | None:
         return None
 
 
-anilist = SimpleNamespace(
-    client_id=_optional_int(env('ANILIST_CLIENT_ID')),
-    client_secret=env('ANILIST_CLIENT_SECRET'),
-    redirect_uri='https://anilist.co/api/v2/oauth/pin'
-)
 locg_api_url: str = 'https://locg.klappstuhl.me/'
 
 
