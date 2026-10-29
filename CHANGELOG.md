@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Description to emoji stats commands.
 
+### Fixed
+- `appinfo` no longer fails with `KeyError: 'owner'`: the application endpoint it reads omits the owner (and the bot fields for apps without a bot user), which are now filled with defaults.
+
 ## [2.24.0] - 2026-10-29
 
 ### Added

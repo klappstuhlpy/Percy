@@ -47,7 +47,21 @@ class RPCAppInfo(AppInfo):
     """Represents an AppInfo given by the /rpc endpoint."""
 
     def __init__(self, *, state: ConnectionState, data: RPCAppInfoPayload) -> None:
-        super().__init__(state=state, data=data)
+        # The /rpc endpoint omits fields AppInfo.__init__ indexes directly (owner always; the bot
+        # fields when the app has no bot user), so fill them before handing the payload over.
+        payload: Any = {
+            'description': '',
+            'icon': None,
+            'bot_public': False,
+            'bot_require_code_grant': False,
+            'verify_key': '',
+            **data,
+        }
+        has_owner = 'owner' in payload
+        payload.setdefault('owner', {'id': 0, 'username': '', 'discriminator': '0', 'avatar': None})
+        super().__init__(state=state, data=payload)
+        if not has_owner:
+            self.owner = None  # type: ignore[assignment]
         self._permissions: int = data.get("permissions", 0)
         self.type: Any | None = data.get("type")
         self.is_monetized: bool | None = data.get("is_monetized")
