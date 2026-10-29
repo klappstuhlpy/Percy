@@ -1,25 +1,31 @@
-.venv/
-.idea/
+# Python / tooling
 __pycache__/
-ruff_cache/
-# Runtime directories (generated state stores and rotating logs). data/universes/ is
-# hand-curated watchlist seed content, not runtime state, so it stays tracked.
+.venv/
+.pytest_cache/
+.ruff_cache/
+pyright_output.txt
+
+# Editors and agent tooling
+.idea/
+.claude/
+.impeccable/
+.playwright-mcp/
+.superpowers/
+
+# Secrets and local config (also covers pyrightconfig.json and the JSON stores in data/)
+.env
+*.json
+
+# Runtime state and logs. data/universes/ is hand-curated watchlist seed content,
+# not runtime state, so it stays tracked.
 /data/*
 !/data/universes/
 /logs/
 percy.log
-.env
-*.json
-doc_links.json
-pyright_output.txt
-pyrightconfig.json
-temp_channels.json
-.claude/
-/tests/artifacts
+/tests/artifacts/
+
+# Local-only material
 SELF_HOSTING_GUIDE.md
-.playwright-mcp/
-.impeccable/
-.superpowers/
-/intent-assets
-/docs
-/code-archive
+/code-archive/
+/docs/
+/intent-assets/
