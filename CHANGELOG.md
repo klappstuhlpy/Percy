@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.23.2] - 2026-10-29
+
+### Removed
+- Unused i18n scaffolding (`app/i18n`, `bot.i18n`): it was loaded on startup but never used, and shipped no translations.
+
 ## [2.23.1] - 2026-10-29
 
 ### Security
