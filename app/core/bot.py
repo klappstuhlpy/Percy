@@ -36,7 +36,6 @@ from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
 from app.core.views import CommandSuggestionView
 from app.database.base import Database
-from app.i18n import I18n
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand, format_duration
@@ -121,7 +120,6 @@ class Bot(commands.Bot):
     internal_api: InternalAPI
     metrics: MetricsCollector
     feature_flags: FeatureFlags
-    i18n: I18n
 
     #: Whether application-command IDs have been resolved onto command objects (for
     #: ``Command.mention``). Set by :meth:`resolve_app_command_ids`, cleared on re-sync.
@@ -178,7 +176,6 @@ class Bot(commands.Bot):
         self.spam_control: SpamControl = SpamControl(self)
         self.metrics: MetricsCollector = MetricsCollector()
         self.feature_flags: FeatureFlags = FeatureFlags()
-        self.i18n: I18n = I18n()
 
         self.initial_extensions: list[str] = EXTENSIONS
         self._setup_finished: asyncio.Event = asyncio.Event()
