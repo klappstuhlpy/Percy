@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 
@@ -23,6 +23,8 @@ from app.utils import helpers, number_suffix
 from config import Emojis
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     import numpy as np
 
     from app.cogs.games import Games
@@ -65,6 +67,7 @@ class PokerSession:
         self.engine.defer_odds = True
         self.engine.hold_runout_for_vote = True  # all-in runouts wait for the run-it-twice vote
         self._vote_task: asyncio.Task | None = None
+        self._background: set[asyncio.Task] = set()
         self.odds_lock: asyncio.Lock = asyncio.Lock()
 
         self.message: discord.Message | None = None
@@ -165,6 +168,12 @@ class PokerSession:
         if self.running_autoplay_loop is not None:
             self.running_autoplay_loop.cancel()
 
+    def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
+        """Runs a fire-and-forget task, keeping a reference so it cannot be garbage-collected mid-flight."""
+        task = self.loop.create_task(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
     def restart_timer(self) -> None:
         """(Re)starts the autoplay timer for the current player while the game runs.
 
@@ -174,7 +183,7 @@ class PokerSession:
         """
         self.cancel_timer()
         if self.engine.pending_odds:
-            self.loop.create_task(self.flush_odds())
+            self._spawn(self.flush_odds())
         if self.engine.runout_pending:
             # No turn timer during the vote: nobody is to act, and autoplay would fold into it.
             if self._vote_task is None or self._vote_task.done():
@@ -184,7 +193,7 @@ class PokerSession:
             self.running_autoplay_loop = self.loop.create_task(self.start_timer(self.engine.current_player))
         elif self.engine.state == TableState.FINISHED and not self._round_settled:
             self._round_settled = True
-            self.loop.create_task(self.settle_round_stats())
+            self._spawn(self.settle_round_stats())
 
     async def run_it_twice_vote(self) -> None:
         """|coro|
@@ -261,7 +270,8 @@ class PokerSession:
                 return
 
             if timer == 100 and self.message is not None:
-                await self.message.edit(view=self.view.render(with_autoplay=True))
+                with suppress(discord.HTTPException):  # a failed warning edit must not kill the turn timer and strand the table
+                    await self.message.edit(view=self.view.render(with_autoplay=True))
 
         await self.autoplay(player)
 
@@ -275,7 +285,8 @@ class PokerSession:
 
         self.restart_timer()
         if self.message is not None:
-            await self.message.edit(view=self.view.render())
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self.view.render())
 
     # -- Player management with side effects ------------------------------
 

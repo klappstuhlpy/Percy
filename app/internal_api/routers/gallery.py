@@ -9,6 +9,7 @@ to invalidate.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,12 @@ from ..dependencies import BotDep, GuildDep, verify_token
 
 if TYPE_CHECKING:
     from app.services.klappstuhl_me import KlappstuhlMeClient
+
+log = logging.getLogger(__name__)
+
+#: Per-request upload caps; the hoster enforces its own, this just stops a huge body being buffered here.
+MAX_UPLOAD_FILES = 10
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Gallery"], dependencies=[Depends(verify_token)])
 
@@ -41,8 +48,9 @@ async def list_gallery(guild: GuildDep, bot: BotDep) -> dict:
     client = _client_or_503(bot)
     try:
         return asdict(await client.list_guild_images(guild.id))
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"gallery unavailable: {exc}")
+    except Exception:
+        log.exception("gallery list failed")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="gallery unavailable")
 
 
 @router.post("/gallery")
@@ -55,8 +63,12 @@ async def upload_gallery(
     client = _client_or_503(bot)
 
     payload: list[tuple[str, bytes]] = []
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"at most {MAX_UPLOAD_FILES} files per upload")
     for upload in files:
-        content = await upload.read()
+        content = await upload.read(MAX_UPLOAD_BYTES + 1)
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="image too large")
         if content:
             payload.append((upload.filename or "image.png", content))
 
@@ -65,8 +77,9 @@ async def upload_gallery(
 
     try:
         result = await client.upload_guild_images(guild.id, *payload)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"upload failed: {exc}")
+    except Exception:
+        log.exception("gallery upload failed")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="upload failed")
 
     if result.errors or result.infected:
         raise HTTPException(
@@ -82,5 +95,6 @@ async def delete_gallery_image(guild: GuildDep, bot: BotDep, image_id: str) -> d
     client = _client_or_503(bot)
     try:
         return asdict(await client.delete_guild_image(guild.id, image_id))
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"delete failed: {exc}")
+    except Exception:
+        log.exception("gallery delete failed")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="delete failed")

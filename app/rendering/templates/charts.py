@@ -286,7 +286,7 @@ def draw_series_chart(data: SeriesData) -> BytesIO:
     ax.set_ylim(bottom=0, top=max(max(data.values, default=0), 1) * 1.1)
     ax.set_xlim(-0.6, max(len(xs) - 0.4, 0.6))
     step = max(1, math.ceil(len(xs) / 12))  # at most ~12 x ticks
-    ax.set_xticks(xs[::step], [data.labels[i] for i in xs[::step]])
+    ax.set_xticks(xs[::step], [data.labels[i] if i < len(data.labels) else '' for i in xs[::step]])
     ax.grid(axis='y', color=GRID, linewidth=1)
     ax.set_axisbelow(True)
     _style_axes(ax)

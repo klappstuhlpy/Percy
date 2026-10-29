@@ -470,11 +470,11 @@ def resize_to_limit(image: io.BytesIO, limit: int = 26_214_400) -> io.BytesIO:
 
     while current_size > limit:
         with Image.open(image) as canvas:
+            fmt = canvas.format  # a resized copy loses its ``format``, so read it first
+            if fmt not in ("PNG", "JPEG", "JPG", "WEBP", "GIF"):
+                return image  # cannot shrink it; looping would never terminate
             image = io.BytesIO()
-            if canvas.format in ("PNG", "JPEG", "JPG", "WEBP"):
-                canvas = canvas.resize([i // 2 for i in canvas.size], resample=Image.BICUBIC)  # type: ignore
-                canvas.save(image, format=canvas.format)
-            elif canvas.format == "GIF":
+            if fmt == "GIF":
                 durations, frames = [], []
                 for frame in ImageSequence.Iterator(canvas):
                     durations.append(frame.info.get("duration", 0))
@@ -491,6 +491,8 @@ def resize_to_limit(image: io.BytesIO, limit: int = 26_214_400) -> io.BytesIO:
                     background=canvas.info.get("background", 0),
                     palette=canvas.getpalette(),
                 )
+            else:
+                canvas.resize([i // 2 for i in canvas.size], resample=Image.Resampling.BICUBIC).save(image, format=fmt)
 
             image.seek(0)
             current_size = image.getbuffer().nbytes

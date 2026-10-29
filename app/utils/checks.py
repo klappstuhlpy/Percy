@@ -216,9 +216,7 @@ def is_author_connected() -> Callable[[T], T]:
     """Checks if the author is connected to a Voice Channel."""
 
     async def predicate(ctx: Context) -> bool:
-        assert isinstance(ctx.user, discord.Member)
-
-        if ctx.guild is None:
+        if ctx.guild is None or not isinstance(ctx.user, discord.Member):
             return False
 
         has_dj = is_dj(ctx.user) or ctx.user.guild_permissions.manage_guild

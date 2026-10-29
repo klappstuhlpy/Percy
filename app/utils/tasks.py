@@ -87,14 +87,6 @@ def get_function_from_coroutine(coroutine: Coroutine) -> Callable:
     return next(filter(lambda ref: inspect.isfunction(ref), referrers))
 
 
-class ScheduledTaskProtocol(Protocol[C]):
-    async def __call__(self, *args: Any, **kwargs: Any) -> C: ...
-
-    def before_task(self, coro: Coroutine) -> Coroutine: ...
-
-    def after_task(self, coro: Coroutine) -> Coroutine: ...
-
-
 def scheduled_coroutine(func: Callable[..., Coroutine]) -> Any:
     """A decorator that schedules a coroutine to run in the background.
 

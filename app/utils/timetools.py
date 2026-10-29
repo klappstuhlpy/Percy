@@ -28,6 +28,14 @@ units["minutes"].append("mins")
 units["seconds"].append("secs")
 
 
+def _from_unix(ts: str) -> datetime.datetime:
+    """Aware UTC datetime for a Discord ``<t:...>`` stamp; absurd values raise BadArgument, not OverflowError."""
+    try:
+        return datetime.datetime.fromtimestamp(int(ts), tz=datetime.UTC)
+    except (OverflowError, OSError, ValueError):
+        raise commands.BadArgument("That timestamp is out of range.") from None
+
+
 class ShortTime:
     """Time parser that parses short human times.
 
@@ -70,7 +78,7 @@ class ShortTime:
         if match is None or not match.group(0):
             match = self.DISCORD_UNIX_TS.fullmatch(argument)
             if match is not None:
-                self.dt = datetime.datetime.fromtimestamp(int(match.group("ts")), tz=datetime.UTC)
+                self.dt = _from_unix(match.group("ts"))
                 if tzinfo is not datetime.UTC:
                     self.dt = self.dt.astimezone(tzinfo)
                 return
@@ -80,7 +88,10 @@ class ShortTime:
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         now = now or datetime.datetime.now(datetime.UTC)
 
-        self.dt = now + relativedelta(**data)  # type: ignore[arg-type]
+        try:
+            self.dt = now + relativedelta(**data)  # type: ignore[arg-type]
+        except (OverflowError, ValueError):
+            raise commands.BadArgument("That time is too far away.") from None
         if tzinfo is not datetime.UTC:
             self.dt = self.dt.astimezone(tzinfo)
 
@@ -125,7 +136,10 @@ class HumanTime:
         tzinfo: datetime.tzinfo = datetime.UTC,
     ) -> None:
         now = now or datetime.datetime.now(tzinfo)
-        dt, status = self.CALENDER.parseDT(argument, sourceTime=now, tzinfo=None)  # type: ignore[assignment]
+        try:
+            dt, status = self.CALENDER.parseDT(argument, sourceTime=now, tzinfo=None)  # type: ignore[assignment]
+        except (OverflowError, ValueError):
+            raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".') from None
 
         if not status.hasDateOrTime:  # If no date or time was provided, means it could not be parsed, raise an error
             raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
@@ -293,7 +307,10 @@ class UserFriendlyTime(commands.Converter):
         if match is not None and match.group(0):
             data = {k: int(v) for k, v in match.groupdict(default=0).items()}
             remaining = argument[match.end() :].strip()
-            dt = now + relativedelta(**data)  # type: ignore[arg-type]
+            try:
+                dt = now + relativedelta(**data)  # type: ignore[arg-type]
+            except (OverflowError, ValueError):
+                raise commands.BadArgument("That time is too far away.") from None
             result = FriendlyTimeResult(dt.astimezone(tzinfo))
             await result.ensure_constraints(ctx, self, now, remaining)
             return result
@@ -301,9 +318,7 @@ class UserFriendlyTime(commands.Converter):
         if match is None or not match.group(0):
             match = ShortTime.DISCORD_UNIX_TS.match(argument)
             if match is not None:
-                result = FriendlyTimeResult(
-                    datetime.datetime.fromtimestamp(int(match.group("ts")), tz=datetime.UTC).astimezone(tzinfo)
-                )
+                result = FriendlyTimeResult(_from_unix(match.group("ts")).astimezone(tzinfo))
                 remaining = argument[match.end() :].strip()
                 await result.ensure_constraints(ctx, self, now, remaining)
                 return result
@@ -315,7 +330,10 @@ class UserFriendlyTime(commands.Converter):
             argument = argument[6:]
 
         now = now.astimezone(tzinfo)
-        elements = calendar.nlp(argument, sourceTime=now)
+        try:
+            elements = calendar.nlp(argument, sourceTime=now)
+        except (OverflowError, ValueError):
+            elements = None
         if elements is None or len(elements) == 0:
             raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
 

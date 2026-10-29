@@ -117,7 +117,7 @@ class KlappstuhlInternalClient(Client):
             if client is not None:
                 return client
 
-            if self._http.token:
+            if self.available:
                 token = await self._provision_guild_key(guild_id)
             else:
                 raise ValueError(
@@ -140,7 +140,7 @@ class KlappstuhlInternalClient(Client):
                 return await call(client)  # type: ignore[return-value]
             except (Unauthorized, Forbidden):
                 # A cached key that got revoked/rotated → re-provision and retry once.
-                if attempt == 0 and self._http.token:
+                if attempt == 0 and self.available:
                     self.invalidate_guild_key(guild_id)
                     continue
                 raise

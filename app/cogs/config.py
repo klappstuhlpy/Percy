@@ -327,7 +327,7 @@ class Config(Cog):
         else:
             await self._bulk_ignore_entries(ctx, entities)
 
-        await ctx.send_success(f"Successfully ingored **{len(entities)}** entities.")
+        await ctx.send_success(f"Successfully ignored **{len(entities)}** entities.")
 
     @ignore.command(
         "list",

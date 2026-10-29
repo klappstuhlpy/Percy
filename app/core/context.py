@@ -149,6 +149,7 @@ class Context[CogT: "Cog"](commands.Context):
         *,
         view: ConfirmationView | None = None,
         user: discord.Member | discord.User | None = None,
+        author_id: int | None = None,
         timeout: float = 60.0,
         true: str = "Yes",
         false: str = "No",
@@ -170,6 +171,8 @@ class Context[CogT: "Cog"](commands.Context):
             ``view.set_content`` if provided).
         user: discord.Member | discord.User
             The user to send the confirmation to.
+        author_id: int
+            Alternative to ``user``: the only ID allowed to press the buttons.
         timeout: float
             The timeout for the confirmation.
         true: str
@@ -184,7 +187,8 @@ class Context[CogT: "Cog"](commands.Context):
         **kwargs
             Additional keyword arguments to pass to the send method.
         """
-        author = user or self.author
+        # ``author_id`` lets someone other than the invoker answer (only ``.id`` is read by the view check).
+        author = user or (discord.Object(id=author_id) if author_id else self.author)
         view = view or ConfirmationView(
             author, content=content, true=true, false=false,
             hook=hook, timeout=timeout, delete_after=True,
@@ -225,6 +229,9 @@ class Context[CogT: "Cog"](commands.Context):
         view = DisambiguatorView(self, matches, entry)
         view.message = await self.send(view=view, ephemeral=ephemeral)
         await view.wait()
+        if not hasattr(view, "selected"):  # timed out without a pick
+            await self.maybe_delete(view.message)
+            raise ValueError("No selection was made.")
         return view.selected
 
     async def send_success(self, content: str, **kwargs: Any) -> discord.Message:

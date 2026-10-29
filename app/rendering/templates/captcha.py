@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import random
+import secrets
 from io import BytesIO
 
 from captcha.image import ImageCaptcha
@@ -18,7 +18,7 @@ _IMAGE_CAPTCHA: ImageCaptcha = ImageCaptcha(
 
 def generate_captcha(*, length: int = 6) -> tuple[str, BytesIO]:
     """Generate a random captcha; returns the solution text and a PNG buffer."""
-    text: str = ''.join(random.choices(_CAPTCHA_CHARS, k=length))
+    text: str = ''.join(secrets.choice(_CAPTCHA_CHARS) for _ in range(length))
     image = _IMAGE_CAPTCHA.generate_image(text)
 
     buffer = BytesIO()

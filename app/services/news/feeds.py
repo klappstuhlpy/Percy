@@ -188,11 +188,21 @@ def parse_date(value: str | None) -> datetime.datetime | None:
     for parse in (parsedate_to_datetime, datetime.datetime.fromisoformat):
         try:
             parsed = parse(text)
-        except (TypeError, ValueError):
+            if isinstance(parsed, datetime.datetime):
+                return _naive_utc(parsed)
+        except (TypeError, ValueError, OverflowError):
             continue
-        if isinstance(parsed, datetime.datetime):
-            return _naive_utc(parsed)
     return None
+
+
+def _web_url(value: str | None) -> str | None:
+    """``value`` if it is an absolute http(s) URL, else ``None``.
+
+    Feeds are untrusted and these URLs end up in ``href``/``src`` attributes on the dashboard
+    and in DMs, so a ``javascript:`` or ``data:`` URL must never be stored.
+    """
+    url = (value or '').strip()
+    return url if url.lower().startswith(('http://', 'https://')) else None
 
 
 def _link(entry: Any) -> str | None:
@@ -204,14 +214,14 @@ def _link(entry: Any) -> str | None:
     """
     fallback: str | None = None
     for child in _children(entry, ('link',)):
-        href = (child.get('href') or '').strip()
+        href = _web_url(child.get('href'))
         rel = (child.get('rel') or 'alternate').strip().lower()
         if href:
             if rel == 'alternate':
                 return href
             fallback = fallback or href
             continue
-        text = _clean(child.text)
+        text = _web_url(_clean(child.text))
         if text:
             return text
     return fallback
@@ -225,7 +235,7 @@ def _image(entry: Any) -> str | None:
     feed does not offer, and a URL lifted from prose is exactly that.
     """
     for child in _children(entry, ('enclosure', 'thumbnail', 'content', 'image')):
-        url = (child.get('url') or child.get('href') or '').strip()
+        url = _web_url(child.get('url') or child.get('href'))
         if not url:
             continue
         kind = (child.get('type') or '').lower()

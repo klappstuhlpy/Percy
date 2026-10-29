@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import datetime
+import logging
+from typing import Annotated
 
 import discord
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from pydantic import BaseModel, Field
 
 from app.services.economy import (
     CATALOGUE,
@@ -21,7 +23,17 @@ from config import Emojis
 
 from ..dependencies import BotDep, GuildDep, verify_token
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Economy"], dependencies=[Depends(verify_token)])
+
+#: Sanity cap on a single delta/grant so a typo cannot overflow the BIGINT columns.
+_MAX_DELTA = 10**12
+_MAX_ID = 2**63 - 1
+#: Path ids: a snowflake fits BIGINT; shop item ids are serial, so INTEGER range.
+UserId = Annotated[int, Path(ge=1, le=_MAX_ID)]
+ItemId = Annotated[int, Path(ge=1, le=2**31 - 1)]
+_Snowflake = Field(default=None, ge=1, le=_MAX_ID)
 
 
 # ---------------------------------------------------------------------------
@@ -30,36 +42,36 @@ router = APIRouter(prefix="/guilds/{guild_id}", tags=["Economy"], dependencies=[
 
 
 class CreateItemBody(BaseModel):
-    name: str
-    price: int
-    description: str | None = None
-    effect: str | None = None
-    effect_value: int | None = None
-    duration_minutes: int | None = None
-    emoji: str | None = None
-    rarity: str = 'common'
-    stock: int | None = None
-    max_per_user: int | None = None
-    required_role_id: int | None = None
+    name: str = Field(max_length=200)
+    price: int = Field(le=_MAX_DELTA)
+    description: str | None = Field(default=None, max_length=1000)
+    effect: str | None = Field(default=None, max_length=32)
+    effect_value: int | None = Field(default=None, le=_MAX_ID)
+    duration_minutes: int | None = Field(default=None, le=10**7)
+    emoji: str | None = Field(default=None, max_length=100)
+    rarity: str = Field(default='common', max_length=32)
+    stock: int | None = Field(default=None, le=_MAX_DELTA)
+    max_per_user: int | None = Field(default=None, le=_MAX_DELTA)
+    required_role_id: int | None = _Snowflake
     available_until: datetime.datetime | None = None
-    remove_role_id: int | None = None
-    reply_message: str | None = None
+    remove_role_id: int | None = _Snowflake
+    reply_message: str | None = Field(default=None, max_length=2000)
 
 
 class PatchItemBody(BaseModel):
     """Partial item update; only the fields sent change. Send ``null`` to clear a nullable column."""
 
-    name: str | None = None
-    price: int | None = None
-    description: str | None = None
-    emoji: str | None = None
-    rarity: str | None = None
-    stock: int | None = None
-    max_per_user: int | None = None
-    required_role_id: int | None = None
+    name: str | None = Field(default=None, max_length=200)
+    price: int | None = Field(default=None, le=_MAX_DELTA)
+    description: str | None = Field(default=None, max_length=1000)
+    emoji: str | None = Field(default=None, max_length=100)
+    rarity: str | None = Field(default=None, max_length=32)
+    stock: int | None = Field(default=None, le=_MAX_DELTA)
+    max_per_user: int | None = Field(default=None, le=_MAX_DELTA)
+    required_role_id: int | None = _Snowflake
     available_until: datetime.datetime | None = None
-    remove_role_id: int | None = None
-    reply_message: str | None = None
+    remove_role_id: int | None = _Snowflake
+    reply_message: str | None = Field(default=None, max_length=2000)
 
 
 #: Columns ``PATCH /economy/items/{id}`` may write (the effect is fixed once owned copies exist).
@@ -89,13 +101,8 @@ class AdjustBalanceBody(BaseModel):
 
 
 class GiveItemBody(BaseModel):
-    item_id: int
+    item_id: int = Field(ge=1, le=2**31 - 1)
     quantity: int = 1
-
-
-#: Sanity cap on a single delta/grant so a typo cannot overflow the BIGINT columns.
-_MAX_DELTA = 10**12
-_MAX_ID = 2**63 - 1
 
 
 class CreateLotteryBody(BaseModel):
@@ -113,6 +120,18 @@ class PatchSettingsBody(BaseModel):
     max_bet: int | None = None
     bank_cap: bool | None = None
     drops_enabled: bool | None = None
+
+
+def _role_error(guild: discord.Guild, field: str, role_id: int | None, *, give: bool = False) -> str | None:
+    """A role id from the body must belong to this guild; a role Percy hands out must also be assignable."""
+    if role_id is None:
+        return None
+    role = guild.get_role(role_id)
+    if role is None:
+        return f'{field} is not a role of this server'
+    if give and (role.is_default() or role.managed or role >= guild.me.top_role):
+        return f'{field}: I cannot assign that role (it must be below my highest role and not integration-managed)'
+    return None
 
 
 def _settings_payload(settings: GuildEconomySettings) -> dict:
@@ -230,6 +249,9 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
         name, rarity=body.rarity, stock=body.stock, max_per_user=body.max_per_user, price=body.price,
         reply_message=body.reply_message,
     )
+    error = error or _role_error(guild, 'required_role_id', body.required_role_id) or _role_error(
+        guild, 'remove_role_id', body.remove_role_id
+    ) or (_role_error(guild, 'effect_value', effect_value, give=True) if effect == 'role' else None)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
@@ -248,7 +270,7 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
 
 
 @router.patch("/economy/items/{item_id}")
-async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: int, body: PatchItemBody) -> dict:
+async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: ItemId, body: PatchItemBody) -> dict:
     values = {key: getattr(body, key) for key in _ITEM_FIELDS if key in body.model_fields_set}
     if not values:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no fields to update')
@@ -263,6 +285,10 @@ async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: int, body: P
         max_per_user=values.get('max_per_user'), price=values.get('price'), reply_message=values.get('reply_message'),
     )
     if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if error := _role_error(guild, 'required_role_id', values.get('required_role_id')) or _role_error(
+        guild, 'remove_role_id', values.get('remove_role_id')
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     existing = await bot.db.economy.get_item_by_id(guild.id, item_id)
     if existing is None:
@@ -310,12 +336,10 @@ async def get_economy_balances(
 
 
 @router.patch("/economy/balances/{user_id}")
-async def patch_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, body: PatchBalanceBody) -> dict:
+async def patch_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId, body: PatchBalanceBody) -> dict:
     if body.cash is None and body.bank is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify cash or bank')
 
-    if not 0 < user_id <= _MAX_ID:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid user_id')
     # A negative wallet breaks every spend check; past BIGINT asyncpg answers with a 500.
     if any(v is not None and not 0 <= v <= _MAX_DELTA for v in (body.cash, body.bank)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'cash and bank must be between 0 and {_MAX_DELTA}')
@@ -379,7 +403,10 @@ async def create_lottery(guild: GuildDep, bot: BotDep, body: CreateLotteryBody) 
     try:
         await channel.send(view=view)
     except discord.HTTPException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        log.warning("Lottery announcement failed in guild %s: %s", guild.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail='the lottery started but the announcement could not be posted'
+        ) from None
 
     return {'ok': True}
 
@@ -401,13 +428,13 @@ def _balance_payload(user_id: int, row) -> dict:
 
 
 @router.get("/economy/balances/{user_id}")
-async def get_economy_balance(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+async def get_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId) -> dict:
     """One member's wallet; a member with no row is a zero wallet (and no row is created)."""
     return _balance_payload(user_id, await bot.db.users.find_balance_record(user_id, guild.id))
 
 
 @router.post("/economy/balances/{user_id}/adjust")
-async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, body: AdjustBalanceBody) -> dict:
+async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId, body: AdjustBalanceBody) -> dict:
     if body.cash == 0 and body.bank == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify cash or bank')
     if abs(body.cash) > _MAX_DELTA or abs(body.bank) > _MAX_DELTA:
@@ -419,7 +446,7 @@ async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: int, bod
 
 
 @router.get("/economy/inventory/{user_id}")
-async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: UserId) -> dict:
     rows = await bot.db.economy.get_inventory(user_id, guild.id)
     return {
         'user_id': str(user_id),
@@ -438,7 +465,7 @@ async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: int) -> d
 
 
 @router.post("/economy/inventory/{user_id}")
-async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: int, body: GiveItemBody) -> dict:
+async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: UserId, body: GiveItemBody) -> dict:
     if not 1 <= body.quantity <= 10_000:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='quantity must be between 1 and 10000')
     result, owned = await bot.db.economy.give_item(user_id, guild.id, body.item_id, body.quantity)
@@ -451,7 +478,7 @@ async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: int, body: Gi
 
 @router.delete("/economy/inventory/{user_id}/{item_id}")
 async def take_economy_item(
-    guild: GuildDep, bot: BotDep, user_id: int, item_id: int, quantity: int = Query(default=1, ge=1, le=10_000)
+    guild: GuildDep, bot: BotDep, user_id: UserId, item_id: ItemId, quantity: int = Query(default=1, ge=1, le=10_000)
 ) -> dict:
     left = await bot.db.economy.consume_item(user_id, guild.id, item_id, quantity)
     if left is None:
@@ -460,7 +487,7 @@ async def take_economy_item(
 
 
 @router.delete("/economy/items/by-id/{item_id}")
-async def delete_economy_item_by_id(guild: GuildDep, bot: BotDep, item_id: int) -> dict:
+async def delete_economy_item_by_id(guild: GuildDep, bot: BotDep, item_id: ItemId) -> dict:
     existing = await bot.db.economy.get_item_by_id(guild.id, item_id)
     if existing is not None and (error := builtin_error(existing, 'remove')):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)

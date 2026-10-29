@@ -858,7 +858,7 @@ class Bot(commands.Bot):
         if isinstance(to_send_error_lookup, to_send):
             # We want to get the original error type and not some
             # wrapped error like CommandInvokeError etc.
-            content = str(to_send_error_lookup)
+            content = str(to_send_error_lookup)[:1800]
             if not content.startswith('<:'):
                 content = f'{Emojis.error} {content}'
             await ctx.send(content, reference=ctx.message, delete_after=15, ephemeral=True)
@@ -896,7 +896,7 @@ class Bot(commands.Bot):
             # A BadArgument raised by the command body after parsing (e.g. "unable to join
             # your voice channel") has no parameter to point at: show the message as is
             # instead of crashing the signature renderer on ``param.name``.
-            await ctx.send_error(str(error))
+            await ctx.send_error(str(error)[:1800])
             return
 
         builder = AnsiStringBuilder()
@@ -960,7 +960,7 @@ class Bot(commands.Bot):
                 if param.description:
                     builder.newline(2).append(f'{" " * 4}Hint: {param.description}', color=AnsiColor.yellow, bold=True)
         else:
-            builder.append(str(error), color=AnsiColor.red, bold=True)
+            builder.append(str(error)[:600], color=AnsiColor.red, bold=True)
 
         if invoked_with != command.qualified_name:
             builder.newline(2)

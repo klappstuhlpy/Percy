@@ -1357,7 +1357,7 @@ class Music(Cog):
             return
 
         await player.skip(force=True)
-        await ctx.send_success("An admin or DJ has to the next track.", delete_after=10)
+        await ctx.send_success("Skipped to the next track.", delete_after=10)
 
     @command(description="Plays the previous Track.", hybrid=True, guild_only=True)
     @checks.is_author_connected()
@@ -1375,7 +1375,7 @@ class Music(Cog):
             return
 
         await player.back()
-        await ctx.send_success("An admin or DJ has skipped to the previous song.", delete_after=10)
+        await ctx.send_success("Went back to the previous track.", delete_after=10)
 
     # A group so queue editing costs no extra global slash commands (Discord allows 100).
     @group(name="queue", description="Display the active queue.", hybrid=True, guild_only=True, fallback="show")

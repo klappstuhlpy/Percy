@@ -159,7 +159,7 @@ class AuditLog(Cog):
         )
         embed.add_field(name="Performed by", value=by, inline=True)
         embed.add_field(name="Target", value=target, inline=True)
-        embed.add_field(name="Reason", value=entry.reason, inline=False)
+        embed.add_field(name="Reason", value=truncate(entry.reason, 1024) if entry.reason else "*No reason provided.*", inline=False)
         embed.add_field(name="Category", value=f"{action_name} (Type: {target_type})", inline=False)
         embed.set_thumbnail(url=get_asset_url(entry.guild))
         embed.set_footer(text=f"Log: [{entry.id}]", icon_url=get_asset_url(entry.user) if entry.user else None)

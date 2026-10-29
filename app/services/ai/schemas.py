@@ -13,12 +13,13 @@ their feature in later phases.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-__all__ = ('Parsable', 'SchemaError', 'require_bool', 'require_float', 'require_int', 'require_str')
+__all__ = ('Parsable', 'SchemaError', 'require_bool', 'require_float', 'require_int', 'require_str', 'unit_interval')
 
 T = TypeVar('T')
 
@@ -75,9 +76,24 @@ def require_float(payload: Mapping[str, Any], key: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         raise SchemaError(f'expected number for {key!r}, got {type(value).__name__}')
     try:
-        return float(value)
+        number = float(value)
     except (ValueError, TypeError) as exc:
         raise SchemaError(f'invalid number for {key!r}: {value!r}') from exc
+    if not math.isfinite(number):
+        raise SchemaError(f'non-finite number for {key!r}: {value!r}')
+    return number
+
+
+def unit_interval(value: object) -> float:
+    """Coerce a model-reported confidence to ``[0.0, 1.0]``; anything unusable (incl. NaN) is ``0.0``.
+
+    ``max(0.0, min(1.0, nan))`` is ``1.0``, so a ``"nan"`` string would otherwise clear every threshold.
+    """
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, number)) if math.isfinite(number) else 0.0
 
 
 def require_bool(payload: Mapping[str, Any], key: str) -> bool:

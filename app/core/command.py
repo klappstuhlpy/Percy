@@ -288,7 +288,7 @@ class Command(commands.Command):
         This still calls the original implementation to check if the command can be run.
         """
         guild_ids_check = getattr(self.callback, "__guild_ids__", None)
-        if guild_ids_check and ctx.guild and ctx.guild.id not in guild_ids_check:
+        if guild_ids_check and (ctx.guild is None or ctx.guild.id not in guild_ids_check):
             return False
         return await super().can_run(ctx)
 

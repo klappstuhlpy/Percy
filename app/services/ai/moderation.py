@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from app.services.ai.schemas import SchemaError
+from app.services.ai.schemas import SchemaError, unit_interval
 from app.services.ai.service import ModelTier
 
 if TYPE_CHECKING:
@@ -72,12 +72,7 @@ class ModerationVerdict:
         if not isinstance(reason, str):
             reason = ''
 
-        conf_raw = payload.get('confidence', 0.0)
-        try:
-            confidence = float(conf_raw)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            confidence = 0.0
-        confidence = max(0.0, min(1.0, confidence))
+        confidence = unit_interval(payload.get('confidence', 0.0))
 
         return cls(flagged=flagged, category=category.strip().lower(), reason=reason.strip(), confidence=confidence)
 

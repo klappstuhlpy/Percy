@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import config
 from app.services import ModelTier, build_dashboard_assistant_system
@@ -70,7 +70,7 @@ class PutAIOverrideBody(BaseModel):
 
 class AIAskBody(BaseModel):
     # A free-form natural-language question from the dashboard command palette.
-    question: str
+    question: str = Field(max_length=2000)
 
     model_config = {"extra": "ignore"}
 
@@ -81,7 +81,7 @@ class BatchOperation(BaseModel):
 
 
 class BatchGuildConfigBody(BaseModel):
-    operations: list[BatchOperation]
+    operations: list[BatchOperation] = Field(max_length=50)
 
 
 class ModerationIgnoreBody(BaseModel):
@@ -105,8 +105,8 @@ class PatchSentinelBody(BaseModel):
 
 class SendSentinelMessageBody(BaseModel):
     channel_id: int | str
-    title: str | None = None
-    content: str | None = None
+    title: str | None = Field(default=None, max_length=256)
+    content: str | None = Field(default=None, max_length=2000)
 
 
 class ToggleSentinelBody(BaseModel):
@@ -184,8 +184,33 @@ def _check_mention_count(value: object) -> int | None:
     return value
 
 
-def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
-    """Extract valid config updates from a flat dict (shared by PATCH and batch)."""
+_CHANNEL_FIELDS = frozenset(f for f in _ALLOWED_CONFIG_FIELDS if f.endswith("_channel_id"))
+
+
+def _check_target(guild: discord.Guild, guild_config, key: str, value: int) -> None:
+    """A channel/role id from the body must belong to *this* guild (and a mute role be one Percy can give).
+
+    An unchanged value is let through: the dashboard resends every field, and a role moved above
+    Percy since must not make saving an unrelated setting fail.
+    """
+    if value == getattr(guild_config, key, None):
+        return
+    if key in _CHANNEL_FIELDS:
+        if not isinstance(guild.get_channel(value), discord.abc.Messageable):
+            raise _bad_request(f"{key} must be a channel of this server")
+        return
+    role = guild.get_role(value)
+    if role is None:
+        raise _bad_request(f"{key} must be a role of this server")
+    if key == "mute_role_id" and (role.is_default() or role.managed or role >= guild.me.top_role):
+        raise _bad_request("I cannot assign that role: pick one below my highest role that no integration manages")
+
+
+def _build_config_updates(data: dict, guild_config, guild: discord.Guild | None = None) -> dict[str, object]:
+    """Extract valid config updates from a flat dict (shared by PATCH and batch).
+
+    With ``guild`` the channel/role ids are checked to belong to it (backup restore passes none: ids are stripped).
+    """
     updates: dict[str, object] = {}
     for key, value in data.items():
         if key == "mention_count":
@@ -197,6 +222,8 @@ def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
         elif key in _ALLOWED_CONFIG_FIELDS:
             # /batch hands over an untyped dict, so a string here would otherwise reach asyncpg as a 500.
             updates[key] = None if value is None else parse_id(value, key)
+            if guild is not None and updates[key] is not None:
+                _check_target(guild, guild_config, key, updates[key])  # type: ignore[arg-type]
         elif key == "flags" and isinstance(value, dict):
             new_flags = guild_config.flags.value
             for flag_name, bit in _FLAG_MAP.items():
@@ -284,7 +311,7 @@ async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfi
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
 
     guild_config = await bot.db.get_guild_config(guild.id)
-    updates = _build_config_updates(data, guild_config)
+    updates = _build_config_updates(data, guild_config, guild)
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
@@ -347,6 +374,8 @@ async def patch_ai_flags(guild: GuildDep, bot: BotDep, body: PatchAIFlagsBody) -
 @router.put("/ai/overrides/{channel_id}")
 async def put_ai_override(guild: GuildDep, bot: BotDep, channel_id: int, body: PutAIOverrideBody) -> dict:
     """Set a per-channel AI override. An override that controls nothing is removed."""
+    if guild.get_channel_or_thread(channel_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="channel not found in this server")
     flags_mask = 0
     enabled_mask = 0
     for name, bit in _AI_FLAG_MAP.items():
@@ -495,7 +524,7 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
         guild_config = await bot.db.get_guild_config(guild.id)
         for op in body.operations:
             if op.type == "config":
-                _build_config_updates(op.data, guild_config)
+                _build_config_updates(op.data, guild_config, guild)
 
     results: list[dict] = []
 
@@ -505,7 +534,7 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
 
         if op_type == "config":
             guild_config = await bot.db.get_guild_config(guild.id)
-            updates = _build_config_updates(data, guild_config)
+            updates = _build_config_updates(data, guild_config, guild)
             if updates:
                 # Same path as PATCH, so a log/alert channel saved here also gets its webhook.
                 await _apply_config_updates(bot, guild, guild_config, updates)
@@ -536,8 +565,7 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
             results.append({"type": "sentinel_toggle", "ok": True})
 
         elif op_type == "audit_log_flags":
-            config = await bot.db.get_guild_config(guild.id)
-            current_flags = config.audit_log_flags or {}
+            current_flags = dict((await bot.db.get_guild_config(guild.id)).audit_log_flags or {})
             for key, value in data.items():
                 if key in current_flags:
                     current_flags[key] = bool(value)
@@ -574,8 +602,7 @@ async def patch_audit_log_flags(guild: GuildDep, bot: BotDep, body: PatchAuditLo
             detail="body must be an object mapping flag names to booleans",
         )
 
-    config = await bot.db.get_guild_config(guild.id)
-    current_flags = config.audit_log_flags or {}
+    current_flags = dict((await bot.db.get_guild_config(guild.id)).audit_log_flags or {})
 
     for key, value in data.items():
         if key in current_flags:
@@ -886,7 +913,8 @@ async def send_sentinel_message(guild: GuildDep, bot: BotDep, body: SendSentinel
     try:
         message = await channel.send(view=view)
     except discord.HTTPException as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"failed to send message: {e}")
+        log.warning("Sentinel card send failed in guild %s: %s", guild.id, e)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="failed to send message") from None
 
     # Replace the card rather than orphan it. Point at the new one first, so deleting the old
     # one is not mistaken for someone removing the live card (which stands Sentinel down).
@@ -1049,7 +1077,7 @@ _LOG_CHANNEL_PERMS = discord.PermissionOverwrite(
 class SetupLoggingBody(BaseModel):
     #: An existing text channel, or ``None`` to have Percy create a private ``#percy-logs``.
     channel_id: int | None = None
-    logs: list[str]
+    logs: list[str] = Field(max_length=len(_SETUP_LOGS))
 
 
 @router.post("/setup/logging")

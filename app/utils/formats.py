@@ -429,6 +429,8 @@ def resolve_entity_id(x: int, *, guild: discord.Guild) -> str:
 
 def get_asset_url(obj: discord.Guild | discord.User | discord.Member | discord.ClientUser | None) -> str:
     """Returns the asset URL of an available discord object."""
+    if obj is None:
+        return ""
     if isinstance(obj, discord.Guild):
         if not obj.icon:
             return ""
@@ -580,7 +582,7 @@ def shorten_number(number: int | float) -> str:
     number = float(f"{number:.3g}")
     magnitude = 0
 
-    while abs(number) >= 1000:
+    while abs(number) >= 1000 and magnitude < 4:
         magnitude += 1
         number /= 1000
 

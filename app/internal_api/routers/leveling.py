@@ -1,8 +1,11 @@
 """Leveling configuration, leaderboard, XP history, and role management endpoints."""
 from __future__ import annotations
 
+import logging
+from typing import Annotated
+
 import discord
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
 from app.rendering.card_style import clean_style, style_options
@@ -10,6 +13,11 @@ from app.services.level_message import LEVEL_UP_VARIABLES, level_up_values, rend
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import invalidate_cog_cache
+
+log = logging.getLogger(__name__)
+
+_MAX_ID = 2**63 - 1
+UserId = Annotated[int, Path(ge=1, le=_MAX_ID)]
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Leveling"], dependencies=[Depends(verify_token)])
 
@@ -46,7 +54,7 @@ class PatchLevelingConfigBody(BaseModel):
     voice_enabled: bool | None = None
     voice_xp: int | None = Field(default=None, ge=0, le=1000)
     level_up_message: str | None = Field(default=None, max_length=1500)
-    level_up_channel: int | None = Field(default=None, ge=0)
+    level_up_channel: int | None = Field(default=None, ge=0, le=_MAX_ID)
     role_stack: bool | None = None
     factor: float | None = Field(default=None, gt=0, le=10)
     delete_after_leave: bool | None = None
@@ -54,7 +62,7 @@ class PatchLevelingConfigBody(BaseModel):
     min_gain: int | None = Field(default=None, ge=0, le=100_000)
     max_gain: int | None = Field(default=None, ge=0, le=100_000)
     cooldown_per: int | None = Field(default=None, ge=0, le=86_400)
-    special_level_up_messages: dict[str, str] | None = None
+    special_level_up_messages: dict[str, str] | None = Field(default=None, max_length=500)
     card_style: dict | None = None
     card_locked: bool | None = None
 
@@ -62,23 +70,23 @@ class PatchLevelingConfigBody(BaseModel):
 
 
 class LevelUpTestBody(BaseModel):
-    user_id: int
+    user_id: int = Field(ge=1, le=_MAX_ID)
 
 
 class PostLevelingRolesBody(BaseModel):
     level: int = Field(ge=0, le=500)
-    role_id: int | None = None
+    role_id: int | None = Field(default=None, ge=0, le=_MAX_ID)
 
 
 class PostLevelingMultipliersBody(BaseModel):
     type: str
-    id: int
-    multiplier: float | None = None
+    id: int = Field(ge=1, le=_MAX_ID)
+    multiplier: float | None = Field(default=None, le=100)
 
 
 class PostLevelingBlacklistBody(BaseModel):
     type: str
-    id: int
+    id: int = Field(ge=1, le=_MAX_ID)
     action: str
 
 
@@ -149,7 +157,7 @@ async def get_leveling_leaderboard(
 
 
 @router.get("/leveling/users/{user_id}")
-async def get_leveling_user(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+async def get_leveling_user(guild: GuildDep, bot: BotDep, user_id: UserId) -> dict:
     """One member's level row (read-only; a member with no XP is level 0, no row is created)."""
     record = await bot.db.leveling.get_user_level(user_id, guild.id)
     if record is None:
@@ -183,7 +191,7 @@ async def get_leveling_xp_history(
 
 
 @router.patch("/leveling/users/{user_id}")
-async def patch_leveling_user(guild: GuildDep, bot: BotDep, user_id: int, body: PatchLevelingUserBody) -> dict:
+async def patch_leveling_user(guild: GuildDep, bot: BotDep, user_id: UserId, body: PatchLevelingUserBody) -> dict:
     if body.level is None and body.xp is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify level or xp')
     # levels.level is INTEGER and levels.xp BIGINT: out of range is a 500 from asyncpg, negative is nonsense.
@@ -216,6 +224,10 @@ async def patch_leveling_config(guild: GuildDep, bot: BotDep, body: PatchLevelin
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
+    target = updates.get('level_up_channel')
+    if isinstance(target, int) and target > 2 and not isinstance(guild.get_channel(target), discord.abc.Messageable):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='level_up_channel must be a channel of this server')
+
     record = await bot.db.leveling.get_guild_config_record(guild.id)
     if record is None:
         await bot.db.leveling.create_guild_config(guild.id, updates.get('enabled', False))
@@ -228,7 +240,7 @@ async def patch_leveling_config(guild: GuildDep, bot: BotDep, body: PatchLevelin
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='min_gain must not exceed max_gain')
     if 'special_level_up_messages' in updates:
         specials = updates['special_level_up_messages']
-        if any(not k.isdigit() or len(v) > 1500 for k, v in specials.items()):  # type: ignore[union-attr]
+        if any(not k.isdigit() or len(k) > 4 or len(v) > 1500 for k, v in specials.items()):  # type: ignore[union-attr]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail='special messages are keyed by level, max 1500 characters'
             )
@@ -246,6 +258,14 @@ async def post_leveling_roles(guild: GuildDep, bot: BotDep, body: PostLevelingRo
 
     level_roles = dict(record.get('level_roles') or {})
     if body.role_id:
+        role = guild.get_role(body.role_id)
+        if role is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='role not found in this server')
+        if role.is_default() or role.managed or role >= guild.me.top_role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='I cannot assign that role: pick one below my highest role that no integration manages',
+            )
         level_roles[str(body.role_id)] = body.level
     else:
         level_roles = {k: v for k, v in level_roles.items() if v != body.level}
@@ -263,7 +283,7 @@ async def create_leveling_role_preset(guild: GuildDep, bot: BotDep) -> dict:
 
 class SetupLevelingBody(BaseModel):
     #: 0 = no messages, 1 = where they talked, 2 = DM, otherwise a text channel id.
-    level_up_channel: int
+    level_up_channel: int = Field(le=_MAX_ID)
     preset_roles: bool = False
 
 
@@ -332,13 +352,21 @@ async def _create_preset_roles(guild: discord.Guild, bot: BotDep) -> int:
                 created += 1
             level_roles[str(role.id)] = level
     except discord.Forbidden:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='bot is missing the Manage Roles permission')
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='bot is missing the Manage Roles permission') from None
     except discord.HTTPException as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'failed to create roles: {exc}')
+        log.warning('Preset role creation failed in guild %s: %s', guild.id, exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Discord refused to create the roles') from None
 
     await bot.db.leveling.update_guild_config(guild.id, {'level_roles': level_roles})
     invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return created
+
+
+def _check_member_of_guild(guild: discord.Guild, kind: str, entity_id: int) -> None:
+    """A role/channel id from the body must exist in the path guild, not just anywhere."""
+    found = guild.get_role(entity_id) if kind == 'role' else guild.get_channel_or_thread(entity_id)
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'{kind} not found in this server')
 
 
 @router.post("/leveling/multipliers")
@@ -353,6 +381,7 @@ async def post_leveling_multipliers(guild: GuildDep, bot: BotDep, body: PostLeve
     field = 'multiplier_roles' if body.type == 'role' else 'multiplier_channels'
     current = dict(record.get(field) or {})
     if body.multiplier is not None and body.multiplier > 0:
+        _check_member_of_guild(guild, body.type, body.id)
         current[str(body.id)] = body.multiplier
     else:
         current.pop(str(body.id), None)
@@ -383,6 +412,8 @@ async def post_leveling_blacklist(guild: GuildDep, bot: BotDep, body: PostLeveli
     field = field_map[body.type]
     current = set(record.get(field) or [])
     if body.action == 'add':
+        if body.type != 'user':
+            _check_member_of_guild(guild, body.type, body.id)
         current.add(body.id)
     else:
         current.discard(body.id)

@@ -780,6 +780,7 @@ class Games(Cog):
             await ctx.send_info("You've already played today's Wordle here. Come back tomorrow!")
             return
         # Claim today's puzzle up front: abort and timeout reveal the word, so they must use up the day too.
+        self.wordle_played = {k for k in self.wordle_played if k[2] == key[2]}  # drop previous days
         self.wordle_played.add(key)
 
         answer = words[daily_index(len(words), ctx.guild.id, today)]
@@ -840,6 +841,10 @@ class Games(Cog):
             await ctx.send_error("A Russian Roulette game is already running in this channel.")
             return
         if not await self._take_bet(ctx, ante, minimum=10):
+            return
+        if ctx.channel.id in self.russian_tables:  # a second command won the race while we awaited the debit
+            await self._refund(ctx, ante)
+            await ctx.send_error("A Russian Roulette game is already running in this channel.")
             return
 
         game = russianroulette_ui.RussianRoulette(self, ctx, ante)
@@ -1123,9 +1128,10 @@ class Games(Cog):
 
         assert roulette.message is not None
         # Note this is just for aesthetics
-        await roulette.message.edit(
-            view=roulette.view.render(image_url="https://klappstuhl.me/gallery/raw/KdKof.gif")
-        )
+        with suppress(discord.HTTPException):  # aesthetics only: a deleted message must not strand the table and its bets
+            await roulette.message.edit(
+                view=roulette.view.render(image_url="https://klappstuhl.me/gallery/raw/KdKof.gif")
+            )
         await asyncio.sleep(5)
 
         if not await self._settle_bets('roulette', channel_id):

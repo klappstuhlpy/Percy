@@ -19,6 +19,7 @@ what resolves a name to the right key -- mirroring ``app/internal_api/routers/re
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import itertools
 import logging
@@ -455,6 +456,10 @@ class Releases(Cog):
             await repo.release_claims(claims)
             log.exception('Failed to deliver a release digest to %s.', user.id)
             return False
+        except asyncio.CancelledError:
+            # Shutdown mid-send: hand the claims back, or this digest is lost for good.
+            await asyncio.shield(repo.release_claims(claims))
+            raise
         return True
 
     @tasks.loop(hours=1)

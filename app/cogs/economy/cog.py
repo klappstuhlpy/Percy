@@ -127,6 +127,9 @@ _CASINO_QUEST_GAMES = frozenset({
     'horserace', 'russianroulette', 'crash', 'scratch', 'snakeeyes', 'gamble',
 })
 
+#: Ceiling for admin/transfer money arguments, far under the bigint columns so sums never overflow.
+MAX_MONEY = 10**15
+
 #: Species ids offered as slash choices by ``pet adopt``.
 PetSpeciesChoice = Literal['hamster', 'cat', 'dog', 'parrot', 'fox', 'dragon']
 #: Rarity ids offered as slash choices by ``shop add`` / ``shop edit`` (mirrors ``RARITIES``).
@@ -385,7 +388,7 @@ class Economy(Cog):
         self,
         ctx: Context,
         member: Annotated[discord.Member, converter.MemberConverter],
-        amount: int,
+        amount: Range[int, 0, MAX_MONEY],
         to: Literal["bank", "cash"],
     ) -> None:
         """Sets a user's balance"""
@@ -415,7 +418,7 @@ class Economy(Cog):
         to="Whether to add the balance to the bank or cash.",
     )
     async def add_money_role(
-        self, ctx: Context, role: Annotated[discord.Role, commands.RoleConverter], amount: Range[int, 1], to: Literal["bank", "cash"]
+        self, ctx: Context, role: Annotated[discord.Role, commands.RoleConverter], amount: Range[int, 1, MAX_MONEY], to: Literal["bank", "cash"]
     ) -> None:
         """Sets a user's balance"""
         humans = [member for member in role.members if not member.bot]
@@ -453,7 +456,7 @@ class Economy(Cog):
         self,
         ctx: Context,
         member: Annotated[discord.Member, converter.MemberConverter],
-        amount: Range[int, 1],
+        amount: Range[int, 1, MAX_MONEY],
         to: Literal["bank", "cash"],
     ) -> None:
         """Removes from a user's balance"""
@@ -520,7 +523,7 @@ class Economy(Cog):
     @command("transfer", description="Transfers money to another user.", guild_only=True, hybrid=True)
     @describe(member="The user to transfer the money to.", amount="The amount to transfer.")
     async def transfer(
-        self, ctx: Context, member: Annotated[discord.Member, converter.MemberConverter], amount: Range[int, 1]
+        self, ctx: Context, member: Annotated[discord.Member, converter.MemberConverter], amount: Range[int, 1, MAX_MONEY]
     ) -> None:
         """Transfers money to another user."""
         if member.bot:
@@ -1689,7 +1692,7 @@ class Economy(Cog):
         user_permissions=PermissionTemplate.admin,
     )
     @describe(duration='How long entries stay open, e.g. "2h" or "1 day".', ticket_price="Cost per ticket.")
-    async def lottery_start(self, ctx: Context, duration: str, ticket_price: Range[int, 1]) -> None:
+    async def lottery_start(self, ctx: Context, duration: str, ticket_price: Range[int, 1, 1_000_000_000]) -> None:
         """Start a lottery that draws a weighted-random winner when the timer ends."""
         assert ctx.guild is not None
         try:
@@ -2001,6 +2004,14 @@ class Economy(Cog):
             await ctx.send_info("Prestige cancelled. Your fortune is safe.")
             return
 
+        # Re-check after the confirm: a second prestige or a spend may have happened while the prompt was open.
+        if await self.bot.db.economy.get_prestige(ctx.author.id, ctx.guild.id) != level:
+            await ctx.send_error("Your prestige changed while you were deciding. Try again.")
+            return
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        if balance.total < requirement:
+            await ctx.send_error("You no longer meet the requirement.")
+            return
         await balance.update(cash=0, bank=0)
         new_level = await self.bot.db.economy.increment_prestige(ctx.author.id, ctx.guild.id)
         await ctx.send_success(

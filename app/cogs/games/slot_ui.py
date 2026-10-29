@@ -250,19 +250,17 @@ class SlotMachine(LayoutView):
         self._compose(buttons=False)
         await interaction.response.edit_message(view=self)
 
-        async for build in self.walk_build():
-            self._compose(display=build, buttons=False)
-            await interaction.edit_original_response(view=self)
-
+        # Settle before animating: a deleted message mid-reveal must not eat the stake or the winnings.
+        self.roll()
         self.finished = True
 
         win, multiplier = self.get_winning(self.bet)
         if win:
             balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
             await balance.add(cash=win)
-            status = f"`\N{WHITE HEAVY CHECK MARK} You won {multiplier}x your bet!`"
+            status = f"`✅ You won {multiplier}x your bet!`"
         else:
-            status = "`\N{CROSS MARK} Better luck next time!`"
+            status = "`❌ Better luck next time!`"
 
         await interaction.client.db.game_stats.record_result(
             interaction.guild_id,
@@ -273,8 +271,14 @@ class SlotMachine(LayoutView):
             profit=win - self.bet,
         )
 
+        with suppress(discord.HTTPException):
+            async for build in self.walk_build():
+                self._compose(display=build, buttons=False)
+                await interaction.edit_original_response(view=self)
+
         self._compose(status=status)
-        await interaction.edit_original_response(view=self)
+        with suppress(discord.HTTPException):
+            await interaction.edit_original_response(view=self)
 
     async def _on_reset(self, interaction: discord.Interaction) -> None:
         """Reset and re-bet for another spin."""

@@ -200,6 +200,8 @@ class Reminder(Cog):
         to_remind = prompt.arg
         if ctx.replied_message is not None and ctx.replied_message.content:
             to_remind = ctx.replied_message.content
+            if len(to_remind) > 1500:
+                raise commands.BadArgument("The reminder message is too long.")
 
         recur, recur_label, recur_remaining = self._build_recurrence(flags, reference=prompt.dt)
 

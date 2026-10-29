@@ -176,7 +176,7 @@ class JumpToModal(discord.ui.Modal, title="Jump to"):
         self.page_number.max_length = len(str(self.paginator.total_pages))
 
     async def on_submit(self, interaction: discord.Interaction, /) -> None:
-        if not self.page_number.value.isdigit():
+        if not self.page_number.value.isdecimal():
             await interaction.response.send_message("Please enter a number.", ephemeral=True)
             return
         if not 1 <= int(self.page_number.value) <= self.paginator.total_pages:
@@ -765,6 +765,10 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
         self.entries = self.interface.pages
         self.pages = [self.entries[i: i + 1] for i in range(0, len(self.entries), 1)]
         self.update_buttons()
+
+        if not self.pages:
+            self.msg = await self._send(self.ctx, ephemeral, content=f"{Emojis.error} No entries to paginate currently.")
+            return self
 
         page = await self.format_page(self.pages[0])
         kwargs = self.resolve_msg_kwargs(page)

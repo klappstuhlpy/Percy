@@ -668,7 +668,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             label = getattr(cmd, "mention", None) if self._render_mentions else None
             if not label:
                 label = f"**`{self.get_command_signature(cmd, no_signature=True)}`**"
-            description = cmd.description or "…"
+            description = truncate(cmd.description or "…", 150)
             lines.append(f"{prefix}{label}\n-# {description}")
         container.add_item(discord.ui.TextDisplay("\n".join(lines)))
 
@@ -741,7 +741,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
         signature.append(command.qualified_name + " ", color=AnsiColor.green, bold=True)
         signature.extend(Command.ansi_signature_of(command))  # type: ignore
 
-        description = inspect.cleandoc(command.help or command.description or "No description provided.")
+        # A Components V2 message holds at most 4000 characters of text in total.
+        description = truncate(
+            inspect.cleandoc(command.help or command.description or "No description provided."), 1200
+        )
         rendered = signature.ensure_codeblock(fallback="md").dynamic(ctx)  # type: ignore
         container.add_item(
             discord.ui.Section(
@@ -809,7 +812,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if extra:
             container.add_item(discord.ui.Separator())
             for block in extra:
-                container.add_item(discord.ui.TextDisplay(block))
+                container.add_item(discord.ui.TextDisplay(truncate(block, 900)))
                 container.add_item(discord.ui.Separator())
 
         try:

@@ -27,6 +27,8 @@ class TimersRepository(BaseRepository):
     @staticmethod
     def _kwargs_filter(kwargs: dict[str, Any]) -> str:
         """Builds the ``metadata`` filter clause for a kwargs lookup (params start at $2)."""
+        if not all(key.isidentifier() for key in kwargs):  # keys are interpolated as SQL literals below
+            raise ValueError(f'invalid timer kwarg name in {list(kwargs)!r}')
         return ' AND '.join(
             f"metadata #>> ARRAY['kwargs', '{key}'] = ${i}"
             for i, key in enumerate(kwargs.keys(), start=2)

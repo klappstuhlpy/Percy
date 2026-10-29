@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Internal API: channel and role ids in the guild config PATCH/batch, economy item roles, leveling reward roles, multipliers, blacklist, level-up channel and AI channel overrides must belong to the path guild (any snowflake was stored); assigned roles must sit below Percy's top role. Unchanged saved values still pass.
+- Internal API: request bodies and path ids are bounded (lengths, batch size 50, multiplier 100, snowflake/int ranges) instead of reaching asyncpg as 500s; Discord and hoster error texts are logged, not returned.
+- Gallery uploads are capped at 10 files and 10 MB per file.
+- Outbound webhooks use the shared `check_destination` SSRF guard, which also refuses IPv4-mapped IPv6 private addresses.
+- News: feed link and image URLs are stored only when http(s), so a `javascript:` link cannot reach a rendered href.
+- AI: a `NaN`/`inf` confidence is rejected and confidence is clamped to [0, 1] (a `"nan"` answer passed every threshold).
+- Captcha solutions use `secrets` instead of `random`.
+- klappstuhl.me hoster client no longer sends its "unconfigured" placeholder as a bearer token.
+- Timers: `_kwargs_filter` refuses non-identifier kwarg names before they reach SQL.
+- Commands restricted with `@guilds(...)` no longer run in DMs.
+
+### Fixed
+- Economy: amounts are bounded (1–10^15, `set-money` 0–10^15, lottery ticket price ≤ 1e9) instead of overflowing bigint; `prestige` re-checks level and balance after the confirmation.
+- Games: slots credits winnings before the reveal animation, so a deleted message no longer loses the payout; two simultaneous Russian roulette tables no longer overwrite each other; a deleted roulette or poker message no longer leaves the table stuck; poker background tasks are kept referenced; the Wordle played-set no longer grows forever.
+- Releases: a digest cancelled mid-send hands its delivery claims back.
+- Reminders: a reminder created from a reply is length-checked like typed text (long replies were silently dropped at fire time).
+- Music: `forceskip` and `back` confirmation texts.
+- Core: voice-gated commands in DMs, `ctx.confirm(author_id=...)` (broke `solved`), a timed-out disambiguation, error replies and help text over Discord's length limits, empty text paginators, the page-jump modal, time parsing overflow, `shorten_number` ≥ 1e15 and `get_asset_url(None)`.
+- Rendering: `resize_to_limit` saves PNG/JPEG/WEBP after resizing and no longer loops on unsupported formats; series charts with fewer labels than values.
+- News: an out-of-range feed date no longer raises out of the parser.
+- Audit log: a missing reason shows "No reason provided." and long reasons are truncated; the `ignored` typo in config.
+- Internal API: a failed audit-log flags write no longer corrupts the cached flags.
+
+### Removed
+- Unused helpers `quick_token_sort_ratio`, `partial_token_sort_ratio` and `ScheduledTaskProtocol`, and the duplicate SSRF check in the webhooks cog.
+
 ## [2.23.0] - 2026-10-28
 
 ### Security

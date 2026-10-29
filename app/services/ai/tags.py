@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.services.ai.schemas import unit_interval
 from app.services.ai.service import ModelTier
 
 if TYPE_CHECKING:
@@ -41,11 +42,7 @@ class TagMatch:
         raw = payload.get('tag')
         name = raw.strip() if isinstance(raw, str) and raw.strip().lower() not in _NULL_TOKENS else None
 
-        try:
-            confidence = float(payload.get('confidence', 0.0))  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            confidence = 0.0
-        return cls(name=name, confidence=max(0.0, min(1.0, confidence)))
+        return cls(name=name, confidence=unit_interval(payload.get('confidence', 0.0)))
 
 
 def build_tag_find_prompt(tags: Sequence[str]) -> str:

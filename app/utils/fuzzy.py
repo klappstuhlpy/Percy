@@ -131,14 +131,6 @@ def token_sort_ratio(a: str, b: str) -> int:
     return ratio(*_sorted_tokens(a, b))
 
 
-def quick_token_sort_ratio(a: str, b: str) -> int:
-    return quick_ratio(*_sorted_tokens(a, b))
-
-
-def partial_token_sort_ratio(a: str, b: str) -> int:
-    return partial_ratio(*_sorted_tokens(a, b))
-
-
 @overload
 def _extraction_generator(
     query: str,
