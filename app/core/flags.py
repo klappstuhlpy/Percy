@@ -616,10 +616,6 @@ class FlagMeta[T](type):
         """Walks through all flags in the class."""
         yield from cls.__commands_flags__.copy().values()
 
-    def inject(cls, command: Command) -> None:
-        """Injects the flags into the command."""
-        command.custom_flags = cls.__commands_flags__  # type: ignore[assignment]
-
 
 class FlagNamespace[T]:
     """Represents a namespace of flags."""

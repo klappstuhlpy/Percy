@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
 import logging
 import random
@@ -500,19 +501,28 @@ class Giveaways(Cog):
             )
             if v
         }
-        giveaway = await self.create_giveaway(
-            message.channel.id,
-            message.id,
-            guild_id,
-            author_id,
-            description=description,
-            prize=prize,
-            winner_count=winners,
-            created=now.isoformat(),
-            expires=expires.isoformat(),
-            **requirements,
-        )
-        await self.bot.timers.create(expires, "giveaway", giveaway_id=giveaway.id, created=now, timezone=timezone)
+        giveaway: Giveaway | None = None
+        try:
+            giveaway = await self.create_giveaway(
+                message.channel.id,
+                message.id,
+                guild_id,
+                author_id,
+                description=description,
+                prize=prize,
+                winner_count=winners,
+                created=now.isoformat(),
+                expires=expires.isoformat(),
+                **requirements,
+            )
+            await self.bot.timers.create(expires, "giveaway", giveaway_id=giveaway.id, created=now, timezone=timezone)
+        except Exception:
+            # Never leave a "Preparing..." card (or a row no timer will ever end) behind.
+            if giveaway is not None:
+                await self.bot.db.giveaways.delete_giveaway(giveaway.id)
+            with contextlib.suppress(discord.HTTPException):
+                await message.delete()
+            raise
         giveaway.message = message
         await message.edit(embed=None, view=giveaway.to_layout())
         return giveaway, message

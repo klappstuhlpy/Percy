@@ -2004,16 +2004,11 @@ class Economy(Cog):
             await ctx.send_info("Prestige cancelled. Your fortune is safe.")
             return
 
-        # Re-check after the confirm: a second prestige or a spend may have happened while the prompt was open.
-        if await self.bot.db.economy.get_prestige(ctx.author.id, ctx.guild.id) != level:
-            await ctx.send_error("Your prestige changed while you were deciding. Try again.")
+        # A second prestige or a spend may have happened while the prompt was open; the repo re-checks atomically.
+        new_level = await self.bot.db.economy.try_prestige(ctx.author.id, ctx.guild.id, level, requirement)
+        if new_level is None:
+            await ctx.send_error("Your balance or prestige changed while you were deciding. Try again.")
             return
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        if balance.total < requirement:
-            await ctx.send_error("You no longer meet the requirement.")
-            return
-        await balance.update(cash=0, bank=0)
-        new_level = await self.bot.db.economy.increment_prestige(ctx.author.id, ctx.guild.id)
         await ctx.send_success(
             f"\N{GLOWING STAR} You ascended to prestige **{new_level}**! "
             f"Permanent payout bonus: **+{(prestige_multiplier(new_level) - 1) * 100:.0f}%**."

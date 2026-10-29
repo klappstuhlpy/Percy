@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - klappstuhl.me hoster client no longer sends its "unconfigured" placeholder as a bearer token.
 - Timers: `_kwargs_filter` refuses non-identifier kwarg names before they reach SQL.
 - Commands restricted with `@guilds(...)` no longer run in DMs.
+- Internal API: `POST /moderation/ignore` (add) only accepts a channel, role or member of the path guild.
+- Error replies never ping: they echo user input such as a bad `<@id>` argument.
 
 ### Fixed
 - Economy: amounts are bounded (1–10^15, `set-money` 0–10^15, lottery ticket price ≤ 1e9) instead of overflowing bigint; `prestige` re-checks level and balance after the confirmation.
@@ -30,9 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - News: an out-of-range feed date no longer raises out of the parser.
 - Audit log: a missing reason shows "No reason provided." and long reasons are truncated; the `ignored` typo in config.
 - Internal API: a failed audit-log flags write no longer corrupts the cached flags.
+- Economy: `prestige` checks and resets in one transaction, so two simultaneous prestiges or a spend during the confirmation can no longer both pass.
+- Games: Tower, Slots, Higher/Lower, Mines, Crash, Plinko, Keno, Scratch, Dice, Coinflip and Russian Roulette refund the stake when the game message cannot be sent.
+- Music: the queue holds at most 1000 tracks; playlists past that are trimmed.
+- Giveaways: a failed setup deletes the "Preparing Giveaway..." card and the half-created row.
+- Internal API: changing a log/alert channel creates the new webhook before deleting the old one, so a failed create keeps logging working; leveling preset roles created before a Discord failure are still registered.
+- `format_fields` no longer raises on an empty mapping.
 
 ### Removed
-- Unused helpers `quick_token_sort_ratio`, `partial_token_sort_ratio` and `ScheduledTaskProtocol`, and the duplicate SSRF check in the webhooks cog.
+- Unused helpers `quick_token_sort_ratio`, `partial_token_sort_ratio` and `ScheduledTaskProtocol`, the duplicate SSRF check in the webhooks cog, and the unused `find_nth_occurrence`, `ensure_future_time`, `EconomyRepository.increment_prestige` and `FlagMeta.inject`.
 
 ## [2.23.0] - 2026-10-28
 

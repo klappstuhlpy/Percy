@@ -138,14 +138,19 @@ async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int |
 
     ``send_alert`` and audit logging need a *webhook*, not just a channel id — but the
     dashboard can only send a channel id. Percy has ``manage_webhooks``, so we create the
-    webhook here (mirroring the in-bot setup command), deleting any previous one first.
+    webhook here (mirroring the in-bot setup command). The old webhook is deleted only once
+    the new one exists, so a failed create leaves logging working; if the create fails at the
+    channel's webhook limit, the old one is deleted to free a slot and the create retried once.
     Returns the new webhook url, or ``None`` when the channel is being cleared.
     """
-    if old_url:
-        with contextlib.suppress(discord.HTTPException):
-            await discord.Webhook.from_url(old_url, session=bot.session).delete()
+
+    async def delete_old() -> None:
+        if old_url:
+            with contextlib.suppress(discord.HTTPException, ValueError):
+                await discord.Webhook.from_url(old_url, session=bot.session).delete()
 
     if channel_id is None:
+        await delete_old()
         return None
 
     channel = guild.get_channel(channel_id)
@@ -154,7 +159,14 @@ async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int |
 
     avatar = await bot.user.avatar.read() if bot.user and bot.user.avatar else None
     try:
-        webhook = await channel.create_webhook(name=name, avatar=avatar)
+        try:
+            webhook = await channel.create_webhook(name=name, avatar=avatar)
+        except discord.HTTPException as exc:
+            if not old_url or isinstance(exc, discord.Forbidden):
+                raise
+            await delete_old()
+            old_url = None
+            webhook = await channel.create_webhook(name=name, avatar=avatar)
     except discord.Forbidden:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -165,6 +177,7 @@ async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int |
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="failed to create the webhook (the channel may be at its 10-webhook limit)",
         ) from None
+    await delete_old()
     return webhook.url
 
 
@@ -586,6 +599,14 @@ async def manage_moderation_ignore(guild: GuildDep, bot: BotDep, body: Moderatio
     entity_id = parse_id(body.entity_id, "entity_id")
 
     if body.action == "add":
+        # Only this guild's channels, roles and members; removal stays open so stale ids can be cleared.
+        if guild.get_channel_or_thread(entity_id) is None and guild.get_role(entity_id) is None:
+            try:
+                guild.get_member(entity_id) or await guild.fetch_member(entity_id)
+            except discord.HTTPException:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=f"{entity_id} is not a channel, role or member here"
+                ) from None
         await bot.db.moderation.add_safe_entities(guild.id, [entity_id])
     else:
         await bot.db.moderation.remove_safe_entities(guild.id, [entity_id])

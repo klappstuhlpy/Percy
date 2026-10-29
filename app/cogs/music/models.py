@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -17,6 +18,9 @@ if TYPE_CHECKING:
     import datetime
 
     from .cog import Music
+
+# ponytail: flat cap per player; make it per-guild config if anyone hits it.
+MAX_QUEUE_SIZE = 1000
 
 
 class ShuffleMode(enum.IntEnum):
@@ -41,6 +45,18 @@ class Queue(wavelink.Queue):
         super().__init__()
         self._listen_together: int = MISSING
         self._shuffle: ShuffleMode = ShuffleMode.off
+
+    async def put_wait(self, item: Any, /, *, atomic: bool = True) -> int:
+        """Like :meth:`wavelink.Queue.put_wait`, but tracks past :data:`MAX_QUEUE_SIZE` are dropped.
+
+        Returns how many tracks were actually queued (0 when the queue is already full).
+        """
+        room = MAX_QUEUE_SIZE - len(self._items)
+        if room <= 0:
+            return 0
+        if isinstance(item, Iterable):
+            item = list(item)[:room]
+        return await super().put_wait(item, atomic=atomic)
 
     def reset(self, *, keep_listen_together: bool = False) -> None:
         """Resets the queue and history.

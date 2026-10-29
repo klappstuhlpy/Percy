@@ -87,6 +87,8 @@ __all__ = (
 )
 
 LOG: Final[logging.Logger] = logging.getLogger(bot_name)
+# Error replies echo user input (e.g. a bad `<@id>` argument), so they never ping anyone.
+NO_MENTIONS: Final[discord.AllowedMentions] = discord.AllowedMentions.none()
 
 
 class Bot(commands.Bot):
@@ -861,7 +863,7 @@ class Bot(commands.Bot):
             content = str(to_send_error_lookup)[:1800]
             if not content.startswith('<:'):
                 content = f'{Emojis.error} {content}'
-            await ctx.send(content, reference=ctx.message, delete_after=15, ephemeral=True)
+            await ctx.send(content, reference=ctx.message, delete_after=15, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
 
         error = getattr(error, 'original', error)
@@ -889,14 +891,14 @@ class Bot(commands.Bot):
                 # URLs. The full error is in the log line above.
                 builder.append(f'panic!({type(error).__name__})', color=AnsiColor.red, bold=True)
                 ansi = builder.ensure_codeblock().dynamic(ctx)
-                await ctx.send(ansi, reference=ctx.message)
+                await ctx.send(ansi, reference=ctx.message, allowed_mentions=NO_MENTIONS)
             raise error
 
         if param is None:
             # A BadArgument raised by the command body after parsing (e.g. "unable to join
             # your voice channel") has no parameter to point at: show the message as is
             # instead of crashing the signature renderer on ``param.name``.
-            await ctx.send_error(str(error)[:1800])
+            await ctx.send_error(str(error)[:1800], allowed_mentions=NO_MENTIONS)
             return
 
         builder = AnsiStringBuilder()
@@ -973,7 +975,8 @@ class Bot(commands.Bot):
             builder.append(', is this correct?')
 
         ansi = builder.ensure_codeblock().dynamic(ctx)
-        await ctx.send_error(f'Could not parse your command input properly:\n{ansi}', reference=ctx.message)
+        await ctx.send_error(f'Could not parse your command input properly:\n{ansi}', reference=ctx.message,
+                             allowed_mentions=NO_MENTIONS)
 
     async def on_blacklist_timer_complete(self, timer: Timer) -> None:
         """Called when a blacklist timer completed.

@@ -356,9 +356,11 @@ async def _create_preset_roles(guild: discord.Guild, bot: BotDep) -> int:
     except discord.HTTPException as exc:
         log.warning('Preset role creation failed in guild %s: %s', guild.id, exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Discord refused to create the roles') from None
-
-    await bot.db.leveling.update_guild_config(guild.id, {'level_roles': level_roles})
-    invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
+    finally:
+        # Register whatever was made before a failure too, so a half-run leaves no unregistered roles.
+        if level_roles:
+            await bot.db.leveling.update_guild_config(guild.id, {'level_roles': level_roles})
+            invalidate_cog_cache(bot, 'Leveling', 'get_guild_level_config', guild.id)
     return created
 
 

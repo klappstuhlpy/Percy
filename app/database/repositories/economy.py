@@ -620,17 +620,36 @@ class EconomyRepository(BaseRepository):
             'SELECT level FROM economy_prestige WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
         return value or 0
 
-    async def increment_prestige(self, user_id: int, guild_id: int) -> int:
-        """Advances a member one prestige level, returning the new level."""
-        query = """
-            INSERT INTO economy_prestige (user_id, guild_id, level, last_prestige)
-            VALUES ($1, $2, 1, (now() at time zone 'utc'))
-            ON CONFLICT (user_id, guild_id)
-                DO UPDATE SET level = economy_prestige.level + 1,
-                              last_prestige = (now() at time zone 'utc')
-            RETURNING level;
+    async def try_prestige(self, user_id: int, guild_id: int, level: int, requirement: int) -> int | None:
+        """Atomically resets cash and bank and advances one prestige level, returning the new level.
+
+        ``None`` if the member is no longer at ``level`` or their cash + bank dropped below ``requirement``
+        (a concurrent prestige or a spend while the confirmation was open) -- nothing changes then.
         """
-        return await self.fetchval(query, user_id, guild_id)
+        async with self.acquire() as conn, conn.transaction():
+            await self._lock_wallets(conn, guild_id, [user_id])
+            current = await conn.fetchval(
+                'SELECT level FROM economy_prestige WHERE user_id = $1 AND guild_id = $2 FOR UPDATE;', user_id, guild_id)
+            if (current or 0) != level:
+                return None
+            reset = await conn.fetchval(
+                'UPDATE economy SET cash = 0, bank = 0 '
+                'WHERE user_id = $1 AND guild_id = $2 AND cash + bank >= $3 RETURNING 1;',
+                user_id, guild_id, requirement,
+            )
+            if reset is None:
+                return None
+            return await conn.fetchval(
+                """
+                INSERT INTO economy_prestige (user_id, guild_id, level, last_prestige)
+                VALUES ($1, $2, 1, (now() at time zone 'utc'))
+                ON CONFLICT (user_id, guild_id)
+                    DO UPDATE SET level = economy_prestige.level + 1,
+                                  last_prestige = (now() at time zone 'utc')
+                RETURNING level;
+                """,
+                user_id, guild_id,
+            )
 
     # -- achievements ---------------------------------------------------------
 

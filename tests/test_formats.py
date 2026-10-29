@@ -119,19 +119,6 @@ class TestHumanizeBool:
         assert formats.humanize_bool(False) == 'No'
 
 
-class TestFindNthOccurrence:
-    def test_first(self) -> None:
-        assert formats.find_nth_occurrence('a.b.c.d', '.', 1) == 1
-
-    def test_third(self) -> None:
-        assert formats.find_nth_occurrence('a.b.c.d', '.', 3) == 5
-
-    def test_not_found(self) -> None:
-        assert formats.find_nth_occurrence('abc', '.', 1) is None
-
-    def test_beyond_count(self) -> None:
-        assert formats.find_nth_occurrence('a.b', '.', 5) is None
-
 
 class TestFindWord:
     def test_found_on_first_line(self) -> None:

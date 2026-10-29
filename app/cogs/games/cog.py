@@ -7,7 +7,7 @@ import logging
 import random
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import discord
 from discord import app_commands
@@ -206,6 +206,14 @@ class Games(Cog):
         assert ctx.guild is not None
         await (await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)).add(cash=amount)
 
+    async def _send_staked(self, ctx: Context, bet: int, *args: Any, **kwargs: Any) -> discord.Message:
+        """Sends a game's first message after :meth:`_take_bet`, refunding the stake if Discord refuses it."""
+        try:
+            return await ctx.send(*args, **kwargs)
+        except discord.HTTPException:
+            await self._refund(ctx, bet)
+            raise
+
     @command(
         "games", aliases=["arcade"], description="Browse every game and your personal records.",
         guild_only=True, hybrid=True,
@@ -349,7 +357,7 @@ class Games(Cog):
             return
 
         tower = tower_ui.Tower(cast("discord.Member", ctx.author), bet)
-        tower.message = await ctx.send(view=tower)
+        tower.message = await self._send_staked(ctx, bet, view=tower)
 
     @command("slots", description="Play a game of slots.", alias="slot", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")
@@ -359,7 +367,7 @@ class Games(Cog):
             return
 
         slots = slot_ui.SlotMachine(cast("discord.Member", ctx.author), bet)
-        slots.message = await ctx.send(view=slots)
+        slots.message = await self._send_staked(ctx, bet, view=slots)
 
     @command("blackjack", description="Play a Blackjack game.", alias="bj", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")
@@ -451,7 +459,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
 
-        message = await ctx.send(f"{Emojis.loading} The coin is in the air...")
+        message = await self._send_staked(ctx, bet, f"{Emojis.loading} The coin is in the air...")
         await asyncio.sleep(1.5)
 
         result = random.choice(coinflip_ui.SIDES)
@@ -707,7 +715,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
         game = higherlower_ui.HigherLowerGame(cast("discord.Member", ctx.author), bet)
-        game.message = await ctx.send(view=game)
+        game.message = await self._send_staked(ctx, bet, view=game)
 
     @command("dice", description="Bet on the total of two dice (2-12).", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.", target="The total to bet on (2-12).")
@@ -717,7 +725,7 @@ class Games(Cog):
             return
         assert ctx.guild is not None
 
-        message = await ctx.send(f"{Emojis.loading} Rolling the dice...")
+        message = await self._send_staked(ctx, bet, f"{Emojis.loading} Rolling the dice...")
         await asyncio.sleep(1.5)
 
         d1, d2 = dice_engine.roll()
@@ -758,7 +766,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
         game = mines_ui.MinesGame(cast("discord.Member", ctx.author), bet, mines)
-        game.message = await ctx.send(view=game)
+        game.message = await self._send_staked(ctx, bet, view=game)
 
     @command("trivia", description="Answer a trivia question — first correct answer wins.", guild_only=True, hybrid=True)
     @cooldown(1, 8.0, commands.BucketType.channel)
@@ -849,7 +857,11 @@ class Games(Cog):
 
         game = russianroulette_ui.RussianRoulette(self, ctx, ante)
         self.russian_tables[ctx.channel.id] = game
-        message = await ctx.send(view=game)
+        try:
+            message = await self._send_staked(ctx, ante, view=game)
+        except discord.HTTPException:
+            self.russian_tables.pop(ctx.channel.id, None)
+            raise
         game.message = message
 
     @command(
@@ -905,7 +917,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
         game = crash_ui.CrashGame(cast("discord.Member", ctx.author), bet, auto)
-        game.message = await ctx.send(view=game)
+        game.message = await self._send_staked(ctx, bet, view=game)
         await game.run(self.bot)
 
     @command("plinko", description="Drop a ball through the pegs and win the multiplier it lands on.", guild_only=True)
@@ -923,7 +935,7 @@ class Games(Cog):
             return
         assert ctx.guild is not None
         game = plinko_ui.PlinkoGame(cast("discord.Member", ctx.author), bet, rows, risk)
-        game.message = await ctx.send(view=game)
+        game.message = await self._send_staked(ctx, bet, view=game)
         await game.play(self.bot, ctx.guild.id)
 
     @command("keno", description="Pick 1-10 numbers from 40; ten are drawn. More matches pay more.", guild_only=True)
@@ -946,7 +958,7 @@ class Games(Cog):
             return
         assert ctx.guild is not None
         game = keno_ui.KenoGame(cast("discord.Member", ctx.author), bet, picks)
-        game.message = await ctx.send(view=game)
+        game.message = await self._send_staked(ctx, bet, view=game)
         await game.play(self.bot, ctx.guild.id)
 
     @command("scratch", description="Scratch three of nine tiles; win their average multiplier.", guild_only=True, hybrid=True)
@@ -956,7 +968,7 @@ class Games(Cog):
         if not await self._take_bet(ctx, bet, minimum=10):
             return
         game = scratch_ui.ScratchGame(self.bot, cast("discord.Member", ctx.author), bet)
-        game.message = await ctx.send(view=game)
+        game.message = await self._send_staked(ctx, bet, view=game)
 
     @command("snakeeyes", aliases=["se"], description="Roll two dice — one 1 pays x2, double 1s pay x15.", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")

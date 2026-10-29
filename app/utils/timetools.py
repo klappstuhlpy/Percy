@@ -491,26 +491,6 @@ def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
     return f"{dt.tzname()} {offset_format}"
 
 
-def ensure_future_time(argument: str, now: datetime.datetime, tzinfo: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
-    """Ensures that the given argument is a valid time in the future. (At least 5 minutes from now)"""
-    if now.tzinfo is not None:
-        now = now.astimezone(datetime.UTC).replace(tzinfo=None)
-
-    try:
-        converter = Time(argument, now=now, tzinfo=tzinfo)
-    except commands.BadArgument:
-        random_future = now + datetime.timedelta(days=random.randint(3, 60))
-        raise commands.BadArgument(
-            f'Due date could not be parsed, sorry. Try something like "tomorrow" or "{random_future.date()}".'
-        )
-
-    minimum_time = now + datetime.timedelta(minutes=5)
-    if converter.dt < minimum_time:
-        raise commands.BadArgument("Due date must be at least 5 minutes in the future.")
-
-    return converter.dt
-
-
 def humanize_duration(seconds: float | datetime.timedelta, depth: int = 3) -> str:
     """Formats a duration (in seconds) into one that is human-readable."""
     if isinstance(seconds, datetime.timedelta):

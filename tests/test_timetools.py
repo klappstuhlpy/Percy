@@ -121,16 +121,6 @@ class TestGetTimezoneOffset:
         assert timetools.get_timezone_offset(dt) == '-05:00'
 
 
-class TestEnsureFutureTime:
-    def test_valid_future(self) -> None:
-        result = timetools.ensure_future_time('2h', NOW)
-        assert result > NOW.replace(tzinfo=None)
-
-    def test_too_soon_raises(self) -> None:
-        with pytest.raises(commands.BadArgument):
-            timetools.ensure_future_time('1s', NOW)
-
-
 class TestHumanizeSmallDuration:
     def test_returns_string_with_unit(self) -> None:
         result = timetools.humanize_small_duration(0.5)

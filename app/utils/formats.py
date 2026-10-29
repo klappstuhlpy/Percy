@@ -153,16 +153,6 @@ def deep_to_with(obj: Any, attr: str) -> Any:
     return current
 
 
-def find_nth_occurrence(string: str, substring: str, n: int) -> int | None:
-    """Return index of `n`th occurrence of `substring` in `string`, or None if not found."""
-    index = 0
-    for _ in range(n):
-        index = string.find(substring, index + 1)
-        if index == -1:
-            return None
-    return index
-
-
 def find_word(text: str, word: str) -> tuple[int, int, int] | None:
     """Finds a word in a string and returns its line, start column, and end column.
 
@@ -473,7 +463,7 @@ def format_fields(mapping: Mapping[str, Any], field_width: int | None = None) ->
     fields = sorted(mapping.items(), key=lambda item: item[0])
 
     if field_width is None:
-        field_width = len(max(mapping.keys(), key=len))
+        field_width = max(map(len, mapping), default=0)
 
     out = ""
     for key, val in fields:
