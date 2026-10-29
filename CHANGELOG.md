@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.23.1] - 2026-10-29
+
 ### Security
 - Internal API: channel and role ids in the guild config PATCH/batch, economy item roles, leveling reward roles, multipliers, blacklist, level-up channel and AI channel overrides must belong to the path guild (any snowflake was stored); assigned roles must sit below Percy's top role. Unchanged saved values still pass.
 - Internal API: request bodies and path ids are bounded (lengths, batch size 50, multiplier 100, snowflake/int ranges) instead of reaching asyncpg as 500s; Discord and hoster error texts are logged, not returned.
