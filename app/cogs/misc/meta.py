@@ -954,6 +954,7 @@ class MetaMixin:
 
     @prefix.command(
         "remove",
+        description="Removes a prefix from the list of custom prefixes.",
         aliases=["delete", "del", "rm", "-"],
         ignore_extra=False,
         guild_only=True,
@@ -1060,7 +1061,7 @@ class MetaMixin:
             return AnsiColor.green
         return AnsiColor.yellow
 
-    @command(aliases=("pong", "latency"))
+    @command(aliases=("pong", "latency"), description="Pong! Sends detailed information about the bot's latency.")
     @cooldown(rate=2, per=3)
     async def ping(self, ctx: Context) -> None:
         """Pong! Sends detailed information about the bot's latency."""
