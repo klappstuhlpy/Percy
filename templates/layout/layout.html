@@ -31,7 +31,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Percy">
-    <link rel="apple-touch-icon" href="/static/img/logo.jpg">
+    <link rel="apple-touch-icon" href="/static/img/logo.png">
 
     {# --- Link-preview metadata (Open Graph + Twitter cards) --- #}
     {# Discord, Slack, iMessage, etc. read these to build the rich embed shown
@@ -47,7 +47,7 @@
     <meta property="og:description" content="{% block og_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, autoresponders, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}"/>
     <meta property="og:url" content="{% block og_url %}{{ crate::config::public_base_url() }}{% endblock %}"/>
     {% block og_image %}
-    <meta property="og:image" content="{{ crate::config::public_base_url() }}/static/img/logo.jpg"/>
+    <meta property="og:image" content="{{ crate::config::public_base_url() }}/static/img/logo.png"/>
     <meta property="og:image:type" content="image/jpeg"/>
     <meta property="og:image:width" content="240"/>
     <meta property="og:image:height" content="240"/>
