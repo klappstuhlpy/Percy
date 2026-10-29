@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Description to emoji stats commands.
+
 ## [2.24.0] - 2026-10-29
 
 ### Added

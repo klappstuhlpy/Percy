@@ -357,7 +357,12 @@ class Emoji(Cog):
         embed.set_footer(text="Statistics based on traffic I can see.")
         await ctx.send(embed=embed)
 
-    @_emoji.group("stats", fallback="show", guild_only=True)
+    @_emoji.group(
+        "stats",
+        description="Shows you statistics about the emoji usage.",
+        fallback="show",
+        guild_only=True
+    )
     @describe(emoji="The emoji to show stats for. If not given then it shows server stats")
     async def emojistats(self, ctx: Context, *, emoji: Annotated[str | int, partial_emoji]) -> None:
         """Shows you statistics about the emoji usage."""
@@ -379,7 +384,12 @@ class Emoji(Cog):
         else:
             await self.get_emoji_stats(ctx, emoji.id)
 
-    @emojistats.command("server", aliases=["guild"], guild_only=True)
+    @emojistats.command(
+        "server",
+        description="Shows you statistics about the local server emojis in this server.",
+        aliases=["guild"],
+        guild_only=True
+    )
     async def emojistats_guild(self, ctx: Context) -> None:
         """Shows you statistics about the local server emojis in this server."""
         assert ctx.guild is not None
@@ -410,7 +420,12 @@ class Emoji(Cog):
 
         await ctx.send(embed=embed)
 
-    @emojistats.command("global", aliases=["all"], guild_only=True)
+    @emojistats.command(
+        "global",
+        description="Shows you statistics about the global emoji usage.",
+        aliases=["all"],
+        guild_only=True
+    )
     async def emojistats_global(self, ctx: Context) -> None:
         """Shows you statistics about the global emoji usage."""
         assert ctx.me.joined_at is not None
