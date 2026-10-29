@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Docs: an unreachable inventory is retried twice (after 2 and 5 minutes) and then given up with one error naming the URL, instead of six retries that restarted on every refresh.
+- Docs: `docs set` on an existing package replaces its inventory and cancels the pending retry for the old URL, instead of merging into the old symbols and retrying the stale link.
+- Docs: `docs delete` removes any configured package (or alias), including one whose inventory never loaded, which used to fail with "not available".
+
 ## [2.23.2] - 2026-10-29
 
 ### Removed

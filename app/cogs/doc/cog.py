@@ -42,6 +42,8 @@ FORCE_PREFIX_GROUPS = (
 )
 
 FETCH_RESCHEDULE_DELAY = SimpleNamespace(first=2, repeated=5)
+# Reschedules after the first failed fetch before giving up until the next refresh.
+FETCH_RESCHEDULE_ATTEMPTS = 2
 
 
 class PackageName(commands.Converter):
@@ -274,11 +276,11 @@ class Documentation(Cog):
                 self.inv_retries[api_package_name] = 0
                 delay = FETCH_RESCHEDULE_DELAY.first
 
-            if self.inv_retries[api_package_name] > 5:
+            if self.inv_retries[api_package_name] >= FETCH_RESCHEDULE_ATTEMPTS:
                 log.error(
-                    "Failed to fetch inventory for %s after 5 attempts.\n"
-                    "Refresh the inventory manually with `?docs refresh`.",
+                    "Giving up on the inventory for %s at %s; fix it with `?docs set` or remove it with `?docs delete`.",
                     api_package_name,
+                    inventory_url,
                 )
                 return
 
@@ -289,9 +291,20 @@ class Documentation(Cog):
                 self.update_or_reschedule_inventory(api_package_name, base_url, inventory_url),
             )
         else:
+            self.inv_retries.pop(api_package_name, None)
             if not base_url:
                 base_url = self.base_url_from_inventory_url(inventory_url)
             self.update_single(api_package_name, base_url, package)
+
+    async def drop_package(self, package_name: str) -> None:
+        """Forget everything loaded or pending for `package_name`, so a re-add starts clean."""
+        if package_name in self.inventory_scheduler:
+            self.inventory_scheduler.cancel(package_name)
+        self.inv_retries.pop(package_name, None)
+        self.base_urls.pop(package_name, None)
+        self.doc_symbols.pop(package_name, None)
+        await self.item_fetcher.remove(package_name)
+        await doc_cache.delete(package_name)
 
     def ensure_unique_symbol_name(self, package_name: str, group_name: str, symbol_name: str) -> str:
         """Ensure `symbol_name` doesn't overwrite a symbol in `doc_symbols`.
@@ -475,6 +488,7 @@ class Documentation(Cog):
         _items = "\n".join(f"{key}: {value}" for key, value in body.items())
         log.info("User @%s (ID: %s) added a new documentation package:\n%s", ctx.author, ctx.author.id, _items)
 
+        await self.drop_package(package_name)
         self.update_single(package_name, str(body["base_url"]), inventory_dict)  # type: ignore
         await ctx.send_success(f"Added the package `{package_name}` to the database and updated the inventories.")
 
@@ -500,14 +514,21 @@ class Documentation(Cog):
     @describe(package_name="The name of the package to remove.")
     @commands.is_owner()
     @lock("Docs", "delete", raise_error=True)
-    async def delete_command(self, ctx: Context, package_name: Annotated[str, PackageName(available=True)]) -> None:
-        """Removes the specified package from the database."""
-        await self.bot.doc_links.remove(package_name)
+    async def delete_command(self, ctx: Context, package_name: Annotated[str, PackageName]) -> None:
+        """Removes the specified package from the database.
 
-        async with ctx.typing():
-            await self.refresh_inventories()
-            await doc_cache.delete(package_name)
-        await ctx.send_success(f"Successfully deleted `{package_name}` and refreshed the inventories.")
+        Checked against the stored links rather than the loaded inventories, so a package whose
+        inventory never loaded (dead URL) can still be removed.
+        """
+        package_name = self.base_aliases.get(package_name, package_name)
+        if package_name not in self.bot.doc_links:
+            await ctx.send_error(f"The package `{package_name}` is not configured.")
+            return
+
+        await self.bot.doc_links.remove(package_name)
+        await self.drop_package(package_name)
+        self.base_aliases = {alias: pkg for alias, pkg in self.base_aliases.items() if pkg != package_name}
+        await ctx.send_success(f"Successfully deleted `{package_name}`.")
 
     @docs.command(
         name="refresh", aliases=["rfsh", "r"], description="Refresh the inventories.", hidden=True, with_app_command=False
