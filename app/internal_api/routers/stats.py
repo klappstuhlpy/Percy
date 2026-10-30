@@ -180,7 +180,7 @@ async def get_bot_stats(bot: BotDep) -> dict:
         'cog_count': len(bot.cogs),
         'command_count': sum(1 for _ in bot.walk_commands()),
         'latency_ms': round(bot.latency * 1000, 1),
-        'uptime_seconds': (bot.uptime.total_seconds() if hasattr(bot, 'uptime') else 0),
+        'uptime_seconds': (datetime.datetime.now(datetime.timezone.utc) - bot.startup_timestamp).total_seconds(),
         'ai': ai_health,
     }
 

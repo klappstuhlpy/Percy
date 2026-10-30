@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `appinfo` no longer fails with `KeyError: 'owner'`: the application endpoint it reads omits the owner (and the bot fields for apps without a bot user), which are now filled with defaults.
 - Components V2 views (paginators, modlog cases, leaderboards, ...) no longer ping the users they list: user mentions are now off by default. Direct invites (`fight`, `tictactoe`, `coinflip` duels, `trade`) still ping the invited member.
+- Uptime stats that are delivered through internal api were derived through a wrong attribute.
 
 ## [2.24.0] - 2026-10-29
 
