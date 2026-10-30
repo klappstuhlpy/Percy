@@ -83,6 +83,7 @@
         $('item_price').value = d ? d.price : '';
         $('item_desc').value = d ? d.description : '';
         $('item_emoji').value = d ? d.emoji : '';
+        $('item_image').value = d ? d.image : '';
         $('item_rarity').value = d ? d.rarity : 'common';
         effectSelect.value = d ? d.effect : 'none';
         $('item_effect_value').value = '';
@@ -116,6 +117,7 @@
                 name, price,
                 description: $('item_desc').value.trim() || null,
                 emoji: $('item_emoji').value.trim() || null,
+                image_url: $('item_image').value.trim() || null,
                 rarity: $('item_rarity').value,
                 stock: intOrNull('item_stock'),
                 max_per_user: intOrNull('item_max_per_user'),

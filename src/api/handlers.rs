@@ -316,6 +316,7 @@ const ITEM_FIELDS: &[&str] = &[
     "available_until",
     "remove_role_id",
     "reply_message",
+    "image_url",
 ];
 /// The effect is fixed once owned copies may exist (Percy ignores it on PATCH anyway).
 const ITEM_PATCH_FIELDS: &[&str] = &[
@@ -330,6 +331,7 @@ const ITEM_PATCH_FIELDS: &[&str] = &[
     "available_until",
     "remove_role_id",
     "reply_message",
+    "image_url",
 ];
 
 fn only(map: serde_json::Map<String, Value>, allowed: &[&str]) -> ApiResult<serde_json::Map<String, Value>> {

@@ -70,6 +70,7 @@
                 {% for item in economy.items %}
                 <tr>
                     <td data-label="Item">
+                        {% if let Some(src) = item.image_url %}<img class="item-thumb" src="{{ src }}" alt="" width="32" height="32" loading="lazy" referrerpolicy="no-referrer">{% endif %}
                         {% if let Some(e) = item.emoji %}{{ e }} {% endif %}<strong>{{ item.name }}</strong>
                         {% if item.builtin_key.is_some() %}<span class="badge badge-info">Percy item</span>{% endif %}
                         {% if !item.for_sale %}<span class="badge badge-muted">Not for sale</span>{% endif %}
@@ -95,7 +96,8 @@
                             data-required-role="{{ item.required_role_id.as_deref().unwrap_or("") }}"
                             data-remove-role="{{ item.remove_role_id.as_deref().unwrap_or("") }}"
                             data-available-until="{{ item.available_until.as_deref().unwrap_or("") }}"
-                            data-reply="{{ item.reply_message.as_deref().unwrap_or("") }}">Edit</button>
+                            data-reply="{{ item.reply_message.as_deref().unwrap_or("") }}"
+                            data-image="{{ item.image_url.as_deref().unwrap_or("") }}">Edit</button>
                         <button type="button" class="button small danger delete-item-btn" data-id="{{ item.id }}" data-name="{{ item.name }}">Delete</button>
                         {% endif %}
                     </td>
@@ -181,6 +183,9 @@
             <input type="text" id="item_desc" class="config-input" maxlength="256">
             <label class="config-label">Emoji</label>
             <input type="text" id="item_emoji" class="config-input" maxlength="64">
+            <label class="config-label" for="item_image">Image link</label>
+            <input type="url" id="item_image" class="config-input" maxlength="500" placeholder="https://…" pattern="https://.*">
+            <span class="config-description">Shown on the item's card in Discord. Use a permanent https link — Discord attachment links expire.</span>
             <label class="config-label">Rarity</label>
             <select id="item_rarity" class="config-select">
                 <option value="common">Common</option>

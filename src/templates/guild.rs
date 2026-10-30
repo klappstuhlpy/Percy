@@ -857,6 +857,7 @@ mod tests {
             available_until: Some("2026-12-01T00:00:00".into()),
             remove_role_id: None,
             reply_message: None,
+            image_url: Some("https://example.com/item.png".into()),
             builtin_key: builtin.map(Into::into),
             for_sale: true,
         };
@@ -887,6 +888,8 @@ mod tests {
         assert!(html.contains("Custom Crate") && html.contains("Padlock"));
         assert!(html.contains("sold out") && html.contains("\u{221e}"));
         assert!(html.contains("Percy item"));
+        assert!(html.contains(r#"class="item-thumb" src="https://example.com/item.png""#));
+        assert!(html.contains(r#"data-image="https://example.com/item.png""#));
         // Exactly one row (the custom item) carries edit/delete controls.
         assert_eq!(html.matches("edit-item-btn\"").count(), 1);
         assert_eq!(html.matches("delete-item-btn\"").count(), 1);

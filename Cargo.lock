@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "dashboard"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "askama",
@@ -794,7 +794,7 @@ dependencies = [
 [[package]]
 name = "kls-ui"
 version = "0.1.0"
-source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.17.1#8ff23beaa3e7b4e00cb9e5e4158762178ebd7f51"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.18.0#46964a055546fd42355f98b12d77ad86e9b66af2"
 dependencies = [
  "axum",
 ]
@@ -802,7 +802,7 @@ dependencies = [
 [[package]]
 name = "kls-web-core"
 version = "0.1.1"
-source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.17.1#8ff23beaa3e7b4e00cb9e5e4158762178ebd7f51"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.18.0#46964a055546fd42355f98b12d77ad86e9b66af2"
 dependencies = [
  "anyhow",
  "askama",
@@ -994,8 +994,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "percy-client"
-version = "0.17.0"
-source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.17.1#8ff23beaa3e7b4e00cb9e5e4158762178ebd7f51"
+version = "0.18.0"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.18.0#46964a055546fd42355f98b12d77ad86e9b66af2"
 dependencies = [
  "reqwest",
  "serde",

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-30
+
+### Added
+- Economy: shop items take an **Image link**, shown as the item's card thumbnail in Discord and beside the item in the shop table. Needs Percy's migration V68 and percy-client 0.18.0 (kls-core v0.18.0).
+
 ## [0.19.0] - 2026-10-28
 
 ### Fixed

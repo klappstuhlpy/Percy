@@ -50,3 +50,12 @@
     border: 1px solid var(--box-border);
     color: var(--branding);
 }
+
+.item-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    vertical-align: middle;
+    margin-right: var(--space-2);
+}
