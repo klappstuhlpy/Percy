@@ -125,7 +125,7 @@ a.card, a.card:hover, a.row, a.row:hover { color: var(--text); }
 .table tbody tr:hover { background: var(--surface-2); }
 
 .modal {
-    width: min(480px, calc(100vw - 32px)); padding: var(--space-5); border-radius: var(--radius-lg);
+    width: min(600px, calc(100vw - 32px)); padding: var(--space-5); border-radius: var(--radius-lg);
     border: 1px solid var(--line); background: var(--surface-2); color: var(--text); box-shadow: var(--shadow-pop);
 }
 .modal::backdrop { background: rgba(0, 0, 0, 0.55); }

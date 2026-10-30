@@ -1257,8 +1257,8 @@ th.th-sortable[aria-sort="descending"]::after {
     border: 1px solid var(--box-border);
     border-radius: 0.625rem;
     padding: 1.5rem;
-    max-width: 420px;
-    width: 90%;
+    max-width: 560px;
+    width: 92%;
     /* Cap height so tall modals (e.g. create poll) scroll instead of
        overflowing the viewport and getting clipped top and bottom. */
     max-height: 90vh;
@@ -2165,10 +2165,10 @@ th.th-sortable[aria-sort="descending"]::after {
 .modal-form > :last-child { margin-bottom: 0; }
 
 /* -- Modal width modifiers (compose with .modal-card) -- */
-.modal-card.w-sm { max-width: 320px; }
-.modal-card.w-md { max-width: 440px; }
-.modal-card.w-lg { max-width: 520px; }
-.modal-card.w-xl { max-width: 560px; }
+.modal-card.w-sm { max-width: 400px; }
+.modal-card.w-md { max-width: 560px; }
+.modal-card.w-lg { max-width: 680px; }
+.modal-card.w-xl { max-width: 760px; }
 
 /* -- Compact form inputs (shared by filter/inline forms) -- */
 

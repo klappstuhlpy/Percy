@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-10-30
+
+### Changed
+- Modals are wider (default 560px; `w-sm`/`w-md`/`w-lg`/`w-xl` 400/560/680/760px; `<dialog>` modals 600px), and the shop item modal uses the large size.
+
+### Fixed
+- Modal backdrops cover the whole viewport again: on screens wider than 1280px the content column's width cap cut them down to a centred translucent rectangle.
+
 ## [0.20.0] - 2026-10-30
 
 ### Added

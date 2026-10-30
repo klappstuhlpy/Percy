@@ -185,6 +185,8 @@ html:has(.shell-page), .dash-sidebar { scrollbar-width: thin; scrollbar-color: c
     padding: var(--space-5) var(--space-5) var(--space-6);
 }
 .dashboard-content > * { max-width: 1280px; margin-left: auto; margin-right: auto; }
+/* Overlays are direct children too, but must keep covering the whole viewport (capped, they dim a centred box). */
+.dashboard-content > .modal-overlay { max-width: none; margin: 0; }
 .dashboard-header {
     display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4);
     margin-bottom: var(--space-5); padding-bottom: 0; border-bottom: 0;
