@@ -56,6 +56,7 @@ class CreateItemBody(BaseModel):
     available_until: datetime.datetime | None = None
     remove_role_id: int | None = _Snowflake
     reply_message: str | None = Field(default=None, max_length=2000)
+    image_url: str | None = Field(default=None, max_length=2000)
 
 
 class PatchItemBody(BaseModel):
@@ -72,12 +73,13 @@ class PatchItemBody(BaseModel):
     available_until: datetime.datetime | None = None
     remove_role_id: int | None = _Snowflake
     reply_message: str | None = Field(default=None, max_length=2000)
+    image_url: str | None = Field(default=None, max_length=2000)
 
 
 #: Columns ``PATCH /economy/items/{id}`` may write (the effect is fixed once owned copies exist).
 _ITEM_FIELDS = (
     'name', 'price', 'description', 'emoji', 'rarity', 'stock', 'max_per_user', 'required_role_id',
-    'available_until', 'remove_role_id', 'reply_message',
+    'available_until', 'remove_role_id', 'reply_message', 'image_url',
 )
 
 
@@ -175,6 +177,7 @@ async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
             'available_until': r['available_until'].isoformat() if r.get('available_until') else None,
             'remove_role_id': str(r['remove_role_id']) if r.get('remove_role_id') else None,
             'reply_message': r.get('reply_message'),
+            'image_url': r.get('image_url'),
             'builtin_key': r.get('builtin_key'),
             'for_sale': r.get('for_sale', True),
         }
@@ -247,7 +250,7 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
 
     error = name_reserved_error(name) or validate_item_effect(effect, effect_value, duration_minutes) or validate_item_meta(
         name, rarity=body.rarity, stock=body.stock, max_per_user=body.max_per_user, price=body.price,
-        reply_message=body.reply_message,
+        reply_message=body.reply_message, image_url=body.image_url,
     )
     error = error or _role_error(guild, 'required_role_id', body.required_role_id) or _role_error(
         guild, 'remove_role_id', body.remove_role_id
@@ -262,7 +265,9 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='an item with that name already exists')
     meta = {
         key: getattr(body, key)
-        for key in ('emoji', 'rarity', 'stock', 'max_per_user', 'required_role_id', 'remove_role_id', 'reply_message')
+        for key in (
+            'emoji', 'rarity', 'stock', 'max_per_user', 'required_role_id', 'remove_role_id', 'reply_message', 'image_url'
+        )
     }
     meta['available_until'] = _naive_utc(body.available_until)
     await bot.db.economy.update_item(guild.id, result['id'], meta)
@@ -283,6 +288,7 @@ async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: ItemId, body
     error = validate_item_meta(
         values.get('name'), rarity=values.get('rarity'), stock=values.get('stock'),
         max_per_user=values.get('max_per_user'), price=values.get('price'), reply_message=values.get('reply_message'),
+        image_url=values.get('image_url'),
     )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)

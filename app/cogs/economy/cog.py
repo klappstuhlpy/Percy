@@ -975,6 +975,7 @@ class Economy(Cog):
         available_for='How long it stays on sale, e.g. "7d" or "2 weeks"; leave empty for always.',
         remove_role="A role taken away from the member when the item is used.",
         reply_message="An extra line shown when the item is used.",
+        image="An https:// image link shown on the item's card.",
         description="A description.",
     )
     async def shop_add(
@@ -994,6 +995,7 @@ class Economy(Cog):
         available_for: str | None = None,
         remove_role: discord.Role | None = None,
         reply_message: commands.Range[str, 1, REPLY_LIMIT] | None = None,
+        image: str | None = None,
         *,
         description: str | None = None,
     ) -> None:
@@ -1009,7 +1011,7 @@ class Economy(Cog):
 
         Emoji, rarity, stock, per-member limit, a required role, an end date
         (`available_for`), a role to remove on use and a reply message are optional
-        and can be changed later with `shop edit`.
+        and can be changed later with `shop edit`. `image` is shown on the item's card.
         """
         assert ctx.guild is not None
         effect_value = value
@@ -1026,7 +1028,7 @@ class Economy(Cog):
             effect_value = role.id
 
         error = name_reserved_error(name) or validate_item_effect(effect, effect_value, duration) or validate_item_meta(
-            name, rarity=rarity, reply_message=reply_message
+            name, rarity=rarity, reply_message=reply_message, image_url=image
         )
         until = None
         if available_for is not None:
@@ -1055,6 +1057,7 @@ class Economy(Cog):
             "available_until": until,
             "remove_role_id": remove_role.id if remove_role and not remove_role.is_default() else None,
             "reply_message": reply_message,
+            "image_url": image,
         }
         record = await self.bot.db.economy.update_item(ctx.guild.id, record["id"], meta) or record
 
@@ -1082,6 +1085,7 @@ class Economy(Cog):
         available_for="Stay on sale for this long from now, e.g. '7d' ('none' = always).",
         remove_role="Role taken away on use; pick @everyone to stop removing one.",
         reply_message="Extra line shown on use ('none' removes it).",
+        image="An https:// image link for the item's card ('none' removes it).",
         description="The new description (type 'none' to remove it).",
     )
     @app_commands.autocomplete(name=shop_item_autocomplete)  # type: ignore
@@ -1099,6 +1103,7 @@ class Economy(Cog):
         available_for: str | None = None,
         remove_role: discord.Role | None = None,
         reply_message: str | None = None,
+        image: str | None = None,
         *,
         description: str | None = None,
     ) -> None:
@@ -1140,6 +1145,8 @@ class Economy(Cog):
             values["remove_role_id"] = None if remove_role.is_default() else remove_role.id
         if reply_message is not None:
             values["reply_message"] = None if reply_message.lower() == "none" else reply_message
+        if image is not None:
+            values["image_url"] = None if image.lower() == "none" else image.strip()
         if description is not None:
             values["description"] = None if description.lower() == "none" else description
 
@@ -1147,7 +1154,8 @@ class Economy(Cog):
             await ctx.send_error("Nothing to change — pass at least one field.")
             return
         if error := (name_reserved_error(values["name"]) if "name" in values else None) or validate_item_meta(
-            values.get("name"), rarity=values.get("rarity"), reply_message=values.get("reply_message")
+            values.get("name"), rarity=values.get("rarity"), reply_message=values.get("reply_message"),
+            image_url=values.get("image_url"),
         ):
             await ctx.send_error(error)
             return

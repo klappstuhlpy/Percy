@@ -132,6 +132,12 @@ class _FakeEconomyRepo:
     async def get_quantity(self, _user_id: int, _guild_id: int, item_id: int) -> int:
         return self.owned.get(item_id, 0)
 
+    async def item_stats(self, _guild_id: int, item_id: int) -> dict[str, Any]:
+        held = sum(q for i, q in self.owned.items() if i == item_id)
+        return getattr(self, 'stats', None) or {
+            'held': held, 'holders': int(held > 0), 'listings': 0, 'listed': 0, 'lowest': None, 'average': None,
+        }
+
     async def get_active_boosts(self, _user_id: int, _guild_id: int) -> list[Any]:
         return []
 
@@ -189,6 +195,19 @@ async def test_shop_detail_shows_listing_gates(monkeypatch: pytest.MonkeyPatch) 
     assert {'Buy 1', 'Buy…', 'Back'} <= labels
     # A custom emoji becomes the detail card's thumbnail.
     assert any(isinstance(i, discord.ui.Thumbnail) for i in browser.walk_children())
+
+
+async def test_detail_shows_image_and_market(monkeypatch: pytest.MonkeyPatch) -> None:
+    items = [_item(4, image_url='https://i.imgur.com/a.png', emoji='<:coin:123456789012345678>')]
+    browser = _browser(monkeypatch, items, {4: 2}, mode='shop', item_id=4)
+    browser.cog.bot.db.economy.stats = {  # type: ignore[attr-defined]
+        'held': 9, 'holders': 3, 'listings': 2, 'listed': 5, 'lowest': 80, 'average': 120,
+    }
+    await browser.build()
+    thumbs = [i for i in browser.walk_children() if isinstance(i, discord.ui.Thumbnail)]
+    assert [t.media.url for t in thumbs] == ['https://i.imgur.com/a.png']  # the image beats the emoji
+    text = _text(browser)
+    assert '×9' in text and '**3** members' in text and 'Active listings: **2**' in text and '120' in text
 
 
 async def test_own_inventory_offers_actions_others_are_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -337,6 +356,14 @@ def test_expiry_and_message() -> None:
     assert 'no longer on sale' in (purchase_error(PurchaseStatus.expired, name='x') or '')
     assert validate_item_meta(reply_message='x' * 501) is not None
     assert validate_item_meta(reply_message='x' * 500) is None
+
+
+def test_validate_item_image_url() -> None:
+    assert validate_item_meta(image_url='https://i.imgur.com/a.png') is None
+    assert validate_item_meta(image_url='http://i.imgur.com/a.png') is not None
+    assert validate_item_meta(image_url='https://x.com/a b.png') is not None
+    assert validate_item_meta(image_url='https://' + 'x' * 500) is not None
+    assert 'expire' in (validate_item_meta(image_url='https://cdn.discordapp.com/attachments/1/2/a.png') or '')
 
 
 async def test_shop_shows_deals_and_disables_expired_buy(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Description to emoji stats commands.
 - Description to prefix remove command.
+- Economy: items can carry a picture (`shop add`/`shop edit` `image:`, `image_url` on the internal API), shown as the item card's thumbnail ahead of a custom emoji. Only permanent `https://` links are accepted; Discord attachment links are refused because they expire. Migration V68 adds the column.
+- Economy: item cards show where a drop is found and a **Market** section — units in circulation, holders, and open market listings with their lowest and average price.
 
 ### Changed
 - Modlog: warn cases use 🚩 instead of ⚠, which Discord drew as a white outline.

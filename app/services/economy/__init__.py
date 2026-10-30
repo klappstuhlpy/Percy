@@ -114,6 +114,7 @@ from app.services.economy.drops import (
 )
 from app.services.economy.items import (
     CATEGORIES,
+    IMAGE_URL_LIMIT,
     ITEM_NAME_LIMIT,
     MAX_ITEM_STOCK,
     RARITIES,
@@ -218,6 +219,7 @@ __all__ = (
     'HUNGRY_AFTER_HOURS',
     'HUNTING_COOLDOWN',
     'HUNTING_TABLE',
+    'IMAGE_URL_LIMIT',
     'ITEM_EFFECTS',
     'ITEM_NAME_LIMIT',
     'JOB_LADDER',

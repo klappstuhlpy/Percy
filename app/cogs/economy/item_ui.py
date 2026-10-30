@@ -343,8 +343,9 @@ class ItemBrowser(LayoutView):
             f'{item.get("description") or "*No description.*"}'
         )
         emoji = discord.PartialEmoji.from_str(item['emoji']) if item.get('emoji') else None
-        if emoji is not None and emoji.id:
-            container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(emoji.url)))
+        picture = item.get('image_url') or (emoji.url if emoji is not None and emoji.id else None)
+        if picture:
+            container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(picture)))
         else:
             container.add_item(discord.ui.TextDisplay(heading))
         if notice := self._notice_item():
@@ -367,7 +368,9 @@ class ItemBrowser(LayoutView):
                 left = await self._durability(item_id) or built_in.durability
                 facts.append(f'\N{WRENCH} Uses left on current: **{left}/{built_in.durability}**')
             facts.append(f'\N{WRENCH} Tool for `{built_in.tool_for}` • lasts **{built_in.durability}** uses per unit')
-        expired = shop_row is not None and self._expired(shop_row)
+        if built_in is not None and built_in.drop_from:
+            facts.append(f'\N{LEFT-POINTING MAGNIFYING GLASS} Found from `{built_in.drop_from}`')
+        expired =shop_row is not None and self._expired(shop_row)
         if shop_row is not None:
             if shop_row['stock'] is not None:
                 facts.append(f'\N{PACKAGE} Stock: **{shop_row["stock"]:,}** left' if shop_row['stock'] > 0 else '\N{PACKAGE} **Sold out**')
@@ -381,6 +384,7 @@ class ItemBrowser(LayoutView):
             if shop_row['remove_role_id']:
                 facts.append(f'\N{CROSS MARK} Using it removes <@&{shop_row["remove_role_id"]}>')
         container.add_item(discord.ui.TextDisplay('\n'.join(facts)))
+        container.add_item(discord.ui.TextDisplay(await self._market_text(item_id)))
         container.add_item(discord.ui.Separator())
 
         back = self._button('Back', self._open(None), emoji='\N{LEFTWARDS ARROW WITH HOOK}')
@@ -402,6 +406,20 @@ class ItemBrowser(LayoutView):
         else:
             container.add_item(discord.ui.ActionRow(back))
         return container
+
+    async def _market_text(self, item_id: int) -> str:
+        """The server-wide picture: how many exist, who holds them and what the player market asks."""
+        stats = await self.cog.bot.db.economy.item_stats(self.guild.id, item_id)
+        cash = Emojis.Economy.cash
+        lines = ['### Market', f'In circulation: **×{stats["held"]:,}** across **{stats["holders"]:,}** members']
+        if stats['listings']:
+            lines.append(
+                f'Active listings: **{stats["listings"]:,}** (×{stats["listed"]:,}) • '
+                f'lowest {cash} {fnumb(stats["lowest"])} • average {cash} {fnumb(stats["average"])}'
+            )
+        else:
+            lines.append('Active listings: *none*')
+        return '\n'.join(lines)
 
     # -- actions ----------------------------------------------------------------
 

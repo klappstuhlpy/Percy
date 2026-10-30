@@ -170,7 +170,7 @@ class EconomyRepository(BaseRepository):
         query = """
             SELECT i.item_id, i.quantity, e.name, e.description, e.price,
                    e.effect, e.effect_value, e.duration_minutes, e.emoji, e.rarity,
-                   e.builtin_key, e.for_sale, i.durability
+                   e.builtin_key, e.for_sale, e.image_url, i.durability
             FROM economy_inventory i
             JOIN economy_items e ON e.id = i.item_id
             WHERE i.user_id = $1 AND i.guild_id = $2 AND i.quantity > 0
@@ -896,6 +896,25 @@ class EconomyRepository(BaseRepository):
         """How many listings a member has open."""
         return await self.fetchval(
             'SELECT COUNT(*) FROM economy_market WHERE guild_id = $1 AND seller_id = $2;', guild_id, seller_id)
+
+    async def item_stats(self, guild_id: int, item_id: int) -> asyncpg.Record:
+        """Server-wide numbers for one item: units held, holders, and its open market listings."""
+        return await self.fetchrow(
+            """
+            SELECT
+                (SELECT COALESCE(SUM(quantity), 0) FROM economy_inventory
+                 WHERE guild_id = $1 AND item_id = $2 AND quantity > 0) AS held,
+                (SELECT COUNT(*) FROM economy_inventory
+                 WHERE guild_id = $1 AND item_id = $2 AND quantity > 0) AS holders,
+                COUNT(m.id) AS listings,
+                COALESCE(SUM(m.quantity), 0) AS listed,
+                MIN(m.price_each) AS lowest,
+                (SUM(m.price_each * m.quantity) / NULLIF(SUM(m.quantity), 0))::bigint AS average
+            FROM economy_market m
+            WHERE m.guild_id = $1 AND m.item_id = $2;
+            """,
+            guild_id, item_id,
+        )
 
     async def market_listings(
         self, guild_id: int, *, item_id: int | None = None, seller_id: int | None = None

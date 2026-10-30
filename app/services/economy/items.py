@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 __all__ = (
     'CATEGORIES',
+    'IMAGE_URL_LIMIT',
     'ITEM_NAME_LIMIT',
     'MAX_ITEM_STOCK',
     'RARITIES',
@@ -44,6 +45,10 @@ ITEM_NAME_LIMIT = 64
 MAX_ITEM_STOCK = 1_000_000
 #: Longest ``reply_message`` an item may carry.
 REPLY_LIMIT = 500
+#: Longest ``image_url`` an item may carry.
+IMAGE_URL_LIMIT = 500
+#: Signed Discord attachment links expire, so an item picture hosted there breaks within a day.
+_EXPIRING_HOSTS = ('cdn.discordapp.com/attachments/', 'media.discordapp.net/attachments/')
 #: Items put on sale per guild per UTC day, and the discount bounds (percent).
 SALE_COUNT = 2
 SALE_MIN, SALE_MAX = 10, 40
@@ -122,6 +127,7 @@ def validate_item_meta(
     max_per_user: int | None = None,
     price: int | None = None,
     reply_message: str | None = None,
+    image_url: str | None = None,
 ) -> str | None:
     """Validate the listing columns, returning an error message or ``None`` when valid.
 
@@ -139,6 +145,11 @@ def validate_item_meta(
         return 'The price must be at least 1.'
     if reply_message is not None and len(reply_message) > REPLY_LIMIT:
         return f'The reply message can be at most {REPLY_LIMIT} characters.'
+    if image_url is not None:
+        if not image_url.startswith('https://') or len(image_url) > IMAGE_URL_LIMIT or any(c.isspace() for c in image_url):
+            return f'The image must be an https:// link of at most {IMAGE_URL_LIMIT} characters.'
+        if any(host in image_url for host in _EXPIRING_HOSTS):
+            return 'Discord attachment links expire after a day — host the image somewhere permanent.'
     return None
 
 
