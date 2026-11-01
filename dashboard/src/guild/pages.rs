@@ -159,7 +159,7 @@ pub async fn guild_leveling(State(app): State<AppState>, session: Session, Path(
     // Text channels for the level-up message destination; all channels for multiplier/blacklist pickers.
     let text_channels: Vec<Channel> = channels
         .iter()
-        .filter(|c| c.channel_type == "text" || c.channel_type == "news")
+        .filter(|c| c.type_ == "text" || c.type_ == "news")
         .cloned()
         .collect();
     let all_channels = channels.clone();

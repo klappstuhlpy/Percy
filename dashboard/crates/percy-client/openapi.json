@@ -81,6 +81,174 @@
         "title": "AdjustBalanceBody",
         "type": "object"
       },
+      "AiAskResponse": {
+        "description": "``available`` is false when the assistant is off/unreachable; ``reason`` then says why.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/AiSuggestion"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "suggestions"
+        ],
+        "title": "AiAskResponse",
+        "type": "object"
+      },
+      "AiChannelOverride": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "controlled": {
+            "$ref": "#/components/schemas/AiFlags"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/AiFlags"
+          }
+        },
+        "required": [
+          "channel",
+          "channel_id",
+          "controlled",
+          "enabled"
+        ],
+        "title": "AiChannelOverride",
+        "type": "object"
+      },
+      "AiConfig": {
+        "description": "Per-guild AI feature flags plus per-channel overrides.",
+        "properties": {
+          "flags": {
+            "$ref": "#/components/schemas/AiFlags"
+          },
+          "overrides": {
+            "items": {
+              "$ref": "#/components/schemas/AiChannelOverride"
+            },
+            "title": "Overrides",
+            "type": "array"
+          }
+        },
+        "required": [
+          "flags",
+          "overrides"
+        ],
+        "title": "AiConfig",
+        "type": "object"
+      },
+      "AiFlags": {
+        "properties": {
+          "assistant": {
+            "title": "Assistant",
+            "type": "boolean"
+          },
+          "giveaways": {
+            "title": "Giveaways",
+            "type": "boolean"
+          },
+          "moderation": {
+            "title": "Moderation",
+            "type": "boolean"
+          },
+          "music": {
+            "title": "Music",
+            "type": "boolean"
+          },
+          "polls": {
+            "title": "Polls",
+            "type": "boolean"
+          },
+          "reminders": {
+            "title": "Reminders",
+            "type": "boolean"
+          },
+          "router": {
+            "title": "Router",
+            "type": "boolean"
+          },
+          "sentinel": {
+            "title": "Sentinel",
+            "type": "boolean"
+          },
+          "tags": {
+            "title": "Tags",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "assistant",
+          "router",
+          "moderation",
+          "sentinel",
+          "music",
+          "polls",
+          "giveaways",
+          "tags",
+          "reminders"
+        ],
+        "title": "AiFlags",
+        "type": "object"
+      },
+      "AiSuggestion": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "command"
+        ],
+        "title": "AiSuggestion",
+        "type": "object"
+      },
       "AlwaysOnBody": {
         "properties": {
           "enabled": {
@@ -613,6 +781,76 @@
           "action"
         ],
         "title": "BulkActionBody",
+        "type": "object"
+      },
+      "Channel": {
+        "properties": {
+          "can_post": {
+            "title": "Can Post",
+            "type": "boolean"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "maximum": 2147483647.0,
+            "minimum": -2147483648.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "position",
+          "category_id",
+          "can_post"
+        ],
+        "title": "Channel",
+        "type": "object"
+      },
+      "ChannelRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "ChannelRef",
         "type": "object"
       },
       "ControlBody": {
@@ -1365,6 +1603,274 @@
         "title": "GiveItemBody",
         "type": "object"
       },
+      "GuildFlags": {
+        "properties": {
+          "alerts": {
+            "title": "Alerts",
+            "type": "boolean"
+          },
+          "audit_log": {
+            "title": "Audit Log",
+            "type": "boolean"
+          },
+          "mentions": {
+            "title": "Mentions",
+            "type": "boolean"
+          },
+          "raid": {
+            "title": "Raid",
+            "type": "boolean"
+          },
+          "sentinel": {
+            "title": "Sentinel",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "audit_log",
+          "raid",
+          "alerts",
+          "sentinel",
+          "mentions"
+        ],
+        "title": "GuildFlags",
+        "type": "object"
+      },
+      "GuildHealth": {
+        "properties": {
+          "attention": {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Attention",
+            "type": "integer"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/HealthFeature"
+            },
+            "title": "Features",
+            "type": "array"
+          }
+        },
+        "required": [
+          "features",
+          "attention"
+        ],
+        "title": "GuildHealth",
+        "type": "object"
+      },
+      "GuildInfo": {
+        "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AiConfig"
+          },
+          "alert_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audit_log_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audit_log_flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Audit Log Flags",
+            "type": "object"
+          },
+          "flags": {
+            "$ref": "#/components/schemas/GuildFlags"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "id": {
+            "maximum": 1.8446744073709552e+19,
+            "minimum": 0.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "ignored_entities": {
+            "items": {
+              "$ref": "#/components/schemas/IgnoredEntity"
+            },
+            "title": "Ignored Entities",
+            "type": "array"
+          },
+          "is_new_config": {
+            "title": "Is New Config",
+            "type": "boolean"
+          },
+          "member_count": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Count"
+          },
+          "mention_count": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mention Count"
+          },
+          "message_log_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mod_log_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "music_panel_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mute_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "poll_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "poll_ping_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "poll_reason_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prefixes",
+            "type": "array"
+          },
+          "use_music_panel": {
+            "title": "Use Music Panel",
+            "type": "boolean"
+          },
+          "voice_log_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ai",
+          "id",
+          "name",
+          "icon_url",
+          "member_count",
+          "flags",
+          "audit_log_channel",
+          "poll_channel",
+          "poll_ping_role",
+          "poll_reason_channel",
+          "mention_count",
+          "ignored_entities",
+          "mute_role",
+          "alert_channel",
+          "mod_log_channel",
+          "message_log_channel",
+          "voice_log_channel",
+          "audit_log_flags",
+          "music_panel_channel",
+          "use_music_panel",
+          "prefixes",
+          "is_new_config"
+        ],
+        "title": "GuildInfo",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1376,6 +1882,60 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthFeature": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "status",
+          "problems"
+        ],
+        "title": "HealthFeature",
+        "type": "object"
+      },
+      "IgnoredEntity": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name"
+        ],
+        "title": "IgnoredEntity",
         "type": "object"
       },
       "ImportBackupBody": {
@@ -3281,6 +3841,102 @@
         "title": "RequestSettingsBody",
         "type": "object"
       },
+      "Role": {
+        "properties": {
+          "assignable": {
+            "title": "Assignable",
+            "type": "boolean"
+          },
+          "color": {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Color",
+            "type": "integer"
+          },
+          "hoist": {
+            "title": "Hoist",
+            "type": "boolean"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "managed": {
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "mentionable": {
+            "title": "Mentionable",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "maximum": 1.8446744073709552e+19,
+            "minimum": 0.0,
+            "title": "Permissions",
+            "type": "integer"
+          },
+          "position": {
+            "maximum": 2147483647.0,
+            "minimum": -2147483648.0,
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "position",
+          "permissions",
+          "mentionable",
+          "managed",
+          "hoist",
+          "icon_url",
+          "assignable"
+        ],
+        "title": "Role",
+        "type": "object"
+      },
+      "RoleRef": {
+        "properties": {
+          "color": {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Color",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "title": "RoleRef",
+        "type": "object"
+      },
       "SendSentinelMessageBody": {
         "properties": {
           "channel_id": {
@@ -3323,6 +3979,102 @@
           "channel_id"
         ],
         "title": "SendSentinelMessageBody",
+        "type": "object"
+      },
+      "SentinelInfo": {
+        "properties": {
+          "bypass_action": {
+            "title": "Bypass Action",
+            "type": "string"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "member_count": {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maximum": 1.8446744073709552e+19,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "needs_setup": {
+            "title": "Needs Setup",
+            "type": "boolean"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "starter_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "channel",
+          "role",
+          "message",
+          "starter_role",
+          "bypass_action",
+          "rate",
+          "started_at",
+          "member_count",
+          "needs_setup"
+        ],
+        "title": "SentinelInfo",
         "type": "object"
       },
       "SetCommandPermissionsBody": {
@@ -5163,9 +5915,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Guild Config Api V1 Guilds  Guild Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GuildInfo"
                 }
               }
             },
@@ -5351,9 +6101,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Ai Config Api V1 Guilds  Guild Id  Ai Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AiConfig"
                 }
               }
             },
@@ -5551,9 +6299,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Ai Ask Api V1 Guilds  Guild Id  Ai Ask Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AiAskResponse"
                 }
               }
             },
@@ -7211,8 +7957,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/Channel"
                   },
                   "title": "Response Get Guild Channels Api V1 Guilds  Guild Id  Channels Get",
                   "type": "array"
@@ -11123,9 +11868,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Guild Health Api V1 Guilds  Guild Id  Health Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GuildHealth"
                 }
               }
             },
@@ -17460,8 +18203,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/Role"
                   },
                   "title": "Response Get Guild Roles Api V1 Guilds  Guild Id  Roles Get",
                   "type": "array"
@@ -17554,8 +18296,7 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "additionalProperties": true,
-                      "type": "object"
+                      "$ref": "#/components/schemas/SentinelInfo"
                     },
                     {
                       "type": "null"

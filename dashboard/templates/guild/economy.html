@@ -269,7 +269,7 @@
             <select id="lottery_channel" class="config-select">
                 <option value="">Select a channel…</option>
                 {% for ch in channels %}
-                {% if ch.channel_type == "text" || ch.channel_type == "news" %}
+                {% if ch.type_ == "text" || ch.type_ == "news" %}
                 <option value="{{ ch.id }}">#{{ ch.name }}</option>
                 {% endif %}
                 {% endfor %}

@@ -20,6 +20,7 @@ from app.utils.webhooks import send_webhook
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id, resolve_channel, resolve_entity, resolve_role
+from .guild_models import AiAskResponse, AiConfig, Channel, GuildHealth, GuildInfo, Role, SentinelInfo
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -262,7 +263,7 @@ def _build_config_updates(data: dict, guild_config, guild: discord.Guild | None 
 # ---------------------------------------------------------------------------
 
 
-def _serialize_ai_config(guild, ai_config) -> dict:
+def _serialize_ai_config(guild, ai_config) -> dict:  # shape: guild_models.AiConfig
     """Shape the resolved AI config (server flags + per-channel overrides) for the dashboard."""
     return {
         "flags": {name: bool(getattr(ai_config.flags, name)) for name in _AI_FLAG_MAP},
@@ -279,10 +280,10 @@ def _serialize_ai_config(guild, ai_config) -> dict:
 
 
 @router.get("")
-async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
+async def get_guild_config(guild: GuildDep, bot: BotDep) -> GuildInfo:
     guild_config = await bot.db.get_guild_config(guild.id)
     ai_config = await bot.db.get_guild_ai_config(guild.id)
-    return {
+    return GuildInfo.model_validate({
         "ai": _serialize_ai_config(guild, ai_config),
         "id": guild_config.id,
         "name": guild.name,
@@ -311,7 +312,7 @@ async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
         "use_music_panel": guild_config.use_music_panel,
         "prefixes": list(guild_config.prefixes),
         "is_new_config": guild_config.flags.value == 0 and guild_config.audit_log_channel_id is None,
-    }
+    })
 
 
 @router.patch("")
@@ -356,9 +357,9 @@ async def _apply_config_updates(bot, guild, guild_config, updates: dict[str, obj
 
 
 @router.get("/ai")
-async def get_ai_config(guild: GuildDep, bot: BotDep) -> dict:
+async def get_ai_config(guild: GuildDep, bot: BotDep) -> AiConfig:
     ai_config = await bot.db.get_guild_ai_config(guild.id)
-    return _serialize_ai_config(guild, ai_config)
+    return AiConfig.model_validate(_serialize_ai_config(guild, ai_config))
 
 
 @router.patch("/ai")
@@ -467,8 +468,8 @@ def _extract_suggestions(bot, answer: str, prefix: str) -> list[dict]:
     return suggestions
 
 
-@router.post("/ai/ask")
-async def ai_ask(guild: GuildDep, bot: BotDep, body: AIAskBody) -> dict:
+@router.post("/ai/ask", response_model_exclude_unset=True)  # a successful answer carries no ``reason`` key
+async def ai_ask(guild: GuildDep, bot: BotDep, body: AIAskBody) -> AiAskResponse:
     """Answer a dashboard command-palette question with Percy's AI assistant.
 
     Gated like every other AI behaviour: the guild must have the ``assistant`` AI feature
@@ -488,7 +489,7 @@ async def ai_ask(guild: GuildDep, bot: BotDep, body: AIAskBody) -> dict:
             if bot.ai.available
             else "The AI assistant is currently unavailable."
         )
-        return {"available": False, "reason": reason, "answer": None, "suggestions": []}
+        return AiAskResponse(available=False, reason=reason, answer=None, suggestions=[])
 
     guild_config = await bot.db.get_guild_config(guild.id)
     prefix = next(iter(guild_config.prefixes), None) or _default_prefix()
@@ -510,13 +511,15 @@ async def ai_ask(guild: GuildDep, bot: BotDep, body: AIAskBody) -> dict:
         max_tokens=_ASK_MAX_TOKENS,
     )
     if answer is None:
-        return {"available": False, "reason": "The AI assistant timed out. Please try again.", "answer": None, "suggestions": []}
+        return AiAskResponse(
+            available=False, reason="The AI assistant timed out. Please try again.", answer=None, suggestions=[]
+        )
 
-    return {
+    return AiAskResponse.model_validate({
         "available": True,
         "answer": answer.strip(),
         "suggestions": _extract_suggestions(bot, answer, prefix),
-    }
+    })
 
 
 def _default_prefix() -> str:
@@ -634,9 +637,9 @@ async def patch_audit_log_flags(guild: GuildDep, bot: BotDep, body: PatchAuditLo
 
 
 @router.get("/roles")
-async def get_guild_roles(guild: GuildDep) -> list[dict]:
+async def get_guild_roles(guild: GuildDep) -> list[Role]:
     return [
-        {
+        Role.model_validate({
             "id": str(role.id),
             "name": role.name,
             "color": role.color.value,
@@ -648,7 +651,7 @@ async def get_guild_roles(guild: GuildDep) -> list[dict]:
             "icon_url": role.icon.url if role.icon else None,
             # Percy can give it out: below its top role and not owned by an integration.
             "assignable": role < guild.me.top_role and not role.managed and not role.is_default(),
-        }
+        })
         for role in sorted(guild.roles, key=lambda r: r.position, reverse=True)
     ]
 
@@ -658,9 +661,9 @@ def _can_post(perms: discord.Permissions) -> bool:
 
 
 @router.get("/channels")
-async def get_guild_channels(guild: GuildDep) -> list[dict]:
+async def get_guild_channels(guild: GuildDep) -> list[Channel]:
     return [
-        {
+        Channel.model_validate({
             "id": str(ch.id),
             "name": ch.name,
             "type": str(ch.type),
@@ -668,13 +671,13 @@ async def get_guild_channels(guild: GuildDep) -> list[dict]:
             "category_id": str(ch.category_id) if ch.category_id else None,
             # Percy can post an embed there right now (what every logging/announce feature needs).
             "can_post": _can_post(ch.permissions_for(guild.me)),
-        }
+        })
         for ch in sorted(guild.channels, key=lambda c: (c.position, c.name))
     ]
 
 
 @router.get("/sentinel")
-async def get_sentinel(guild: GuildDep, bot: BotDep) -> dict | None:
+async def get_sentinel(guild: GuildDep, bot: BotDep) -> SentinelInfo | None:
     sentinel = await bot.db.get_guild_sentinel(guild.id)
     if sentinel is None:
         return None
@@ -683,7 +686,7 @@ async def get_sentinel(guild: GuildDep, bot: BotDep) -> dict | None:
     if isinstance(rate, (list, tuple)):
         rate = f"{rate[0]}/{rate[1]}"
 
-    return {
+    return SentinelInfo.model_validate({
         "channel": resolve_channel(guild, sentinel.channel_id),
         "role": resolve_role(guild, sentinel.role_id),
         "message": sentinel.message_id,
@@ -693,7 +696,7 @@ async def get_sentinel(guild: GuildDep, bot: BotDep) -> dict | None:
         "started_at": sentinel.started_at.isoformat() if sentinel.started_at else None,
         "member_count": len(sentinel.members),
         "needs_setup": sentinel.requires_setup,
-    }
+    })
 
 
 _SENTINEL_FIELDS = frozenset({"channel_id", "role_id", "starter_role_id", "bypass_action", "rate"})
@@ -1010,7 +1013,7 @@ def _guild_missing(guild: discord.Guild, *needs: str) -> tuple[str, ...]:
 
 
 @router.get("/health")
-async def get_guild_health(guild: GuildDep, bot: BotDep) -> dict:
+async def get_guild_health(guild: GuildDep, bot: BotDep) -> GuildHealth:
     """Per feature: ``ok`` / ``attention`` / ``off``, with each problem in plain language.
 
     Read live from Discord on every call (never cached): the answer to "can Percy post there
@@ -1075,7 +1078,7 @@ async def get_guild_health(guild: GuildDep, bot: BotDep) -> dict:
         gate.guild_missing = _guild_missing(guild, 'manage_roles')
     facts.append(gate)
 
-    return summarize(facts)
+    return GuildHealth.model_validate(summarize(facts))
 
 
 # ---------------------------------------------------------------------------

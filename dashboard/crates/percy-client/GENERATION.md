@@ -132,7 +132,7 @@ small and self-contained first.
 | `leveling.py` | 12 | |
 | `economy.py` | 15 | |
 | `music.py` | 18 | |
-| `guild.py` | 20 | biggest config surface; `Option` leniency matters most here |
+| `guild.py` | 20 | **done (typed: config, ai, ai/ask, roles, channels, sentinel GET, health; `{ok}`-style replies left as dict)** | biggest config surface; `Option` leniency matters most here |
 | `users.py` | 21 | includes PNG-preview and data-export routes (leave non-JSON alone) |
 | `content.py` | 37 | split by sub-domain (polls, giveaways, tags, commands, ...) |
 

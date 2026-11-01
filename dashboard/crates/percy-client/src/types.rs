@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::generated::{AiChannelOverride, AiConfig, ChannelRef, RoleRef}; // guild domain
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct UserGuild {
     pub id: String,
@@ -28,123 +30,6 @@ pub struct UserAvatar {
     pub avatar_url: String,
     #[serde(default)]
     pub username: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ChannelRef {
-    pub id: String,
-    pub name: String,
-    #[serde(rename = "type")]
-    pub channel_type: String,
-}
-
-/// A real command the AI assistant named in its answer, surfaced as a chip in the
-/// command palette. `command` is the bare qualified name; `label` includes the prefix.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AiSuggestion {
-    pub label: String,
-    pub command: String,
-}
-
-/// Answer from Percy's dashboard AI assistant (`POST /guilds/{id}/ai/ask`).
-///
-/// `available` is `false` whenever the guild has the AI assistant disabled or the engine is
-/// unreachable/timed out — in that case `answer` is `None` and `reason` carries a short, user-safe
-/// explanation. The palette degrades to its navigation/action results and shows `reason`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AiAskResponse {
-    pub available: bool,
-    #[serde(default)]
-    pub reason: Option<String>,
-    #[serde(default)]
-    pub answer: Option<String>,
-    #[serde(default)]
-    pub suggestions: Vec<AiSuggestion>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoleRef {
-    pub id: String,
-    pub name: String,
-    pub color: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildInfo {
-    pub id: u64,
-    pub name: String,
-    pub icon_url: Option<String>,
-    pub member_count: Option<u32>,
-    pub flags: GuildFlags,
-    pub audit_log_channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub mod_log_channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub message_log_channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub voice_log_channel: Option<ChannelRef>,
-    pub poll_channel: Option<ChannelRef>,
-    pub poll_ping_role: Option<RoleRef>,
-    pub poll_reason_channel: Option<ChannelRef>,
-    pub mention_count: Option<u32>,
-    #[serde(default)]
-    pub ignored_entities: Vec<IgnoredEntity>,
-    pub mute_role: Option<RoleRef>,
-    pub alert_channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub audit_log_flags: std::collections::BTreeMap<String, bool>,
-    pub music_panel_channel: Option<ChannelRef>,
-    pub use_music_panel: bool,
-    pub prefixes: Vec<String>,
-    #[serde(default)]
-    pub is_new_config: bool,
-    #[serde(default)]
-    pub ai: AiConfig,
-}
-
-/// Per-guild AI feature flags plus per-channel overrides (the AI-native rewrite).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AiConfig {
-    #[serde(default)]
-    pub flags: AiFlags,
-    #[serde(default)]
-    pub overrides: Vec<AiChannelOverride>,
-}
-
-/// The AI feature toggles. Mirrors Percy's `GuildConfig.AIFlags`; each field defaults off.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AiFlags {
-    #[serde(default)]
-    pub assistant: bool,
-    #[serde(default)]
-    pub router: bool,
-    #[serde(default)]
-    pub moderation: bool,
-    #[serde(default)]
-    pub sentinel: bool,
-    #[serde(default)]
-    pub music: bool,
-    #[serde(default)]
-    pub polls: bool,
-    #[serde(default)]
-    pub giveaways: bool,
-    #[serde(default)]
-    pub tags: bool,
-    #[serde(default)]
-    pub reminders: bool,
-}
-
-/// A per-channel override: `controlled` marks which features the channel overrides,
-/// and `enabled` holds their on/off value for those controlled features.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AiChannelOverride {
-    #[serde(default)]
-    pub channel: Option<ChannelRef>,
-    pub channel_id: String,
-    #[serde(default)]
-    pub controlled: AiFlags,
-    #[serde(default)]
-    pub enabled: AiFlags,
 }
 
 /// One controlled feature in an override's summary (for the dashboard table).
@@ -182,53 +67,6 @@ impl AiConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct IgnoredEntity {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub entity_type: String,
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildFlags {
-    pub audit_log: bool,
-    pub raid: bool,
-    pub alerts: bool,
-    pub sentinel: bool,
-    #[serde(default)]
-    pub mentions: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Role {
-    pub id: String,
-    pub name: String,
-    pub color: u32,
-    pub position: i32,
-    pub permissions: u64,
-    pub mentionable: bool,
-    pub managed: bool,
-    pub hoist: bool,
-    pub icon_url: Option<String>,
-    /// Percy can give this role out (below its top role, not integration-managed).
-    #[serde(default = "default_true")]
-    pub assignable: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Channel {
-    pub id: String,
-    pub name: String,
-    #[serde(rename = "type")]
-    pub channel_type: String,
-    pub position: i32,
-    pub category_id: Option<String>,
-    /// Percy can post an embed in this channel right now.
-    #[serde(default = "default_true")]
-    pub can_post: bool,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Member {
     pub id: String,
@@ -244,19 +82,6 @@ pub struct Member {
 pub struct MembersResponse {
     pub members: Vec<Member>,
     pub total: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SentinelInfo {
-    pub channel: Option<ChannelRef>,
-    pub role: Option<RoleRef>,
-    pub message: Option<u64>,
-    pub starter_role: Option<RoleRef>,
-    pub bypass_action: String,
-    pub rate: Option<String>,
-    pub started_at: Option<String>,
-    pub member_count: u32,
-    pub needs_setup: bool,
 }
 
 // -- Leveling types ----------------------------------------------------------
@@ -3145,28 +2970,6 @@ pub struct NewsSourcesResponse {
 }
 
 // -- Guild health ------------------------------------------------------------
-
-/// `GET /guilds/{id}/health` — whether Percy can do what the server configured.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct GuildHealth {
-    /// Every feature, those needing attention first.
-    #[serde(default)]
-    pub features: Vec<HealthFeature>,
-    /// How many features need attention.
-    #[serde(default)]
-    pub attention: u32,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct HealthFeature {
-    pub key: String,
-    pub label: String,
-    /// `ok` | `attention` | `off`.
-    pub status: String,
-    /// Plain-language problems naming the channel/role and permission.
-    #[serde(default)]
-    pub problems: Vec<String>,
-}
 
 // -- Role menus ----------------------------------------------------------------
 

@@ -205,7 +205,7 @@ pub async fn guild_notifications(
         channels: channels
             .unwrap_or_default()
             .into_iter()
-            .filter(|c| c.channel_type == "text")
+            .filter(|c| c.type_ == "text")
             .collect(),
         roles: roles
             .unwrap_or_default()
