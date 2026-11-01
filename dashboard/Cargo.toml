@@ -29,7 +29,7 @@ serde_yaml = "0.9"
 # repo) and the local command-syntax guide to HTML.
 pulldown-cmark = "0.10"
 
-kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.19.0" }
+kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.20.0" }
 percy-client = { path = "crates/percy-client" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init

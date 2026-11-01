@@ -386,7 +386,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -792,15 +792,11 @@ dependencies = [
 
 [[package]]
 name = "kls-web-core"
-version = "0.1.1"
-source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.19.0#c672a9c6f3d40a8ce3a0752e4a1023f707e0bf63"
+version = "0.2.0"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.20.0#3761759e1dffd482c7d96f522b0dd10f36548b16"
 dependencies = [
  "anyhow",
- "askama",
- "async-trait",
- "axum",
  "base64",
- "cookie",
  "crossbeam-channel",
  "getrandom 0.2.17",
  "hmac",
@@ -1101,7 +1097,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
