@@ -53,6 +53,7 @@ pytest-timeout = ">=2.3"
 [tool.ruff]
 target-version = "py313"
 line-length = 125
+extend-exclude = ["dashboard"]
 
 [tool.ruff.lint]
 select = [
@@ -89,6 +90,7 @@ ignore = [
 useLibraryCodeForTypes = true
 typeCheckingMode = "basic"
 pythonVersion = "3.13"
+exclude = ["**/node_modules", "**/__pycache__", ".venv", "dashboard"]
 strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
