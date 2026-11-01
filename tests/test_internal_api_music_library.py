@@ -115,14 +115,14 @@ async def test_playlist_other_owner_404() -> None:
     with pytest.raises(HTTPException) as e:
         await api.get_user_playlist(1, 7, bot)
     assert e.value.status_code == 404
-    assert (await api.get_user_playlist(2, 7, bot))["name"] == "mine"
+    assert (await api.get_user_playlist(2, 7, bot)).name == "mine"
 
 
 async def test_playlist_lifecycle() -> None:
     bot = _bot()
     made = await api.create_user_playlist(1, api.PlaylistCreateBody(name="  Road   trip "), bot)
-    pid = int(made["id"])
-    assert made["name"] == "Road trip"
+    pid = int(made.id)
+    assert made.name == "Road trip"
 
     assert (await api.add_user_playlist_track(1, pid, _track(artwork="https://img/c.jpg"), bot))["added"] is True
     assert (await api.add_user_playlist_track(1, pid, _track(), bot))["added"] is False
@@ -130,12 +130,12 @@ async def test_playlist_lifecycle() -> None:
     assert summary["track_count"] == 1 and summary["cover"] == "https://img/c.jpg" and summary["thumbnail"] is None
 
     p = await api.patch_user_playlist(1, pid, api.PlaylistPatchBody(name="Drive", thumbnail="https://img/t.png"), bot)
-    assert (p["name"], p["thumbnail"], p["cover"]) == ("Drive", "https://img/t.png", "https://img/t.png")
+    assert (p.name, p.thumbnail, p.cover) == ("Drive", "https://img/t.png", "https://img/t.png")
     p = await api.patch_user_playlist(1, pid, api.PlaylistPatchBody(thumbnail=""), bot)
-    assert p["thumbnail"] is None and p["cover"] == "https://img/c.jpg"
+    assert p.thumbnail is None and p.cover == "https://img/c.jpg"
 
     await api.remove_user_playlist_track(1, pid, bot, url=U)
-    assert (await api.get_user_playlist(1, pid, bot))["tracks"] == []
+    assert (await api.get_user_playlist(1, pid, bot)).tracks == []
     assert await api.delete_user_playlist(1, pid, bot) == {"deleted": True}
     assert (await api.get_user_music(1, bot))["playlists"] == []
 
@@ -159,7 +159,7 @@ async def test_liked_songs_cannot_be_renamed_or_deleted() -> None:
         await api.delete_user_playlist(1, liked_id, bot)
     # Its cover may still be customized.
     p = await api.patch_user_playlist(1, liked_id, api.PlaylistPatchBody(thumbnail="https://img/l.png"), bot)
-    assert p["thumbnail"] == "https://img/l.png"
+    assert p.thumbnail == "https://img/l.png"
 
 
 async def test_recent_uses_history_shape() -> None:

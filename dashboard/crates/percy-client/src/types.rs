@@ -2,33 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct UserGuild {
-    pub id: String,
-    pub name: String,
-    pub icon_url: Option<String>,
-    pub member_count: Option<u32>,
-    pub owner: bool,
-    /// True when the user has Administrator or Manage Server in this guild. The
-    /// dashboard shows manageable guilds as full admin cards and the rest as
-    /// read-only public overviews. Defaults to `false` for backward compat with
-    /// an older Percy that only returned manageable guilds.
-    #[serde(default)]
-    pub manageable: bool,
-    /// Percy has a track loaded in this guild (playing or paused).
-    #[serde(default)]
-    pub music_playing: bool,
-}
-
-/// A user's *current* avatar, resolved live from the bot (never persisted, so it
-/// can't go stale).
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct UserAvatar {
-    pub avatar_url: String,
-    #[serde(default)]
-    pub username: String,
-}
+use crate::generated::{PlaylistSummary, PlaylistTrack};
+#[cfg(test)]
+use crate::generated::PlaylistDetail;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChannelRef {
@@ -341,24 +317,6 @@ pub struct CardOption {
     pub label: String,
 }
 
-/// `GET /users/{id}/rank-card?guild_id=` — a member's rank card style on one server.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RankCard {
-    /// The member's own partial style (`{}` = follow the server).
-    #[serde(default)]
-    pub style: HashMap<String, String>,
-    #[serde(default)]
-    pub guild_default: HashMap<String, String>,
-    /// The server fixes the style; clients hide the editor.
-    #[serde(default)]
-    pub locked: bool,
-    /// The fully resolved style the card renders with.
-    #[serde(default)]
-    pub effective: HashMap<String, String>,
-    #[serde(default)]
-    pub options: HashMap<String, Vec<CardOption>>,
-}
-
 fn default_factor() -> f64 {
     1.0
 }
@@ -631,15 +589,6 @@ pub struct MemberEconomy {
     pub total: i64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct UserSettings {
-    pub timezone: Option<String>,
-    #[serde(default = "default_true")]
-    pub track_presence: bool,
-    #[serde(default = "default_true")]
-    pub track_history: bool,
-}
-
 fn default_true() -> bool {
     true
 }
@@ -672,20 +621,6 @@ pub struct PresenceEntry {
     pub status: Option<String>,
     pub status_before: Option<String>,
     pub changed_at: Option<String>,
-}
-
-/// Consent-tracked history for a user (names, avatars, presence) — the payload
-/// behind the personal dashboard's "Your History" view.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct UserHistory {
-    #[serde(default)]
-    pub usernames: Vec<NameHistoryEntry>,
-    #[serde(default)]
-    pub nicknames: Vec<NameHistoryEntry>,
-    #[serde(default)]
-    pub avatars: Vec<AvatarEntry>,
-    #[serde(default)]
-    pub presence: Vec<PresenceEntry>,
 }
 
 // -- Polls types -------------------------------------------------------------
@@ -1548,49 +1483,6 @@ pub struct TopTrack {
     pub plays: u64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct PlaylistTrack {
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub url: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub author: Option<String>,
-    /// Saved cover, or one Percy recovered (last play's artwork, the YouTube thumbnail).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artwork: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct PlaylistSummary {
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub track_count: u32,
-    /// The owner's custom cover, if they set one.
-    #[serde(default)]
-    pub thumbnail: Option<String>,
-    /// What to show: the custom cover, else the first song's.
-    #[serde(default)]
-    pub cover: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct PlaylistDetail {
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub thumbnail: Option<String>,
-    #[serde(default)]
-    pub cover: Option<String>,
-    #[serde(default)]
-    pub tracks: Vec<PlaylistTrack>,
-}
-
 /// One chart entry: a track and how many different people picked it (and how often).
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TrendingTrack {
@@ -1716,7 +1608,7 @@ mod music_app_tests {
 
     #[test]
     fn library_and_playlist_parse() {
-        let l: UserMusicLibrary = serde_json::from_str(r#"{"top_tracks":[{"title":"T","author":"A","uri":"u","artwork":null,"length_ms":5,"plays":3}],"recent":[],"liked":[{"name":"n","url":"u"}],"playlists":[{"id":"7","name":"P","track_count":2}]}"#).unwrap();
+        let l: UserMusicLibrary = serde_json::from_str(r#"{"top_tracks":[{"title":"T","author":"A","uri":"u","artwork":null,"length_ms":5,"plays":3}],"recent":[],"liked":[{"name":"n","url":"u","author":null,"artwork":null}],"playlists":[{"id":"7","name":"P","track_count":2,"thumbnail":null,"cover":null}]}"#).unwrap();
         assert_eq!(
             (l.top_tracks[0].plays, l.liked.len(), l.playlists[0].track_count),
             (3, 1, 2)
@@ -1726,9 +1618,8 @@ mod music_app_tests {
             .playlists
             .is_empty());
         let d: PlaylistDetail =
-            serde_json::from_str(r#"{"id":"7","name":"P","tracks":[{"name":"n","url":"u"}]}"#).unwrap();
+            serde_json::from_str(r#"{"id":"7","name":"P","thumbnail":null,"cover":null,"tracks":[{"name":"n","url":"u","author":null,"artwork":null}]}"#).unwrap();
         assert_eq!(d.tracks[0].url, "u");
-        assert!(serde_json::from_str::<PlaylistDetail>("{}").unwrap().tracks.is_empty());
     }
 }
 
@@ -3250,27 +3141,6 @@ pub struct StarboardTop {
 }
 
 // -- Reminders -----------------------------------------------------------------
-
-/// `GET /users/{id}/reminders`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct RemindersResponse {
-    #[serde(default)]
-    pub reminders: Vec<Reminder>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Reminder {
-    pub id: i64,
-    /// ISO-8601 UTC.
-    pub expires: String,
-    #[serde(default)]
-    pub message: String,
-    /// e.g. "every day"; `None` for a one-off.
-    #[serde(default)]
-    pub repeats: Option<String>,
-    #[serde(default)]
-    pub shared_with: u32,
-}
 
 // -- Notifications and action requests -------------------------------------------
 

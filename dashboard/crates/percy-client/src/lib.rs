@@ -24,6 +24,10 @@ pub use types::*;
 #[rustfmt::skip]
 pub mod generated;
 pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+pub use generated::{
+    HistoryAvatarEntry, HistoryNameEntry, HistoryPresenceEntry, PlaylistDetail, PlaylistSummary, PlaylistTrack, RankCard,
+    RankCardOption, Reminder, RemindersResponse, UserAvatar, UserGuild, UserHistory, UserSettings,
+}; // users domain
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

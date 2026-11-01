@@ -30,7 +30,7 @@ def _bot(*, guild_default: dict, user_style: dict, locked: bool) -> MagicMock:
 
 async def test_get_reports_lock_and_effective_style() -> None:
     bot = _bot(guild_default={'theme': 'ink'}, user_style={'accent': 'rose'}, locked=True)
-    payload = await api.get_rank_card(USER, bot, guild_id=GUILD)
+    payload = (await api.get_rank_card(USER, bot, guild_id=GUILD)).model_dump(mode='json')
     assert payload['locked'] is True
     assert payload['effective'] == {'theme': 'ink', 'accent': 'coral', 'bar': 'gradient', 'font': 'rubik'}
     assert {o['value'] for o in payload['options']['theme']} >= {'panel', 'paper'}

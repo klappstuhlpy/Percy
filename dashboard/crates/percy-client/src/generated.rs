@@ -39,6 +39,136 @@ pub struct AnalyticsTopCommand {
     pub command: ::std::string::String,
     pub uses: i64,
 }
+///`HistoryAvatarEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct HistoryAvatarEntry {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub changed_at: ::std::option::Option<::std::string::String>,
+    pub image: ::std::string::String,
+}
+///`HistoryNameEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct HistoryNameEntry {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub changed_at: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+}
+///`HistoryPresenceEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct HistoryPresenceEntry {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub changed_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub status: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub status_before: ::std::option::Option<::std::string::String>,
+}
+///`PlaylistDetail`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct PlaylistDetail {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub cover: ::std::option::Option<::std::string::String>,
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub thumbnail: ::std::option::Option<::std::string::String>,
+    pub tracks: ::std::vec::Vec<PlaylistTrack>,
+}
+///`PlaylistSummary`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct PlaylistSummary {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub cover: ::std::option::Option<::std::string::String>,
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub thumbnail: ::std::option::Option<::std::string::String>,
+    pub track_count: i64,
+}
+///`PlaylistTrack`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct PlaylistTrack {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub author: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+    pub url: ::std::string::String,
+}
+///`RankCard`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RankCard {
+    pub effective: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::string::String,
+    >,
+    pub guild_default: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::string::String,
+    >,
+    pub locked: bool,
+    pub options: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::vec::Vec<RankCardOption>,
+    >,
+    pub style: ::std::collections::HashMap<::std::string::String, ::std::string::String>,
+}
+///`RankCardOption`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RankCardOption {
+    pub label: ::std::string::String,
+    pub value: ::std::string::String,
+}
+///`Reminder`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct Reminder {
+    pub expires: ::std::string::String,
+    pub id: i64,
+    pub message: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub repeats: ::std::option::Option<::std::string::String>,
+    pub shared_with: i64,
+}
+///`RemindersResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RemindersResponse {
+    pub reminders: ::std::vec::Vec<Reminder>,
+}
+///`UserAvatar`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct UserAvatar {
+    pub avatar_url: ::std::string::String,
+    pub username: ::std::string::String,
+}
+///`UserGuild`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct UserGuild {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub icon_url: ::std::option::Option<::std::string::String>,
+    pub id: ::std::string::String,
+    pub manageable: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub member_count: ::std::option::Option<i64>,
+    pub music_playing: bool,
+    pub name: ::std::string::String,
+    pub owner: bool,
+}
+///`UserHistory`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct UserHistory {
+    pub avatars: ::std::vec::Vec<HistoryAvatarEntry>,
+    pub nicknames: ::std::vec::Vec<HistoryNameEntry>,
+    pub presence: ::std::vec::Vec<HistoryPresenceEntry>,
+    pub usernames: ::std::vec::Vec<HistoryNameEntry>,
+}
+///`UserSettings`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct UserSettings {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub timezone: ::std::option::Option<::std::string::String>,
+    pub track_history: bool,
+    pub track_presence: bool,
+}
 /// Error types.
 pub mod error {
     /// Error from a `TryFrom` or `FromStr` implementation.

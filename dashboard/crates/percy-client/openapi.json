@@ -1378,6 +1378,100 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HistoryAvatarEntry": {
+        "properties": {
+          "changed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed At"
+          },
+          "image": {
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image",
+          "changed_at"
+        ],
+        "title": "HistoryAvatarEntry",
+        "type": "object"
+      },
+      "HistoryNameEntry": {
+        "properties": {
+          "changed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "changed_at"
+        ],
+        "title": "HistoryNameEntry",
+        "type": "object"
+      },
+      "HistoryPresenceEntry": {
+        "properties": {
+          "changed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "status_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Before"
+          }
+        },
+        "required": [
+          "status",
+          "status_before",
+          "changed_at"
+        ],
+        "title": "HistoryPresenceEntry",
+        "type": "object"
+      },
       "ImportBackupBody": {
         "properties": {
           "data": {
@@ -2925,6 +3019,56 @@
         "title": "PlaylistCreateBody",
         "type": "object"
       },
+      "PlaylistDetail": {
+        "properties": {
+          "cover": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/PlaylistTrack"
+            },
+            "title": "Tracks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "thumbnail",
+          "cover",
+          "tracks"
+        ],
+        "title": "PlaylistDetail",
+        "type": "object"
+      },
       "PlaylistPatchBody": {
         "properties": {
           "name": {
@@ -2951,6 +3095,95 @@
           }
         },
         "title": "PlaylistPatchBody",
+        "type": "object"
+      },
+      "PlaylistSummary": {
+        "properties": {
+          "cover": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail"
+          },
+          "track_count": {
+            "title": "Track Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "track_count",
+          "thumbnail",
+          "cover"
+        ],
+        "title": "PlaylistSummary",
+        "type": "object"
+      },
+      "PlaylistTrack": {
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "author",
+          "artwork"
+        ],
+        "title": "PlaylistTrack",
         "type": "object"
       },
       "PostLevelingBlacklistBody": {
@@ -3223,6 +3456,54 @@
         "title": "PutAIOverrideBody",
         "type": "object"
       },
+      "RankCard": {
+        "properties": {
+          "effective": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Effective",
+            "type": "object"
+          },
+          "guild_default": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Guild Default",
+            "type": "object"
+          },
+          "locked": {
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "options": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/RankCardOption"
+              },
+              "type": "array"
+            },
+            "title": "Options",
+            "type": "object"
+          },
+          "style": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Style",
+            "type": "object"
+          }
+        },
+        "required": [
+          "style",
+          "guild_default",
+          "locked",
+          "effective",
+          "options"
+        ],
+        "title": "RankCard",
+        "type": "object"
+      },
       "RankCardBody": {
         "properties": {
           "style": {
@@ -3235,6 +3516,24 @@
           "style"
         ],
         "title": "RankCardBody",
+        "type": "object"
+      },
+      "RankCardOption": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "RankCardOption",
         "type": "object"
       },
       "RankCardPreviewBody": {
@@ -3254,6 +3553,62 @@
           "guild_id"
         ],
         "title": "RankCardPreviewBody",
+        "type": "object"
+      },
+      "Reminder": {
+        "properties": {
+          "expires": {
+            "title": "Expires",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "repeats": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeats"
+          },
+          "shared_with": {
+            "title": "Shared With",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "expires",
+          "message",
+          "repeats",
+          "shared_with"
+        ],
+        "title": "Reminder",
+        "type": "object"
+      },
+      "RemindersResponse": {
+        "properties": {
+          "reminders": {
+            "items": {
+              "$ref": "#/components/schemas/Reminder"
+            },
+            "title": "Reminders",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reminders"
+        ],
+        "title": "RemindersResponse",
         "type": "object"
       },
       "RequestSettingsBody": {
@@ -3729,6 +4084,151 @@
           "channel_ids"
         ],
         "title": "UnlockChannelsBody",
+        "type": "object"
+      },
+      "UserAvatar": {
+        "properties": {
+          "avatar_url": {
+            "title": "Avatar Url",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "avatar_url",
+          "username"
+        ],
+        "title": "UserAvatar",
+        "type": "object"
+      },
+      "UserGuild": {
+        "properties": {
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manageable": {
+            "title": "Manageable",
+            "type": "boolean"
+          },
+          "member_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Count"
+          },
+          "music_playing": {
+            "title": "Music Playing",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon_url",
+          "member_count",
+          "owner",
+          "manageable",
+          "music_playing"
+        ],
+        "title": "UserGuild",
+        "type": "object"
+      },
+      "UserHistory": {
+        "properties": {
+          "avatars": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryAvatarEntry"
+            },
+            "title": "Avatars",
+            "type": "array"
+          },
+          "nicknames": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryNameEntry"
+            },
+            "title": "Nicknames",
+            "type": "array"
+          },
+          "presence": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryPresenceEntry"
+            },
+            "title": "Presence",
+            "type": "array"
+          },
+          "usernames": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryNameEntry"
+            },
+            "title": "Usernames",
+            "type": "array"
+          }
+        },
+        "required": [
+          "usernames",
+          "nicknames",
+          "avatars",
+          "presence"
+        ],
+        "title": "UserHistory",
+        "type": "object"
+      },
+      "UserSettings": {
+        "properties": {
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "track_history": {
+            "title": "Track History",
+            "type": "boolean"
+          },
+          "track_presence": {
+            "title": "Track Presence",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "timezone",
+          "track_presence",
+          "track_history"
+        ],
+        "title": "UserSettings",
         "type": "object"
       },
       "ValidationError": {
@@ -23009,9 +23509,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get User Avatar Api V1 Users  Discord Id  Avatar Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UserAvatar"
                 }
               }
             },
@@ -23188,8 +23686,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/UserGuild"
                   },
                   "title": "Response Get User Guilds Api V1 Users  Discord Id  Guilds Get",
                   "type": "array"
@@ -23293,9 +23790,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get User History Api V1 Users  Discord Id  History Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UserHistory"
                 }
               }
             },
@@ -23680,9 +24175,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create User Playlist Api V1 Users  Discord Id  Music Playlists Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PlaylistSummary"
                 }
               }
             },
@@ -23876,9 +24369,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get User Playlist Api V1 Users  Discord Id  Music Playlists  Playlist Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PlaylistDetail"
                 }
               }
             },
@@ -23983,9 +24474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch User Playlist Api V1 Users  Discord Id  Music Playlists  Playlist Id  Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PlaylistDetail"
                 }
               }
             },
@@ -24389,9 +24878,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Rank Card Api V1 Users  Discord Id  Rank Card Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RankCard"
                 }
               }
             },
@@ -24675,9 +25162,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get User Reminders Api V1 Users  Discord Id  Reminders Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RemindersResponse"
                 }
               }
             },
@@ -24866,9 +25351,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get User Settings Api V1 Users  Discord Id  Settings Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UserSettings"
                 }
               }
             },
