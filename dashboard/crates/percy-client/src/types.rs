@@ -2036,66 +2036,6 @@ pub struct WebhookTestResponse {
     pub result: serde_json::Value,
 }
 
-// -- Analytics types ---------------------------------------------------------
-
-/// One point in a zero-filled analytics series. `bucket` is an ISO-8601 UTC
-/// timestamp at the start of the bucket; `value` is the metric for that bucket.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AnalyticsPoint {
-    #[serde(default)]
-    pub bucket: String,
-    #[serde(default)]
-    pub value: f64,
-}
-
-/// The `GET /analytics/series` response: a contiguous time-series for one metric.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AnalyticsSeries {
-    #[serde(default)]
-    pub metric: String,
-    #[serde(default)]
-    pub range: String,
-    #[serde(default)]
-    pub granularity: String,
-    #[serde(default)]
-    pub total: f64,
-    #[serde(default)]
-    pub points: Vec<AnalyticsPoint>,
-}
-
-/// A headline number paired with its delta vs the preceding equal window.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AnalyticsMetric {
-    #[serde(default)]
-    pub value: i64,
-    #[serde(default)]
-    pub delta: i64,
-}
-
-/// A top-command row in the analytics summary.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AnalyticsTopCommand {
-    #[serde(default)]
-    pub command: String,
-    #[serde(default)]
-    pub uses: i64,
-}
-
-/// The `GET /analytics/summary` response: at-a-glance numbers with deltas.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AnalyticsSummary {
-    #[serde(default)]
-    pub range: String,
-    #[serde(default)]
-    pub commands: AnalyticsMetric,
-    #[serde(default)]
-    pub new_members: AnalyticsMetric,
-    #[serde(default)]
-    pub member_count: Option<i64>,
-    #[serde(default)]
-    pub top_commands: Vec<AnalyticsTopCommand>,
-}
-
 // -- Backup & template types -------------------------------------------------
 
 /// A public template card in the gallery.

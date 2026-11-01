@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from app.services import METRICS, fill_buckets, resolve_granularity, resolve_range
 
@@ -20,6 +21,51 @@ router = APIRouter(
     tags=["Analytics"],
     dependencies=[Depends(verify_token)],
 )
+
+
+# ---------------------------------------------------------------------------
+# Response models — the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md). Class names are the Rust type names.
+# ---------------------------------------------------------------------------
+
+
+class AnalyticsPoint(BaseModel):
+    """One bucket of a zero-filled series: ISO-8601 UTC start timestamp and the metric for it."""
+
+    bucket: str
+    value: float
+
+
+class AnalyticsSeries(BaseModel):
+    """A contiguous time-series for one metric."""
+
+    metric: str
+    range: str
+    granularity: str
+    total: float
+    points: list[AnalyticsPoint]
+
+
+class AnalyticsMetric(BaseModel):
+    """A headline number paired with its delta vs the preceding equal window."""
+
+    value: int
+    delta: int
+
+
+class AnalyticsTopCommand(BaseModel):
+    command: str
+    uses: int
+
+
+class AnalyticsSummary(BaseModel):
+    """At-a-glance numbers with deltas vs the preceding window."""
+
+    range: str
+    commands: AnalyticsMetric
+    new_members: AnalyticsMetric
+    member_count: int | None
+    top_commands: list[AnalyticsTopCommand]
 
 
 def _as_utc(dt: datetime.datetime) -> datetime.datetime:
@@ -34,7 +80,7 @@ async def get_series(
     metric: str = Query(..., description="One of: commands, command_failures, xp, members"),
     range_: str = Query("30d", alias="range", description="24h, 7d, 30d, 90d, or 1y"),
     granularity: str | None = Query(None, description="hour, day, or week (auto if omitted)"),
-) -> dict:
+) -> AnalyticsSeries:
     """A zero-filled time-series for one metric over a range.
 
     Returns ``{metric, range, granularity, total, points: [{bucket, value}]}``. ``points`` is
@@ -79,13 +125,13 @@ async def get_series(
                 values[key] = values.get(key, 0) + 1
 
     points = fill_buckets(values, days=days, granularity=gran, now=now)
-    return {
+    return AnalyticsSeries.model_validate({
         "metric": metric,
         "range": range_,
         "granularity": gran,
         "total": sum(p["value"] for p in points),
         "points": points,
-    }
+    })
 
 
 @router.get("/summary")
@@ -93,7 +139,7 @@ async def get_summary(
     guild: GuildDep,
     bot: BotDep,
     range_: str = Query("30d", alias="range", description="24h, 7d, 30d, 90d, or 1y"),
-) -> dict:
+) -> AnalyticsSummary:
     """Headline numbers for a range, each with a delta vs the preceding equal window.
 
     Covers command volume, new-member growth, and the top commands — the at-a-glance row
@@ -119,10 +165,10 @@ async def get_summary(
     new_current = sum(1 for j in joins if j >= cutoff)
     new_previous = sum(1 for j in joins if prev_cutoff <= j < cutoff)
 
-    return {
+    return AnalyticsSummary.model_validate({
         "range": range_,
         "commands": {"value": commands_current, "delta": commands_current - commands_previous},
         "new_members": {"value": new_current, "delta": new_current - new_previous},
         "member_count": guild.member_count,
         "top_commands": top_commands,
-    }
+    })

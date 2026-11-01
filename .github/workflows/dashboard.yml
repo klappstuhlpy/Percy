@@ -2,9 +2,9 @@ name: Dashboard
 
 on:
   push:
-    paths: ['dashboard/**', '.github/workflows/dashboard.yml']
+    paths: ['dashboard/**', 'app/internal_api/**', 'scripts/export_openapi.py', 'pyproject.toml', 'poetry.lock', '.github/workflows/dashboard.yml']
   pull_request:
-    paths: ['dashboard/**', '.github/workflows/dashboard.yml']
+    paths: ['dashboard/**', 'app/internal_api/**', 'scripts/export_openapi.py', 'pyproject.toml', 'poetry.lock', '.github/workflows/dashboard.yml']
   workflow_dispatch:
 
 permissions:
@@ -32,3 +32,29 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+  # percy-client's types are generated from Percy's OpenAPI schema. A router change that is not
+  # re-exported (openapi.json) and re-generated (generated.rs) would leave the dashboard compiling
+  # against a stale contract, so CI fails on any drift. Recipe: dashboard/crates/percy-client/GENERATION.md.
+  generated:
+    name: openapi.json and generated.rs are up to date
+    runs-on: ubuntu-latest
+    env:
+      # Same dummy values as ci.yml: config imports need them, nothing connects.
+      DISCORD_TOKEN: ci-dummy-token
+      DISCORD_BETA_TOKEN: ci-dummy-token
+      INTERNAL_API_PORT: "8090"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pipx install poetry
+      - run: poetry install --no-interaction --no-root
+      - run: poetry run python scripts/export_openapi.py --check
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dashboard
+      - run: cargo run -p percy-codegen -- --check
+        working-directory: dashboard
