@@ -10193,6 +10193,110 @@
         ]
       }
     },
+    "/api/v1/guilds/{guild_id}/events": {
+      "get": {
+        "description": "Live ``{type, data}`` hints for one guild. ``topics`` is a comma list (default: all).",
+        "operationId": "stream_events_api_v1_guilds__guild_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "topics",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topics"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Events",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/v1/guilds/{guild_id}/gallery": {
       "get": {
         "description": "List the guild's image gallery (newest first, expired images omitted).",
