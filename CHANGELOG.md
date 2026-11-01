@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Components V2 views (paginators, modlog cases, leaderboards, ...) no longer ping the users they list: user mentions are now off by default. Direct invites (`fight`, `tictactoe`, `coinflip` duels, `trade`) still ping the invited member.
 - Uptime stats that are delivered through internal api were derived through a wrong attribute.
 
+### Removed
+- Highlights (`highlight …`) and autoresponders (`autoresponder …`/`ar`), with their internal API endpoints (`/highlights`, `/autoresponders`) and the `autoresponders` backup section. Older backups that still carry it import fine; the section is ignored. The `highlights` and `autoresponders` tables are left in place (no migration drops them).
+
 ## [2.24.0] - 2026-10-29
 
 ### Added

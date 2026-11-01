@@ -33,7 +33,6 @@ BACKUP_KIND = 'percy.backup'
 #: tuple is ignored by both export and restore.
 PORTABLE_SECTIONS: tuple[str, ...] = (
     'config',
-    'autoresponders',
     'tags',
 )
 

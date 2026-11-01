@@ -1,4 +1,4 @@
-"""Content endpoints: polls, giveaways, tags, commands, autoresponders, comics, etc."""
+"""Content endpoints: polls, giveaways, tags, commands, comics, etc."""
 from __future__ import annotations
 
 import datetime
@@ -83,18 +83,6 @@ class SetCommandPermissionsBody(BaseModel):
     permissions: int | None = None
     #: Role IDs allowed to run the command regardless of permissions.
     allowed_roles: list[int | str] = []
-
-
-class CreateAutoresponderBody(BaseModel):
-    trigger: str
-    response: str
-    match_type: str = "contains"
-    ignore_case: bool = True
-    created_by: int | str | None = None
-
-
-class PatchAutoresponderBody(BaseModel):
-    enabled: bool
 
 
 class CreateComicBody(BaseModel):
@@ -917,79 +905,6 @@ async def delete_command_permissions(guild: GuildDep, bot: BotDep, command: str)
 
 
 # ---------------------------------------------------------------------------
-# Autoresponders
-# ---------------------------------------------------------------------------
-
-
-@router.get("/autoresponders")
-async def get_autoresponders(
-    guild: GuildDep,
-    bot: BotDep,
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    search: str = Query(default=''),
-) -> dict:
-    records = await bot.db.autoresponders.get_all(guild.id)
-    entries = [
-        {
-            'id': r['id'],
-            'trigger': r['trigger'],
-            'response': r['response'],
-            'match_type': r['match_type'],
-            'ignore_case': r.get('ignore_case', True),
-            'enabled': r['enabled'],
-            'uses': r.get('uses', 0),
-            'created_by': str(r['created_by']) if r.get('created_by') else None,
-        }
-        for r in records
-    ]
-
-    search_lower = search.lower()
-    if search_lower:
-        entries = [e for e in entries if search_lower in e['trigger'].lower() or search_lower in e['response'].lower()]
-
-    total = len(entries)
-    entries = entries[offset:offset + limit]
-    return {'entries': entries, 'total': total}
-
-
-@router.post("/autoresponders")
-async def create_autoresponder(guild: GuildDep, bot: BotDep, body: CreateAutoresponderBody) -> dict:
-    trigger = body.trigger.strip()
-    response = body.response.strip()
-
-    if not trigger or not response:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='trigger and response are required')
-
-    result = await bot.db.autoresponders.create(
-        guild.id, trigger, response,
-        match_type=body.match_type, ignore_case=body.ignore_case, created_by=int(body.created_by) if body.created_by else 0,
-    )
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='an autoresponder with that trigger already exists')
-    invalidate_cog_cache(bot, 'Automation', 'get_responders', guild.id)
-    return {'ok': True}
-
-
-@router.delete("/autoresponders/{trigger:path}")
-async def delete_autoresponder(guild: GuildDep, bot: BotDep, trigger: str) -> dict:
-    result = await bot.db.autoresponders.delete(guild.id, trigger)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='autoresponder not found')
-    invalidate_cog_cache(bot, 'Automation', 'get_responders', guild.id)
-    return {'ok': True}
-
-
-@router.patch("/autoresponders/{trigger:path}")
-async def patch_autoresponder(guild: GuildDep, bot: BotDep, trigger: str, body: PatchAutoresponderBody) -> dict:
-    result = await bot.db.autoresponders.set_enabled(guild.id, trigger, body.enabled)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='autoresponder not found')
-    invalidate_cog_cache(bot, 'Automation', 'get_responders', guild.id)
-    return {'ok': True}
-
-
-# ---------------------------------------------------------------------------
 # Comics
 # ---------------------------------------------------------------------------
 
@@ -1259,45 +1174,6 @@ async def unlock_channels(guild: GuildDep, bot: BotDep, body: UnlockChannelsBody
     # end_lockdown drops the bookkeeping of restored channels only, so a failed one stays listed for a retry.
     failures = await end_lockdown(bot, guild, channel_ids=_channel_ids(body.channel_ids), reason='Unlocked via dashboard')
     return {'ok': True, 'failures': len(failures)}
-
-
-# ---------------------------------------------------------------------------
-# Highlights
-# ---------------------------------------------------------------------------
-
-
-@router.get("/highlights")
-async def get_highlights(
-    guild: GuildDep,
-    bot: BotDep,
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-) -> dict:
-    records = await bot.db.highlights.get_guild_configs(guild.id)
-    entries = []
-    for r in records:
-        member = guild.get_member(r['user_id'])
-        lookup = r.get('lookup') or []
-        blocked = r.get('blocked') or []
-        entries.append({
-            'user_id': str(r['user_id']),
-            'username': str(member) if member else 'Unknown',
-            'triggers': lookup if isinstance(lookup, list) else list(lookup),
-            'blocked_count': len(blocked) if isinstance(blocked, (list, set)) else 0,
-        })
-
-    total = len(entries)
-    entries = entries[offset:offset + limit]
-    return {'entries': entries, 'total': total}
-
-
-@router.delete("/highlights/{user_id}")
-async def delete_highlight(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
-    config = await bot.db.highlights.get_config(guild.id, user_id)
-    if config is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='highlight config not found')
-    await bot.db.highlights.delete_config(config['id'])
-    return {'ok': True}
 
 
 # ---------------------------------------------------------------------------

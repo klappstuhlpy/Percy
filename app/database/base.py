@@ -18,7 +18,6 @@ from discord.utils import MISSING
 
 from app.database.repositories import (
     AdminRepository,
-    AutoRespondersRepository,
     CasesRepository,
     ComicsRepository,
     EconomyRepository,
@@ -28,7 +27,6 @@ from app.database.repositories import (
     GiveawaysRepository,
     GuildsRepository,
     GuildTemplatesRepository,
-    HighlightsRepository,
     IncidentsRepository,
     LevelingRepository,
     ModerationRepository,
@@ -294,7 +292,6 @@ class Database(_Database):
     giveaways: GiveawaysRepository
     emoji_stats: EmojiStatsRepository
     game_stats: GameStatsRepository
-    highlights: HighlightsRepository
     temp_channels: TempChannelsRepository
     playlists: PlaylistsRepository
     music_sessions: MusicSessionsRepository
@@ -306,7 +303,6 @@ class Database(_Database):
     cases: CasesRepository
     economy: EconomyRepository
     rolemenu: RoleMenusRepository
-    autoresponders: AutoRespondersRepository
     stat_counters: StatCountersRepository
     votes: VotesRepository
     event_webhooks: EventWebhooksRepository
@@ -328,7 +324,6 @@ class Database(_Database):
         self.giveaways = GiveawaysRepository(self)
         self.emoji_stats = EmojiStatsRepository(self)
         self.game_stats = GameStatsRepository(self)
-        self.highlights = HighlightsRepository(self)
         self.temp_channels = TempChannelsRepository(self)
         self.playlists = PlaylistsRepository(self)
         self.music_sessions = MusicSessionsRepository(self)
@@ -340,7 +335,6 @@ class Database(_Database):
         self.cases = CasesRepository(self)
         self.economy = EconomyRepository(self)
         self.rolemenu = RoleMenusRepository(self)
-        self.autoresponders = AutoRespondersRepository(self)
         self.stat_counters = StatCountersRepository(self)
         self.votes = VotesRepository(self)
         self.event_webhooks = EventWebhooksRepository(self)

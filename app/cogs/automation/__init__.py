@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from app.core import Cog
 
 from .assistant import AssistantMixin
-from .autoresponder import AutoResponderMixin
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -15,11 +14,10 @@ __all__ = ('Automation', 'setup')
 
 class Automation(
     AssistantMixin,
-    AutoResponderMixin,
     Cog,
     name='Automation',
 ):
-    """The AI assistant, automod presets, and automatic trigger-phrase replies.
+    """The AI assistant, and automod presets.
 
     Composed from domain mixins (mirroring the ``Misc`` / ``InternalAPI`` pattern) so
     each feature keeps its own module while presenting a single help category.

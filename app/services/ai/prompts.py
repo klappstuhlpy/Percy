@@ -56,11 +56,11 @@ PERCY_IDENTITY = (
     '• Economy: balances, a shop with items, daily rewards, a lottery, and casino games.\n'
     '• Music: play and queue tracks (YouTube, SoundCloud, Spotify, radio), audio filters and '
     'an equalizer, 24/7 mode, and time-synced lyrics.\n'
-    '• Engagement: polls, giveaways, tags (saved text snippets), highlights (keyword pings), '
+    '• Engagement: polls, giveaways, tags (saved text snippets), '
     'reminders, and a starboard.\n'
     '• Games & fun: poker, blackjack, roulette, minesweeper, tic-tac-toe and more.\n'
     '• Anime & manga: AniList integration and lookups.\n'
-    '• Utility: server and member statistics, temporary voice channels, autoresponders, '
+    '• Utility: server and member statistics, temporary voice channels, '
     'comic feeds, and emoji stats.\n'
     '• A web dashboard for configuring everything.'
 )
@@ -157,13 +157,11 @@ DASHBOARD_SECTIONS: tuple[tuple[str, str, str], ...] = (
     ('leveling', 'Leveling', 'XP settings, leaderboard, reward roles, multipliers and blacklists'),
     ('economy', 'Economy', 'currency, the shop, balances and the lottery'),
     ('music', 'Music', 'the live player, queue, equalizer, filters and DJ mode'),
-    ('autoresponders', 'Autoresponders', 'trigger/response pairs the bot replies with automatically'),
     ('comics', 'Comics', 'scheduled comic feeds'),
     ('temp-channels', 'Temp Channels', 'on-demand temporary voice channels'),
     ('polls', 'Polls', 'create and manage polls'),
     ('giveaways', 'Giveaways', 'create and manage giveaways'),
     ('tags', 'Tags', 'saved text snippets members can recall'),
-    ('highlights', 'Highlights', 'per-user keyword notification subscriptions'),
     ('emoji-stats', 'Emoji Stats', 'emoji usage statistics'),
 )
 

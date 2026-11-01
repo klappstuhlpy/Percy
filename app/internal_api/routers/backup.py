@@ -1,7 +1,7 @@
 """Internal API endpoints for config backup / restore and shareable templates.
 
 Export produces a portable JSON snapshot of a guild's ID-free configuration (portable
-guild scalars, autoresponders, tags); import applies one back — into the same guild
+guild scalars, tags); import applies one back — into the same guild
 (disaster recovery) or a different one (cloning). Publishing a backup as a *template*
 lets other servers apply the same setup by slug. Portability rules live in
 ``app.services.backup``; the actual repo reads/writes live here (they need bot + guild).
@@ -22,7 +22,6 @@ from app.services import (
 )
 
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import invalidate_cog_cache
 from .guild import _build_config_updates
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Backup & Templates"], dependencies=[Depends(verify_token)])
@@ -70,19 +69,9 @@ async def _collect_sections(bot, guild) -> dict[str, object]:
         "use_music_panel": gc.use_music_panel,
     }
 
-    autoresponders = [
-        {
-            "trigger": r["trigger"],
-            "response": r["response"],
-            "match_type": r["match_type"],
-            "ignore_case": r.get("ignore_case", True),
-        }
-        for r in await bot.db.autoresponders.get_all(guild.id)
-    ]
-
     tags = [{"name": r["name"], "content": r["content"]} for r in await bot.db.tags.export_tags(guild.id)]
 
-    return {"config": config_section, "autoresponders": autoresponders, "tags": tags}
+    return {"config": config_section, "tags": tags}
 
 
 async def _apply_config(bot, guild, section: object) -> dict:
@@ -93,34 +82,6 @@ async def _apply_config(bot, guild, section: object) -> dict:
     if updates:
         await gc.update(**updates)
     return {"applied": len(updates)}
-
-
-async def _apply_autoresponders(bot, guild, section: object) -> dict:
-    created = skipped = failed = 0
-    if not isinstance(section, list):
-        return {"created": 0, "skipped": 0, "failed": 0}
-    for item in section[:1000]:
-        if not isinstance(item, dict):
-            failed += 1
-            continue
-        trigger = (item.get("trigger") or "").strip()
-        response = (item.get("response") or "").strip()
-        if not trigger or not response:
-            failed += 1
-            continue
-        result = await bot.db.autoresponders.create(
-            guild.id, trigger, response,
-            match_type=item.get("match_type", "contains"),
-            ignore_case=bool(item.get("ignore_case", True)),
-            created_by=bot.user.id,
-        )
-        if result is None:  # duplicate trigger
-            skipped += 1
-        else:
-            created += 1
-    if created:
-        invalidate_cog_cache(bot, "Automation", "get_responders", guild.id)
-    return {"created": created, "skipped": skipped, "failed": failed}
 
 
 async def _apply_tags(bot, guild, section: object) -> dict:
@@ -162,8 +123,6 @@ async def _apply_sections(bot, guild, sections: dict[str, object]) -> dict:
     report: dict[str, object] = {}
     if "config" in sections:
         report["config"] = await _apply_config(bot, guild, sections["config"])
-    if "autoresponders" in sections:
-        report["autoresponders"] = await _apply_autoresponders(bot, guild, sections["autoresponders"])
     if "tags" in sections:
         report["tags"] = await _apply_tags(bot, guild, sections["tags"])
     return report

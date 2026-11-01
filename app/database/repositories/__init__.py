@@ -1,13 +1,11 @@
 from app.database.repositories.base import BaseRepository
 from app.database.repositories.community import (
     GiveawaysRepository,
-    HighlightsRepository,
     PollsRepository,
     StarboardRepository,
     TagsRepository,
 )
 from app.database.repositories.content import (
-    AutoRespondersRepository,
     ComicsRepository,
     RoleMenusRepository,
     StatCountersRepository,
@@ -33,7 +31,6 @@ from app.database.repositories.watchlist import WatchlistRepository
 
 __all__ = (
     'AdminRepository',
-    'AutoRespondersRepository',
     'BaseRepository',
     'CasesRepository',
     'ComicsRepository',
@@ -44,7 +41,6 @@ __all__ = (
     'GiveawaysRepository',
     'GuildTemplatesRepository',
     'GuildsRepository',
-    'HighlightsRepository',
     'IncidentsRepository',
     'LevelingRepository',
     'ModerationRepository',

@@ -125,8 +125,6 @@ and the public release, news, watch-order and comic pages. There is no third-par
 | **Polls**          | Rich polls with up to 8 options, animated vote bars, optional vote reasons, role-ping opt-in, threads, scheduling and live odds. Search, edit and inspect existing polls. |
 | **Giveaways**      | Create and manage giveaways through modals; entries via a persistent button, optional role and account/server-age requirements, automatic winner draw and reroll.                                                            |
 | **Tags**           | Per-guild custom tags with aliases, fuzzy search, ownership transfer and usage stats.                                                                                     |
-| **Highlights**     | Get a DM when a word or phrase you subscribed to is mentioned.                                                                                                            |
-| **Autoresponders** | Canned replies that fire when a message matches a trigger (`contains`/`exact`/`startswith`/`regex`), with placeholders like `{user}` and `{count}` (`autoresponder …`).   |
 | **Starboard**      | Repost messages that gather enough star reactions into a dedicated channel.                                                                                              |
 | **Role menus**     | Self-assignable roles via persistent buttons (`rolemenu …`), optionally single-choice.                                                                                   |
 | **Gimmicks**       | Fun/flavour annotation commands.                                                                                                                                          |
