@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-01
+
+### Added
+- Live updates over server-sent events (`/dashboard/guild/:id/events`): the player, audit log and stats pages update on push and fall back to polling. The stats page's live tiles work for the first time (they pointed at a `/ws` route that never existed).
+- `percy-client` response types are generated from Percy's OpenAPI schema (`percy-codegen`, pilot: analytics); CI fails on a stale schema or generated file and on client calls to missing routes.
+
+### Removed
+- Dead AutoMod client methods (the feature was removed from Percy).
+
 ### Changed
 - The dashboard now lives inside the Percy repo at `dashboard/` (git subtree, history kept) as a Cargo workspace.
 - `percy-client` moved from `kls-core` to `dashboard/crates/percy-client` (path dependency): API, client and dashboard changes ship in one commit, no kls-core tag bump.

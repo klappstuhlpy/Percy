@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.25.0] - 2026-11-01
+
 ### Added
+- Internal API: `GET /guilds/{id}/events` — a per-guild server-sent event stream (`music`, `case`, `stats` topics plus any `percy_event`), fed by an in-process `EventHub` with bounded drop-oldest queues so a slow listener never blocks the bot. The dashboard uses it for live updates instead of polling.
+- Internal API: typed response models for the analytics endpoints, and a checked-in OpenAPI schema the dashboard's client types are generated from.
+- CI: a client/API contract test (`tests/test_api_contract.py`) that fails when the dashboard client calls a route the API lacks.
 - Description to emoji stats commands.
 - Description to prefix remove command.
 - Economy: items can carry a picture (`shop add`/`shop edit` `image:`, `image_url` on the internal API), shown as the item card's thumbnail ahead of a custom emoji. Only permanent `https://` links are accepted; Discord attachment links are refused because they expire. Migration V68 adds the column.
@@ -21,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `appinfo` no longer fails with `KeyError: 'owner'`: the application endpoint it reads omits the owner (and the bot fields for apps without a bot user), which are now filled with defaults.
 - Components V2 views (paginators, modlog cases, leaderboards, ...) no longer ping the users they list: user mentions are now off by default. Direct invites (`fight`, `tictactoe`, `coinflip` duels, `trade`) still ping the invited member.
 - Uptime stats that are delivered through internal api were derived through a wrong attribute.
+
+### Changed
+- The Percy dashboard now lives in this repo at `dashboard/` (Rust workspace with `percy-client`), with its own CI workflow.
 
 ### Removed
 - Highlights (`highlight …`) and autoresponders (`autoresponder …`/`ar`), with their internal API endpoints (`/highlights`, `/autoresponders`) and the `autoresponders` backup section. Older backups that still carry it import fine; the section is ignored. The `highlights` and `autoresponders` tables are left in place (no migration drops them).
