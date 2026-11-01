@@ -6,6 +6,7 @@ from .backup import router as backup_router
 from .comics import router as comics_router
 from .content import router as content_router
 from .economy import router as economy_router
+from .events import router as events_router
 from .gallery import router as gallery_router
 from .guild import router as guild_router
 from .leveling import router as leveling_router
@@ -47,4 +48,5 @@ ALL_ROUTERS = [
     rolemenus_router,
     starboard_router,
     notifications_router,
+    events_router,
 ]

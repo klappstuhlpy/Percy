@@ -50,6 +50,7 @@ class ModLog(Cog):
             expires_at = warn_expiry(datetime.datetime.now(datetime.UTC), days)
         record = await self.bot.db.cases.create_case(guild_id, action, target_id, moderator_id, reason, expires_at)
         case = ModerationCase.from_record(record)
+        self.bot.events.publish(guild_id, 'case.created', {'case_index': case.index})
         await self._post_to_modlog(case)
         return case
 

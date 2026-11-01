@@ -459,6 +459,7 @@ class Music(Cog):
         if not player:
             return
 
+        player.announce()
         if player.queue.listen_together is not MISSING:
             # Only a track that played to its end means "load the host's next track". A
             # track replaced because the host skipped is already handled by
@@ -535,6 +536,7 @@ class Music(Cog):
 
         # A track started cleanly — clear the failure streak used by _recover_player.
         player._consecutive_errors = 0
+        player.announce()
 
         track = player.current
         if track is not None and player.guild is not None:
