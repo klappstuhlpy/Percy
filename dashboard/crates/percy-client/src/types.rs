@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::generated::{MemberDetail, MemberRoleBadge, MemberSelf};
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct UserGuild {
     pub id: String,
@@ -230,23 +232,6 @@ pub struct Channel {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Member {
-    pub id: String,
-    pub name: String,
-    pub display_name: String,
-    pub avatar_url: String,
-    pub joined_at: Option<String>,
-    pub roles: Vec<String>,
-    pub bot: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MembersResponse {
-    pub members: Vec<Member>,
-    pub total: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct SentinelInfo {
     pub channel: Option<ChannelRef>,
     pub role: Option<RoleRef>,
@@ -443,44 +428,10 @@ pub struct XpHistoryResponse {
 
 // -- Member detail (user lookup) ---------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberRoleBadge {
-    pub id: String,
-    pub name: String,
-    pub color: u32,
-}
-
 impl MemberRoleBadge {
     pub fn color_hex(&self) -> String {
         format!("#{:06x}", self.color)
     }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberLeveling {
-    pub level: i64,
-    pub xp: i64,
-    pub messages: i64,
-    pub rank: i64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberCase {
-    pub case_index: i64,
-    pub action: String,
-    pub reason: Option<String>,
-    pub moderator_id: Option<String>,
-    pub moderator_name: Option<String>,
-    pub created_at: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberCommandStats {
-    #[serde(default)]
-    pub total_commands: i64,
-    pub first_command_at: Option<String>,
-    #[serde(default)]
-    pub top_commands: Vec<CommandUsageEntry>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -489,146 +440,16 @@ pub struct CommandUsageEntry {
     pub uses: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct NameHistoryEntry {
-    pub name: String,
-    pub changed_at: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberNameHistory {
-    #[serde(default)]
-    pub usernames: Vec<NameHistoryEntry>,
-    #[serde(default)]
-    pub nicknames: Vec<NameHistoryEntry>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberDetail {
-    pub id: String,
-    pub name: String,
-    pub display_name: String,
-    pub avatar_url: String,
-    pub joined_at: Option<String>,
-    pub created_at: String,
-    #[serde(default)]
-    pub roles: Vec<MemberRoleBadge>,
-    pub bot: bool,
-    #[serde(default)]
-    pub in_guild: bool,
-    pub leveling: Option<MemberLeveling>,
-    #[serde(default)]
-    pub cases: Vec<MemberCase>,
-    #[serde(default)]
-    pub case_count: u32,
-    #[serde(default)]
-    pub warning_count: u32,
-    // Extended user info
-    pub top_role: Option<String>,
-    #[serde(default)]
-    pub top_role_color: u32,
-    pub join_position: Option<u32>,
-    #[serde(default)]
-    pub member_count: u32,
-    #[serde(default)]
-    pub mutual_guilds: u32,
-    #[serde(default)]
-    pub permissions: u64,
-    pub boosting_since: Option<String>,
-    #[serde(default)]
-    pub public_flags: Vec<String>,
-    pub status: Option<String>,
-    pub command_stats: Option<MemberCommandStats>,
-    pub last_seen: Option<String>,
-    pub names: Option<MemberNameHistory>,
-    #[serde(default)]
-    pub avatar_count: u32,
-    #[serde(default)]
-    pub owned_tags: Vec<OwnedTag>,
-    /// Whether the member currently holds the guild's configured mute role.
-    #[serde(default)]
-    pub muted: bool,
-    /// Whether the guild has a mute role at all — without one, `mute` is not offerable.
-    #[serde(default)]
-    pub mute_role_configured: bool,
-    /// End of an active Discord timeout, if any.
-    pub timed_out_until: Option<String>,
-}
-
 impl MemberDetail {
     pub fn top_role_color_hex(&self) -> String {
         format!("#{:06x}", self.top_role_color)
     }
 }
 
-/// One message from the live-history scan behind the member message viewer.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberMessage {
-    pub id: String,
-    pub channel_id: String,
-    pub channel_name: String,
-    pub content: String,
-    pub created_at: String,
-    pub edited_at: Option<String>,
-    pub jump_url: String,
-    #[serde(default)]
-    pub attachments: Vec<String>,
-    #[serde(default)]
-    pub embed_count: u32,
-}
-
-/// A member's recent messages. Percy holds no message archive, so this is a bounded
-/// scan of the guild's most recently active channels — `partial` reports that some
-/// channels were skipped, i.e. the list may not be exhaustive.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberMessages {
-    #[serde(default)]
-    pub messages: Vec<MemberMessage>,
-    #[serde(default)]
-    pub scanned_channels: u32,
-    #[serde(default)]
-    pub partial: bool,
-}
-
-/// Personal profile for a non-admin member (leveling + economy + command stats).
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MemberSelf {
-    pub id: String,
-    pub name: String,
-    pub display_name: String,
-    pub avatar_url: String,
-    pub joined_at: Option<String>,
-    pub created_at: String,
-    #[serde(default)]
-    pub roles: Vec<MemberRoleBadge>,
-    pub top_role: Option<String>,
-    #[serde(default)]
-    pub top_role_color: u32,
-    pub join_position: Option<u32>,
-    #[serde(default)]
-    pub member_count: u32,
-    pub boosting_since: Option<String>,
-    pub leveling: Option<MemberLeveling>,
-    pub economy: Option<MemberEconomy>,
-    pub command_stats: Option<MemberCommandStats>,
-    #[serde(default)]
-    pub owned_tags: Vec<OwnedTag>,
-}
-
 impl MemberSelf {
     pub fn top_role_color_hex(&self) -> String {
         format!("#{:06x}", self.top_role_color)
     }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MemberEconomy {
-    #[serde(default)]
-    pub cash: i64,
-    #[serde(default)]
-    pub bank: i64,
-    #[serde(default)]
-    pub total: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -655,22 +476,23 @@ pub struct UserSettingsPatch {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct AvatarEntry {
-    pub image: String,
-    pub changed_at: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AvatarHistoryResponse {
-    pub avatars: Vec<AvatarEntry>,
-    #[serde(default)]
-    pub total: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct PresenceEntry {
     pub status: Option<String>,
     pub status_before: Option<String>,
+    pub changed_at: Option<String>,
+}
+
+/// One name/nickname change in [`UserHistory`] (lenient: that payload is not typed from OpenAPI yet).
+#[derive(Debug, Deserialize, Serialize)]
+pub struct HistoryNameEntry {
+    pub name: String,
+    pub changed_at: String,
+}
+
+/// One avatar in [`UserHistory`].
+#[derive(Debug, Deserialize, Serialize)]
+pub struct HistoryAvatarEntry {
+    pub image: String,
     pub changed_at: Option<String>,
 }
 
@@ -679,11 +501,11 @@ pub struct PresenceEntry {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct UserHistory {
     #[serde(default)]
-    pub usernames: Vec<NameHistoryEntry>,
+    pub usernames: Vec<HistoryNameEntry>,
     #[serde(default)]
-    pub nicknames: Vec<NameHistoryEntry>,
+    pub nicknames: Vec<HistoryNameEntry>,
     #[serde(default)]
-    pub avatars: Vec<AvatarEntry>,
+    pub avatars: Vec<HistoryAvatarEntry>,
     #[serde(default)]
     pub presence: Vec<PresenceEntry>,
 }
@@ -1820,65 +1642,9 @@ pub struct EmojiStatsResponse {
 
 // -- Audit log (cases) types -------------------------------------------------
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CaseEntry {
-    pub case_index: i64,
-    pub action: String,
-    pub target_id: String,
-    pub target_name: String,
-    pub moderator_id: Option<String>,
-    pub moderator_name: Option<String>,
-    pub reason: Option<String>,
-    pub created_at: Option<String>,
-    #[serde(default)]
-    pub pardoned: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct CasesResponse {
-    pub cases: Vec<CaseEntry>,
-    pub total: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RecentCasesResponse {
-    pub cases: Vec<CaseEntry>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct CaseActionResponse {
-    pub ok: bool,
-    pub case: CaseEntry,
-}
-
 // -- Activity heatmap types --------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ActivityDay {
-    pub day: String,
-    pub count: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ActivityResponse {
-    pub activity: Vec<ActivityDay>,
-    pub days: u32,
-}
-
 // -- Bulk action types -------------------------------------------------------
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BulkActionFailure {
-    pub user_id: String,
-    pub error: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BulkActionResponse {
-    pub ok: bool,
-    pub successes: u32,
-    pub failures: Vec<BulkActionFailure>,
-}
 
 // -- Guild image gallery types -----------------------------------------------
 
@@ -3274,131 +3040,15 @@ pub struct Reminder {
 
 // -- Notifications and action requests -------------------------------------------
 
-/// Percy emits notification ids as JSON integers, but the dashboard treats them as opaque
-/// strings (cursors); accept either.
-fn string_or_int<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum V {
-        S(String),
-        I(i64),
-    }
-    Ok(match V::deserialize(d)? {
-        V::S(s) => s,
-        V::I(i) => i.to_string(),
-    })
-}
-
-/// One row of `GET /guilds/{id}/notifications`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Notification {
-    #[serde(deserialize_with = "string_or_int")]
-    pub id: String,
-    pub kind: String,
-    pub severity: String,
-    pub title: String,
-    #[serde(default)]
-    pub body: String,
-    #[serde(default)]
-    pub link: Option<String>,
-    /// ISO-8601 UTC.
-    pub created_at: String,
-    /// Guild-wide (not addressed to one user).
-    #[serde(default)]
-    pub global: bool,
-    #[serde(default)]
-    pub unread: bool,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct NotificationList {
-    #[serde(default)]
-    pub items: Vec<Notification>,
-    #[serde(default)]
-    pub unread: u32,
-    #[serde(default, deserialize_with = "string_or_int")]
-    pub last_read_id: String,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct NotificationSummary {
-    #[serde(default)]
-    pub unread: u32,
-    #[serde(default)]
-    pub pending_requests: u32,
-}
-
-/// A moderator's request that someone with more authority carries out an action.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ActionRequest {
-    pub id: String,
-    pub action: String,
-    /// `pending`, `approved`, `denied`, `expired`, `failed`, ...
-    pub status: String,
-    pub requester_id: String,
-    #[serde(default)]
-    pub requester_name: Option<String>,
-    pub target_id: String,
-    #[serde(default)]
-    pub target_name: Option<String>,
-    #[serde(default)]
-    pub reason: String,
-    /// Seconds, for timeouts.
-    #[serde(default)]
-    pub duration: Option<i64>,
-    #[serde(default)]
-    pub decided_by: Option<String>,
-    #[serde(default)]
-    pub decided_by_name: Option<String>,
-    #[serde(default)]
-    pub decision_note: Option<String>,
-    #[serde(default)]
-    pub result: Option<String>,
-    pub created_at: String,
-    #[serde(default)]
-    pub decided_at: Option<String>,
-    pub expires_at: String,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct ActionRequestList {
-    #[serde(default)]
-    pub items: Vec<ActionRequest>,
-}
-
-/// Outcome of `POST /requests/{id}/decide`. Also built from 400/403/404/409 bodies, where
-/// `ok` is `false` and `message` says why; `request` is `None` when Percy found none.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RequestDecision {
-    pub ok: bool,
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub message: String,
-    #[serde(default)]
-    pub request: Option<ActionRequest>,
-}
-
-/// `GET`/`PATCH /requests/settings`: where requests are posted and which roles may file them.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct RequestSettings {
-    #[serde(default)]
-    pub channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub role_ids: Vec<String>,
-    #[serde(default)]
-    pub roles: Vec<RoleRef>,
-}
-
 #[cfg(test)]
 mod notification_tests {
-    use super::*;
+    use crate::generated::{ActionRequestList, NotificationList, NotificationSummary, RequestDecision, RequestSettings};
 
     #[test]
-    fn notification_list_accepts_integer_ids() {
+    fn notification_list_reads_integer_ids() {
         let l: NotificationList = serde_json::from_str(r##"{"items":[{"id":42,"kind":"missing_permission","severity":"warning","title":"Missing permission in #logs","body":"x","link":"/dashboard/guild/1/logs","meta":{"channel_id":"555"},"created_at":"2026-10-21T12:30:00.123456Z","global":false,"unread":true}],"unread":1,"last_read_id":41}"##).unwrap();
-        assert_eq!(l.items[0].id, "42");
-        assert_eq!(l.last_read_id, "41");
+        assert_eq!(l.items[0].id, 42);
+        assert_eq!(l.last_read_id, 41);
         assert!(l.items[0].unread && !l.items[0].global);
     }
 
@@ -3508,21 +3158,3 @@ pub struct MemberLevel {
 }
 
 // -- Warn policy types ---------------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct WarnThreshold {
-    pub warn_count: u32,
-    pub action: String,
-    #[serde(default)]
-    pub duration_seconds: Option<u64>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WarnPolicy {
-    #[serde(default)]
-    pub expiry_days: Option<u32>,
-    #[serde(default)]
-    pub thresholds: Vec<WarnThreshold>,
-    #[serde(default)]
-    pub actions: Vec<String>,
-}

@@ -15,6 +15,235 @@
         "title": "AIAskBody",
         "type": "object"
       },
+      "ActionRequest": {
+        "description": "A moderator's request that someone with more authority carries out an action.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decided_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Name"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "guild_id": {
+            "title": "Guild Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requester_id": {
+            "title": "Requester Id",
+            "type": "string"
+          },
+          "requester_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Name"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Name"
+          }
+        },
+        "required": [
+          "id",
+          "guild_id",
+          "requester_id",
+          "requester_name",
+          "target_id",
+          "target_name",
+          "action",
+          "reason",
+          "duration",
+          "status",
+          "decided_by",
+          "decided_by_name",
+          "decision_note",
+          "result",
+          "channel_id",
+          "message_id",
+          "created_at",
+          "decided_at",
+          "expires_at"
+        ],
+        "title": "ActionRequest",
+        "type": "object"
+      },
+      "ActionRequestList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRequest"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ActionRequestList",
+        "type": "object"
+      },
+      "ActivityDay": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "day": {
+            "title": "Day",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "count"
+        ],
+        "title": "ActivityDay",
+        "type": "object"
+      },
+      "ActivityResponse": {
+        "properties": {
+          "activity": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityDay"
+            },
+            "title": "Activity",
+            "type": "array"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activity",
+          "days"
+        ],
+        "title": "ActivityResponse",
+        "type": "object"
+      },
       "AddRoleMenuRoleBody": {
         "properties": {
           "emoji": {
@@ -377,6 +606,52 @@
         "title": "AudioBody",
         "type": "object"
       },
+      "AvatarEntry": {
+        "properties": {
+          "changed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed At"
+          },
+          "image": {
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image",
+          "changed_at"
+        ],
+        "title": "AvatarEntry",
+        "type": "object"
+      },
+      "AvatarHistoryResponse": {
+        "properties": {
+          "avatars": {
+            "items": {
+              "$ref": "#/components/schemas/AvatarEntry"
+            },
+            "title": "Avatars",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "avatars",
+          "total"
+        ],
+        "title": "AvatarHistoryResponse",
+        "type": "object"
+      },
       "BatchGuildConfigBody": {
         "properties": {
           "operations": {
@@ -613,6 +888,187 @@
           "action"
         ],
         "title": "BulkActionBody",
+        "type": "object"
+      },
+      "BulkActionFailure": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "error"
+        ],
+        "title": "BulkActionFailure",
+        "type": "object"
+      },
+      "BulkActionResponse": {
+        "properties": {
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/BulkActionFailure"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "successes": {
+            "title": "Successes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "successes",
+          "failures"
+        ],
+        "title": "BulkActionResponse",
+        "type": "object"
+      },
+      "CaseActionResponse": {
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/CaseEntry"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "case"
+        ],
+        "title": "CaseActionResponse",
+        "type": "object"
+      },
+      "CaseDeleteResponse": {
+        "properties": {
+          "case_index": {
+            "title": "Case Index",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "case_index"
+        ],
+        "title": "CaseDeleteResponse",
+        "type": "object"
+      },
+      "CaseEntry": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "case_index": {
+            "title": "Case Index",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "moderator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderator Id"
+          },
+          "moderator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderator Name"
+          },
+          "pardoned": {
+            "default": false,
+            "title": "Pardoned",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_name": {
+            "title": "Target Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_index",
+          "action",
+          "target_id",
+          "target_name",
+          "moderator_id",
+          "moderator_name",
+          "reason",
+          "created_at"
+        ],
+        "title": "CaseEntry",
+        "type": "object"
+      },
+      "CasesResponse": {
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseEntry"
+            },
+            "title": "Cases",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cases",
+          "total"
+        ],
+        "title": "CasesResponse",
         "type": "object"
       },
       "ControlBody": {
@@ -1518,6 +1974,59 @@
         "title": "MarkReadBody",
         "type": "object"
       },
+      "Member": {
+        "properties": {
+          "avatar_url": {
+            "title": "Avatar Url",
+            "type": "string"
+          },
+          "bot": {
+            "title": "Bot",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "avatar_url",
+          "joined_at",
+          "roles",
+          "bot"
+        ],
+        "title": "Member",
+        "type": "object"
+      },
       "MemberActionBody": {
         "properties": {
           "action": {
@@ -1577,6 +2086,606 @@
         "title": "MemberActionBody",
         "type": "object"
       },
+      "MemberActionResult": {
+        "description": "Success body of a member action; failures are HTTP errors with their own status.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "deleted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "ok",
+          "action"
+        ],
+        "title": "MemberActionResult",
+        "type": "object"
+      },
+      "MemberCase": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "case_index": {
+            "title": "Case Index",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "moderator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderator Id"
+          },
+          "moderator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderator Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "case_index",
+          "action",
+          "reason",
+          "moderator_id",
+          "moderator_name",
+          "created_at"
+        ],
+        "title": "MemberCase",
+        "type": "object"
+      },
+      "MemberCommandStats": {
+        "properties": {
+          "first_command_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Command At"
+          },
+          "top_commands": {
+            "items": {
+              "$ref": "#/components/schemas/MemberTopCommand"
+            },
+            "title": "Top Commands",
+            "type": "array"
+          },
+          "total_commands": {
+            "title": "Total Commands",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_commands",
+          "first_command_at",
+          "top_commands"
+        ],
+        "title": "MemberCommandStats",
+        "type": "object"
+      },
+      "MemberDetail": {
+        "description": "Aggregated profile for one user (the lookup page). ``in_guild`` is false for a user who left.",
+        "properties": {
+          "avatar_count": {
+            "title": "Avatar Count",
+            "type": "integer"
+          },
+          "avatar_url": {
+            "title": "Avatar Url",
+            "type": "string"
+          },
+          "boosting_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boosting Since"
+          },
+          "bot": {
+            "title": "Bot",
+            "type": "boolean"
+          },
+          "case_count": {
+            "title": "Case Count",
+            "type": "integer"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/MemberCase"
+            },
+            "title": "Cases",
+            "type": "array"
+          },
+          "command_stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberCommandStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "in_guild": {
+            "title": "In Guild",
+            "type": "boolean"
+          },
+          "join_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Join Position"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "leveling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberLeveling"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "mute_role_configured": {
+            "title": "Mute Role Configured",
+            "type": "boolean"
+          },
+          "muted": {
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "mutual_guilds": {
+            "title": "Mutual Guilds",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberNameHistory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owned_tags": {
+            "items": {
+              "$ref": "#/components/schemas/MemberOwnedTag"
+            },
+            "title": "Owned Tags",
+            "type": "array"
+          },
+          "permissions": {
+            "title": "Permissions",
+            "type": "integer"
+          },
+          "public_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Public Flags",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/MemberRoleBadge"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "timed_out_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timed Out Until"
+          },
+          "top_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Role"
+          },
+          "top_role_color": {
+            "title": "Top Role Color",
+            "type": "integer"
+          },
+          "warning_count": {
+            "title": "Warning Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "avatar_url",
+          "joined_at",
+          "created_at",
+          "roles",
+          "bot",
+          "in_guild",
+          "top_role",
+          "top_role_color",
+          "join_position",
+          "member_count",
+          "mutual_guilds",
+          "permissions",
+          "boosting_since",
+          "public_flags",
+          "status",
+          "muted",
+          "mute_role_configured",
+          "timed_out_until",
+          "leveling",
+          "cases",
+          "case_count",
+          "warning_count",
+          "command_stats",
+          "last_seen",
+          "names",
+          "avatar_count",
+          "owned_tags"
+        ],
+        "title": "MemberDetail",
+        "type": "object"
+      },
+      "MemberEconomy": {
+        "properties": {
+          "bank": {
+            "title": "Bank",
+            "type": "integer"
+          },
+          "cash": {
+            "title": "Cash",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cash",
+          "bank",
+          "total"
+        ],
+        "title": "MemberEconomy",
+        "type": "object"
+      },
+      "MemberLeveling": {
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "messages": {
+            "title": "Messages",
+            "type": "integer"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "xp": {
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "xp",
+          "messages",
+          "rank"
+        ],
+        "title": "MemberLeveling",
+        "type": "object"
+      },
+      "MemberMessage": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "title": "Channel Name",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "embed_count": {
+            "title": "Embed Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "jump_url": {
+            "title": "Jump Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "content",
+          "created_at",
+          "edited_at",
+          "jump_url",
+          "attachments",
+          "embed_count"
+        ],
+        "title": "MemberMessage",
+        "type": "object"
+      },
+      "MemberMessages": {
+        "description": "A bounded live scan: ``partial`` means some channels were skipped.",
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MemberMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "scanned_channels": {
+            "title": "Scanned Channels",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "messages",
+          "scanned_channels",
+          "partial"
+        ],
+        "title": "MemberMessages",
+        "type": "object"
+      },
+      "MemberNameHistory": {
+        "properties": {
+          "nicknames": {
+            "items": {
+              "$ref": "#/components/schemas/NameHistoryEntry"
+            },
+            "title": "Nicknames",
+            "type": "array"
+          },
+          "usernames": {
+            "items": {
+              "$ref": "#/components/schemas/NameHistoryEntry"
+            },
+            "title": "Usernames",
+            "type": "array"
+          }
+        },
+        "required": [
+          "usernames",
+          "nicknames"
+        ],
+        "title": "MemberNameHistory",
+        "type": "object"
+      },
+      "MemberOwnedTag": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "uses"
+        ],
+        "title": "MemberOwnedTag",
+        "type": "object"
+      },
+      "MemberRoleBadge": {
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "title": "MemberRoleBadge",
+        "type": "object"
+      },
       "MemberRolesBody": {
         "properties": {
           "add": {
@@ -1613,6 +2722,232 @@
         "title": "MemberRolesBody",
         "type": "object"
       },
+      "MemberRolesResult": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "MemberRolesResult",
+        "type": "object"
+      },
+      "MemberSelf": {
+        "description": "Personal profile for a non-admin member: leveling, economy, command stats; no cases.",
+        "properties": {
+          "avatar_url": {
+            "title": "Avatar Url",
+            "type": "string"
+          },
+          "boosting_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boosting Since"
+          },
+          "command_stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberCommandStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "economy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberEconomy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "join_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Join Position"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "leveling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberSelfLeveling"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owned_tags": {
+            "items": {
+              "$ref": "#/components/schemas/MemberOwnedTag"
+            },
+            "title": "Owned Tags",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/MemberRoleBadge"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "top_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Role"
+          },
+          "top_role_color": {
+            "title": "Top Role Color",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "avatar_url",
+          "joined_at",
+          "created_at",
+          "roles",
+          "top_role",
+          "top_role_color",
+          "join_position",
+          "member_count",
+          "boosting_since",
+          "leveling",
+          "economy",
+          "command_stats",
+          "owned_tags"
+        ],
+        "title": "MemberSelf",
+        "type": "object"
+      },
+      "MemberSelfLeveling": {
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "messages": {
+            "title": "Messages",
+            "type": "integer"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "total_xp": {
+            "title": "Total Xp",
+            "type": "integer"
+          },
+          "xp": {
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "xp",
+          "messages",
+          "rank",
+          "total_xp"
+        ],
+        "title": "MemberSelfLeveling",
+        "type": "object"
+      },
+      "MemberTopCommand": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command",
+          "uses"
+        ],
+        "title": "MemberTopCommand",
+        "type": "object"
+      },
+      "MembersResponse": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "members",
+          "total"
+        ],
+        "title": "MembersResponse",
+        "type": "object"
+      },
       "ModerationIgnoreBody": {
         "properties": {
           "action": {
@@ -1636,6 +2971,153 @@
           "entity_id"
         ],
         "title": "ModerationIgnoreBody",
+        "type": "object"
+      },
+      "NameHistoryEntry": {
+        "properties": {
+          "changed_at": {
+            "title": "Changed At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "changed_at"
+        ],
+        "title": "NameHistoryEntry",
+        "type": "object"
+      },
+      "Notification": {
+        "description": "One row of the feed. ``id`` is an integer on the wire.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "global": {
+            "title": "Global",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "title": "Meta",
+            "type": "object"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "severity",
+          "title",
+          "body",
+          "link",
+          "meta",
+          "created_at",
+          "global",
+          "unread"
+        ],
+        "title": "Notification",
+        "type": "object"
+      },
+      "NotificationList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "last_read_id": {
+            "title": "Last Read Id",
+            "type": "integer"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "unread",
+          "last_read_id"
+        ],
+        "title": "NotificationList",
+        "type": "object"
+      },
+      "NotificationSummary": {
+        "properties": {
+          "pending_requests": {
+            "title": "Pending Requests",
+            "type": "integer"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread",
+          "pending_requests"
+        ],
+        "title": "NotificationSummary",
+        "type": "object"
+      },
+      "NotificationsReadResult": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "unread"
+        ],
+        "title": "NotificationsReadResult",
         "type": "object"
       },
       "PardonBody": {
@@ -3256,6 +4738,139 @@
         "title": "RankCardPreviewBody",
         "type": "object"
       },
+      "RecentCasesResponse": {
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseEntry"
+            },
+            "title": "Cases",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cases"
+        ],
+        "title": "RecentCasesResponse",
+        "type": "object"
+      },
+      "RequestChannelRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "RequestChannelRef",
+        "type": "object"
+      },
+      "RequestDecision": {
+        "description": "Outcome of a decision. The HTTP status mirrors it; error bodies share this shape.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "message",
+          "request"
+        ],
+        "title": "RequestDecision",
+        "type": "object"
+      },
+      "RequestRoleRef": {
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "title": "RequestRoleRef",
+        "type": "object"
+      },
+      "RequestSettings": {
+        "description": "Where requests are posted and which roles may file them.",
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RequestRoleRef"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "channel",
+          "role_ids",
+          "roles"
+        ],
+        "title": "RequestSettings",
+        "type": "object"
+      },
       "RequestSettingsBody": {
         "properties": {
           "channel_id": {
@@ -3786,6 +5401,72 @@
           }
         },
         "title": "WarnExpiryBody",
+        "type": "object"
+      },
+      "WarnPolicy": {
+        "properties": {
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "expiry_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiry Days"
+          },
+          "thresholds": {
+            "items": {
+              "$ref": "#/components/schemas/WarnThreshold"
+            },
+            "title": "Thresholds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expiry_days",
+          "thresholds",
+          "actions"
+        ],
+        "title": "WarnPolicy",
+        "type": "object"
+      },
+      "WarnThreshold": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "warn_count": {
+            "title": "Warn Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "warn_count",
+          "action",
+          "duration_seconds"
+        ],
+        "title": "WarnThreshold",
         "type": "object"
       },
       "WarnThresholdBody": {
@@ -6587,9 +8268,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Cases Api V1 Guilds  Guild Id  Cases Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CasesResponse"
                 }
               }
             },
@@ -6686,9 +8365,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Case Api V1 Guilds  Guild Id  Cases Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CaseActionResponse"
                 }
               }
             },
@@ -6786,9 +8463,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Recent Cases Api V1 Guilds  Guild Id  Cases Recent Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RecentCasesResponse"
                 }
               }
             },
@@ -6902,9 +8577,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Case Api V1 Guilds  Guild Id  Cases  Case Index  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CaseDeleteResponse"
                 }
               }
             },
@@ -7010,9 +8683,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Case Api V1 Guilds  Guild Id  Cases  Case Index  Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CaseActionResponse"
                 }
               }
             },
@@ -7120,9 +8791,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Pardon Case Api V1 Guilds  Guild Id  Cases  Case Index  Pardon Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CaseEntry"
                 }
               }
             },
@@ -12641,9 +14310,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Guild Members Api V1 Guilds  Guild Id  Members Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MembersResponse"
                 }
               }
             },
@@ -12742,9 +14409,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Bulk Member Action Api V1 Guilds  Guild Id  Members Bulk Action Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BulkActionResponse"
                 }
               }
             },
@@ -12852,9 +14517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Member Action Api V1 Guilds  Guild Id  Members  User Id  Action Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberActionResult"
                 }
               }
             },
@@ -12964,9 +14627,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Member Activity Api V1 Guilds  Guild Id  Members  User Id  Activity Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActivityResponse"
                 }
               }
             },
@@ -13066,9 +14727,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Member Avatars Api V1 Guilds  Guild Id  Members  User Id  Avatars Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AvatarHistoryResponse"
                 }
               }
             },
@@ -13166,9 +14825,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Member Detail Api V1 Guilds  Guild Id  Members  User Id  Detail Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberDetail"
                 }
               }
             },
@@ -13290,9 +14947,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Member Messages Api V1 Guilds  Guild Id  Members  User Id  Messages Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberMessages"
                 }
               }
             },
@@ -13399,9 +15054,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Member Roles Api V1 Guilds  Guild Id  Members  User Id  Roles Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberRolesResult"
                 }
               }
             },
@@ -13499,9 +15152,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Member Self Api V1 Guilds  Guild Id  Members  User Id  Self Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberSelf"
                 }
               }
             },
@@ -15538,9 +17189,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Notifications Api V1 Guilds  Guild Id  Notifications Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NotificationList"
                 }
               }
             },
@@ -15638,9 +17287,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Mark Notifications Read Api V1 Guilds  Guild Id  Notifications Read Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NotificationsReadResult"
                 }
               }
             },
@@ -15737,9 +17384,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Notifications Summary Api V1 Guilds  Guild Id  Notifications Summary Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NotificationSummary"
                 }
               }
             },
@@ -16464,9 +18109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Requests Api V1 Guilds  Guild Id  Requests Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActionRequestList"
                 }
               }
             },
@@ -16554,9 +18197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Request Settings Api V1 Guilds  Guild Id  Requests Settings Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RequestSettings"
                 }
               }
             },
@@ -16652,9 +18293,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Request Settings Api V1 Guilds  Guild Id  Requests Settings Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RequestSettings"
                 }
               }
             },
@@ -16760,7 +18399,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDecision"
+                }
               }
             },
             "description": "Successful Response"
@@ -20399,9 +22040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Warn Policy Api V1 Guilds  Guild Id  Warn Policy Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WarnPolicy"
                 }
               }
             },
@@ -20498,9 +22137,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Warn Policy Api V1 Guilds  Guild Id  Warn Policy Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WarnPolicy"
                 }
               }
             },
@@ -20696,9 +22333,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Put Warn Threshold Api V1 Guilds  Guild Id  Warn Policy Thresholds  Warn Count  Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WarnPolicy"
                 }
               }
             },

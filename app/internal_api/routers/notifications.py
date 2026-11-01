@@ -4,12 +4,12 @@ Permission checks for a decision stay in :func:`app.cogs.notifications.decide.de
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.cogs.notifications.decide import decide_request
 from app.services.notifications import notification_payload, request_payload
@@ -36,6 +36,104 @@ class RequestSettingsBody(BaseModel):
     role_ids: list[int] = []
 
 
+# ---------------------------------------------------------------------------
+# Response models — the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md).
+# ---------------------------------------------------------------------------
+
+
+class Notification(BaseModel):
+    """One row of the feed. ``id`` is an integer on the wire."""
+
+    id: int
+    kind: str
+    severity: str
+    title: str
+    body: str
+    link: str | None
+    meta: dict[str, Any]
+    #: ISO-8601 UTC with a trailing ``Z``.
+    created_at: str
+    #: Guild-wide (not addressed to one user).
+    global_: bool = Field(alias='global')
+    unread: bool
+
+
+class NotificationList(BaseModel):
+    items: list[Notification]
+    unread: int
+    last_read_id: int
+
+
+class NotificationSummary(BaseModel):
+    unread: int
+    pending_requests: int
+
+
+class NotificationsReadResult(BaseModel):
+    ok: bool
+    unread: int
+
+
+class ActionRequest(BaseModel):
+    """A moderator's request that someone with more authority carries out an action."""
+
+    id: str
+    guild_id: str
+    requester_id: str
+    requester_name: str | None
+    target_id: str
+    target_name: str | None
+    action: str
+    reason: str
+    #: Seconds, for timeouts.
+    duration: int | None
+    #: ``pending``, ``approved``, ``denied``, ``expired``, ``failed``, ...
+    status: str
+    decided_by: str | None
+    decided_by_name: str | None
+    decision_note: str | None
+    result: str | None
+    channel_id: str | None
+    message_id: str | None
+    created_at: str
+    decided_at: str | None
+    expires_at: str
+
+
+class ActionRequestList(BaseModel):
+    items: list[ActionRequest]
+
+
+class RequestChannelRef(BaseModel):
+    id: str
+    name: str
+    type: str
+
+
+class RequestRoleRef(BaseModel):
+    id: str
+    name: str
+    color: int
+
+
+class RequestSettings(BaseModel):
+    """Where requests are posted and which roles may file them."""
+
+    channel: RequestChannelRef | None
+    role_ids: list[str]
+    roles: list[RequestRoleRef]
+
+
+class RequestDecision(BaseModel):
+    """Outcome of a decision. The HTTP status mirrors it; error bodies share this shape."""
+
+    ok: bool
+    status: str
+    message: str
+    request: ActionRequest | None
+
+
 def _name(guild, user_id: int | None) -> str | None:
     member = guild.get_member(user_id) if user_id is not None else None
     return member.display_name if member else None
@@ -53,31 +151,31 @@ def _enriched(guild, row) -> dict:
 async def list_notifications(
     guild: GuildDep, bot: BotDep, user_id: int,
     limit: int = Query(30, ge=1, le=100), before: int | None = None,
-) -> dict:
+) -> NotificationList:
     repo = bot.db.notifications
     last_read = await repo.last_read(guild.id, user_id)
     rows = await repo.list(guild.id, limit=limit, before_id=before)
-    return {
+    return NotificationList.model_validate({
         "items": [notification_payload(r, last_read) for r in rows],
         "unread": await repo.unread_count(guild.id, user_id),
         "last_read_id": last_read,
-    }
+    })
 
 
 @router.get("/notifications/summary")
-async def notifications_summary(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+async def notifications_summary(guild: GuildDep, bot: BotDep, user_id: int) -> NotificationSummary:
     repo = bot.db.notifications
-    return {
-        "unread": await repo.unread_count(guild.id, user_id),
-        "pending_requests": await repo.pending_count(guild.id),
-    }
+    return NotificationSummary(
+        unread=await repo.unread_count(guild.id, user_id),
+        pending_requests=await repo.pending_count(guild.id),
+    )
 
 
 @router.post("/notifications/read")
-async def mark_notifications_read(guild: GuildDep, bot: BotDep, body: MarkReadBody) -> dict:
+async def mark_notifications_read(guild: GuildDep, bot: BotDep, body: MarkReadBody) -> NotificationsReadResult:
     repo = bot.db.notifications
     await repo.mark_read(guild.id, body.user_id, body.up_to_id)
-    return {"ok": True, "unread": await repo.unread_count(guild.id, body.user_id)}
+    return NotificationsReadResult(ok=True, unread=await repo.unread_count(guild.id, body.user_id))
 
 
 @router.get("/requests")
@@ -85,31 +183,31 @@ async def list_requests(
     guild: GuildDep, bot: BotDep,
     status_filter: Literal['pending', 'all'] = Query('pending', alias='status'),
     limit: int = Query(50, ge=1, le=100),
-) -> dict:
+) -> ActionRequestList:
     rows = await bot.db.notifications.list_requests(
         guild.id, status=None if status_filter == 'all' else 'pending', limit=limit
     )
-    return {"items": [_enriched(guild, row) for row in rows]}
+    return ActionRequestList.model_validate({"items": [_enriched(guild, row) for row in rows]})
 
 
-async def _settings(guild, bot) -> dict:
+async def _settings(guild, bot) -> RequestSettings:
     config = await bot.db.get_guild_config(guild.id)
     role_ids = list(config.request_role_ids)
-    return {
+    return RequestSettings.model_validate({
         "channel": resolve_channel(guild, config.request_channel_id),
         "role_ids": [str(r) for r in role_ids],
         "roles": [resolve_role(guild, r) for r in role_ids],
-    }
+    })
 
 
 # Declared before /requests/{request_id}/... so "settings" is never read as an id.
 @router.get("/requests/settings")
-async def get_request_settings(guild: GuildDep, bot: BotDep) -> dict:
+async def get_request_settings(guild: GuildDep, bot: BotDep) -> RequestSettings:
     return await _settings(guild, bot)
 
 
 @router.patch("/requests/settings")
-async def patch_request_settings(guild: GuildDep, bot: BotDep, body: RequestSettingsBody) -> dict:
+async def patch_request_settings(guild: GuildDep, bot: BotDep, body: RequestSettingsBody) -> RequestSettings:
     if body.channel_id is not None:
         channel = guild.get_channel(body.channel_id)
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):
@@ -121,7 +219,8 @@ async def patch_request_settings(guild: GuildDep, bot: BotDep, body: RequestSett
     return await _settings(guild, bot)
 
 
-@router.post("/requests/{request_id}/decide")
+# A JSONResponse is returned as-is (its status mirrors the outcome); response_model only documents the body.
+@router.post("/requests/{request_id}/decide", response_model=RequestDecision)
 async def decide(guild: GuildDep, bot: BotDep, request_id: int, body: DecideBody) -> JSONResponse:
     moderator = guild.get_member(body.moderator_id)
     if moderator is None:

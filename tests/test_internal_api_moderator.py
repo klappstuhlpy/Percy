@@ -123,7 +123,7 @@ async def test_kick_with_permission_records_the_moderator() -> None:
     guild, _, target = _setup(kick_members=True)
     bot = _bot()
     result = await _act(guild, bot, 'kick', reason='spam')
-    assert result['ok']
+    assert result.ok
     target.kick.assert_awaited_once()
     bot.dispatch.assert_called_once_with('mod_action', guild.id, 'kick', TARGET, MOD, 'spam')
 
@@ -164,7 +164,7 @@ async def test_mute_does_not_need_percy_to_outrank_the_member() -> None:
     bot.db.get_guild_config = AsyncMock(return_value=SimpleNamespace(mute_role_id=mute_role.id))
     guild.get_role = MagicMock(return_value=mute_role)
     result = await _act(guild, bot, 'mute')
-    assert result['action'] == 'mute'
+    assert result.action == 'mute'
     target.add_roles.assert_awaited_once()
 
 
@@ -208,7 +208,7 @@ async def test_purge_works_for_a_user_who_left(monkeypatch: pytest.MonkeyPatch) 
     purge = AsyncMock(return_value=3)
     monkeypatch.setattr(member_actions, 'purge_member_messages', purge)
     result = await _act(guild, _bot(), 'purge', user_id=555)
-    assert result['deleted'] == 3
+    assert result.deleted == 3
 
 
 # -- roles PATCH -----------------------------------------------------------------
@@ -280,7 +280,7 @@ async def test_bulk_requires_the_permission_and_skips_members_above_the_moderato
     result = await mod_api.bulk_member_action(
         _bot(), guild, mod_api.BulkActionBody(user_ids=[TARGET], action='kick', moderator_id=MOD)
     )
-    assert result['successes'] == 0 and 'yours' in result['failures'][0]['error']
+    assert result.successes == 0 and 'yours' in result.failures[0].error
     target.kick.assert_not_awaited()
 
 
@@ -339,7 +339,7 @@ async def test_an_uncached_moderator_is_fetched_not_refused() -> None:
     guild, moderator, target = _setup(kick_members=True)
     guild.get_member = MagicMock(side_effect={ME: guild.me, TARGET: target}.get)  # moderator not cached
     guild.fetch_member = AsyncMock(return_value=moderator)
-    assert (await _act(guild, _bot(), 'kick'))['ok']
+    assert (await _act(guild, _bot(), 'kick')).ok
     guild.fetch_member.assert_awaited_once_with(MOD)
 
 
@@ -347,7 +347,7 @@ async def test_purging_your_own_messages_is_allowed(monkeypatch: pytest.MonkeyPa
     guild, _, _ = _setup(manage_messages=True)
     monkeypatch.setattr(member_actions, 'purge_member_messages', AsyncMock(return_value=2))
     result = await _act(guild, _bot(), 'purge', user_id=MOD)
-    assert result['deleted'] == 2
+    assert result.deleted == 2
 
 
 async def test_timing_out_an_administrator_says_why() -> None:

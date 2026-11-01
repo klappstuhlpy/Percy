@@ -2,6 +2,56 @@
 // Regenerate after any API change: `poetry run python scripts/export_openapi.py && cargo run -p percy-codegen`.
 // See GENERATION.md.
 
+///A moderator's request that someone with more authority carries out an action.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ActionRequest {
+    pub action: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel_id: ::std::option::Option<::std::string::String>,
+    pub created_at: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub decided_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub decided_by: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub decided_by_name: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub decision_note: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub duration: ::std::option::Option<i64>,
+    pub expires_at: ::std::string::String,
+    pub guild_id: ::std::string::String,
+    pub id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub message_id: ::std::option::Option<::std::string::String>,
+    pub reason: ::std::string::String,
+    pub requester_id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub requester_name: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub result: ::std::option::Option<::std::string::String>,
+    pub status: ::std::string::String,
+    pub target_id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub target_name: ::std::option::Option<::std::string::String>,
+}
+///`ActionRequestList`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ActionRequestList {
+    pub items: ::std::vec::Vec<ActionRequest>,
+}
+///`ActivityDay`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ActivityDay {
+    pub count: i64,
+    pub day: ::std::string::String,
+}
+///`ActivityResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ActivityResponse {
+    pub activity: ::std::vec::Vec<ActivityDay>,
+    pub days: i64,
+}
 ///A headline number paired with its delta vs the preceding equal window.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct AnalyticsMetric {
@@ -38,6 +88,360 @@ pub struct AnalyticsSummary {
 pub struct AnalyticsTopCommand {
     pub command: ::std::string::String,
     pub uses: i64,
+}
+///`AvatarEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AvatarEntry {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub changed_at: ::std::option::Option<::std::string::String>,
+    pub image: ::std::string::String,
+}
+///`AvatarHistoryResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AvatarHistoryResponse {
+    pub avatars: ::std::vec::Vec<AvatarEntry>,
+    pub total: i64,
+}
+///`BulkActionFailure`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct BulkActionFailure {
+    pub error: ::std::string::String,
+    pub user_id: ::std::string::String,
+}
+///`BulkActionResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct BulkActionResponse {
+    pub failures: ::std::vec::Vec<BulkActionFailure>,
+    pub ok: bool,
+    pub successes: i64,
+}
+///`CaseActionResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CaseActionResponse {
+    pub case: CaseEntry,
+    pub ok: bool,
+}
+///`CaseDeleteResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CaseDeleteResponse {
+    pub case_index: i64,
+    pub ok: bool,
+}
+///`CaseEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CaseEntry {
+    pub action: ::std::string::String,
+    pub case_index: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub created_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub moderator_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub moderator_name: ::std::option::Option<::std::string::String>,
+    #[serde(default)]
+    pub pardoned: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub reason: ::std::option::Option<::std::string::String>,
+    pub target_id: ::std::string::String,
+    pub target_name: ::std::string::String,
+}
+///`CasesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CasesResponse {
+    pub cases: ::std::vec::Vec<CaseEntry>,
+    pub total: i64,
+}
+///`Member`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct Member {
+    pub avatar_url: ::std::string::String,
+    pub bot: bool,
+    pub display_name: ::std::string::String,
+    pub id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub joined_at: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+    pub roles: ::std::vec::Vec<::std::string::String>,
+}
+///Success body of a member action; failures are HTTP errors with their own status.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberActionResult {
+    pub action: ::std::string::String,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub deleted: ::std::option::Option<i64>,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub until: ::std::option::Option<::std::string::String>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub warning: ::std::option::Option<::std::string::String>,
+}
+///`MemberCase`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberCase {
+    pub action: ::std::string::String,
+    pub case_index: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub created_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub moderator_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub moderator_name: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub reason: ::std::option::Option<::std::string::String>,
+}
+///`MemberCommandStats`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberCommandStats {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub first_command_at: ::std::option::Option<::std::string::String>,
+    pub top_commands: ::std::vec::Vec<MemberTopCommand>,
+    pub total_commands: i64,
+}
+///Aggregated profile for one user (the lookup page). ``in_guild`` is false for a user who left.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberDetail {
+    pub avatar_count: i64,
+    pub avatar_url: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub boosting_since: ::std::option::Option<::std::string::String>,
+    pub bot: bool,
+    pub case_count: i64,
+    pub cases: ::std::vec::Vec<MemberCase>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub command_stats: ::std::option::Option<MemberCommandStats>,
+    pub created_at: ::std::string::String,
+    pub display_name: ::std::string::String,
+    pub id: ::std::string::String,
+    pub in_guild: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub join_position: ::std::option::Option<i64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub joined_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub last_seen: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub leveling: ::std::option::Option<MemberLeveling>,
+    pub member_count: i64,
+    pub mute_role_configured: bool,
+    pub muted: bool,
+    pub mutual_guilds: i64,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub names: ::std::option::Option<MemberNameHistory>,
+    pub owned_tags: ::std::vec::Vec<MemberOwnedTag>,
+    pub permissions: i64,
+    pub public_flags: ::std::vec::Vec<::std::string::String>,
+    pub roles: ::std::vec::Vec<MemberRoleBadge>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub status: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub timed_out_until: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub top_role: ::std::option::Option<::std::string::String>,
+    pub top_role_color: i64,
+    pub warning_count: i64,
+}
+///`MemberEconomy`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberEconomy {
+    pub bank: i64,
+    pub cash: i64,
+    pub total: i64,
+}
+///`MemberLeveling`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberLeveling {
+    pub level: i64,
+    pub messages: i64,
+    pub rank: i64,
+    pub xp: i64,
+}
+///`MemberMessage`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberMessage {
+    pub attachments: ::std::vec::Vec<::std::string::String>,
+    pub channel_id: ::std::string::String,
+    pub channel_name: ::std::string::String,
+    pub content: ::std::string::String,
+    pub created_at: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub edited_at: ::std::option::Option<::std::string::String>,
+    pub embed_count: i64,
+    pub id: ::std::string::String,
+    pub jump_url: ::std::string::String,
+}
+///A bounded live scan: ``partial`` means some channels were skipped.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberMessages {
+    pub messages: ::std::vec::Vec<MemberMessage>,
+    pub partial: bool,
+    pub scanned_channels: i64,
+}
+///`MemberNameHistory`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberNameHistory {
+    pub nicknames: ::std::vec::Vec<NameHistoryEntry>,
+    pub usernames: ::std::vec::Vec<NameHistoryEntry>,
+}
+///`MemberOwnedTag`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberOwnedTag {
+    pub id: i64,
+    pub name: ::std::string::String,
+    pub uses: i64,
+}
+///`MemberRoleBadge`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberRoleBadge {
+    pub color: i64,
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+}
+///`MemberRolesResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberRolesResult {
+    pub ok: bool,
+}
+///Personal profile for a non-admin member: leveling, economy, command stats; no cases.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberSelf {
+    pub avatar_url: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub boosting_since: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub command_stats: ::std::option::Option<MemberCommandStats>,
+    pub created_at: ::std::string::String,
+    pub display_name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub economy: ::std::option::Option<MemberEconomy>,
+    pub id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub join_position: ::std::option::Option<i64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub joined_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub leveling: ::std::option::Option<MemberSelfLeveling>,
+    pub member_count: i64,
+    pub name: ::std::string::String,
+    pub owned_tags: ::std::vec::Vec<MemberOwnedTag>,
+    pub roles: ::std::vec::Vec<MemberRoleBadge>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub top_role: ::std::option::Option<::std::string::String>,
+    pub top_role_color: i64,
+}
+///`MemberSelfLeveling`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberSelfLeveling {
+    pub level: i64,
+    pub messages: i64,
+    pub rank: i64,
+    pub total_xp: i64,
+    pub xp: i64,
+}
+///`MemberTopCommand`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberTopCommand {
+    pub command: ::std::string::String,
+    pub uses: i64,
+}
+///`MembersResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MembersResponse {
+    pub members: ::std::vec::Vec<Member>,
+    pub total: i64,
+}
+///`NameHistoryEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct NameHistoryEntry {
+    pub changed_at: ::std::string::String,
+    pub name: ::std::string::String,
+}
+///One row of the feed. ``id`` is an integer on the wire.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct Notification {
+    pub body: ::std::string::String,
+    pub created_at: ::std::string::String,
+    pub global: bool,
+    pub id: i64,
+    pub kind: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub link: ::std::option::Option<::std::string::String>,
+    pub meta: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    pub severity: ::std::string::String,
+    pub title: ::std::string::String,
+    pub unread: bool,
+}
+///`NotificationList`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct NotificationList {
+    pub items: ::std::vec::Vec<Notification>,
+    pub last_read_id: i64,
+    pub unread: i64,
+}
+///`NotificationSummary`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct NotificationSummary {
+    pub pending_requests: i64,
+    pub unread: i64,
+}
+///`NotificationsReadResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct NotificationsReadResult {
+    pub ok: bool,
+    pub unread: i64,
+}
+///`RecentCasesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RecentCasesResponse {
+    pub cases: ::std::vec::Vec<CaseEntry>,
+}
+///`RequestChannelRef`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RequestChannelRef {
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
+///Outcome of a decision. The HTTP status mirrors it; error bodies share this shape.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RequestDecision {
+    pub message: ::std::string::String,
+    pub ok: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub request: ::std::option::Option<ActionRequest>,
+    pub status: ::std::string::String,
+}
+///`RequestRoleRef`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RequestRoleRef {
+    pub color: i64,
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+}
+///Where requests are posted and which roles may file them.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RequestSettings {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel: ::std::option::Option<RequestChannelRef>,
+    pub role_ids: ::std::vec::Vec<::std::string::String>,
+    pub roles: ::std::vec::Vec<RequestRoleRef>,
+}
+///`WarnPolicy`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct WarnPolicy {
+    pub actions: ::std::vec::Vec<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub expiry_days: ::std::option::Option<i64>,
+    pub thresholds: ::std::vec::Vec<WarnThreshold>,
+}
+///`WarnThreshold`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct WarnThreshold {
+    pub action: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub duration_seconds: ::std::option::Option<i64>,
+    pub warn_count: i64,
 }
 /// Error types.
 pub mod error {

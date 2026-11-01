@@ -128,7 +128,7 @@ small and self-contained first.
 | `stats.py` | 9 | mixed scope |
 | `releases.py` | 9 | `progress` map: `dict[str, dict[str, Row]]` |
 | `watchlist.py` | 11 | large nested payloads |
-| `moderation.py` | 12 | 1 route has no JSON body |
+| `moderation.py` | 12 | **done** 1 route has no JSON body |
 | `leveling.py` | 12 | |
 | `economy.py` | 15 | |
 | `music.py` | 18 | |

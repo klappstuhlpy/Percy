@@ -24,6 +24,15 @@ pub use types::*;
 #[rustfmt::skip]
 pub mod generated;
 pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+pub use generated::{
+    ActionRequest, ActionRequestList, ActivityDay, ActivityResponse, AvatarEntry, AvatarHistoryResponse, BulkActionFailure,
+    BulkActionResponse, CaseActionResponse, CaseEntry, CaseDeleteResponse, CasesResponse, Member, MemberCase,
+    MemberCommandStats, MemberDetail, MemberEconomy, MemberLeveling, MemberMessage, MemberMessages, MemberNameHistory,
+    MemberRoleBadge, MemberSelf, MemberSelfLeveling, MemberTopCommand, MemberOwnedTag, MemberActionResult,
+    MemberRolesResult, MembersResponse, NameHistoryEntry, Notification, NotificationList, NotificationSummary,
+    NotificationsReadResult, RecentCasesResponse, RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings,
+    WarnPolicy, WarnThreshold,
+}; // members + moderation + notifications domains
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

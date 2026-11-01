@@ -49,12 +49,197 @@ class MemberRolesBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response models - the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md). Class names are the Rust type names.
+# ---------------------------------------------------------------------------
+
+
+class Member(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    avatar_url: str
+    joined_at: str | None
+    roles: list[str]
+    bot: bool
+
+
+class MembersResponse(BaseModel):
+    members: list[Member]
+    total: int
+
+
+class MemberRoleBadge(BaseModel):
+    id: str
+    name: str
+    color: int
+
+
+class MemberLeveling(BaseModel):
+    level: int
+    xp: int
+    messages: int
+    rank: int
+
+
+class MemberSelfLeveling(MemberLeveling):
+    total_xp: int
+
+
+class MemberCase(BaseModel):
+    case_index: int
+    action: str
+    reason: str | None
+    moderator_id: str | None
+    moderator_name: str | None
+    created_at: str | None
+
+
+class MemberTopCommand(BaseModel):
+    command: str
+    uses: int
+
+
+class MemberCommandStats(BaseModel):
+    total_commands: int
+    first_command_at: str | None
+    top_commands: list[MemberTopCommand]
+
+
+class NameHistoryEntry(BaseModel):
+    name: str
+    changed_at: str
+
+
+class MemberNameHistory(BaseModel):
+    usernames: list[NameHistoryEntry]
+    nicknames: list[NameHistoryEntry]
+
+
+class MemberOwnedTag(BaseModel):
+    id: int
+    name: str
+    uses: int
+
+
+class MemberEconomy(BaseModel):
+    cash: int
+    bank: int
+    total: int
+
+
+class MemberDetail(BaseModel):
+    """Aggregated profile for one user (the lookup page). ``in_guild`` is false for a user who left."""
+
+    id: str
+    name: str
+    display_name: str
+    avatar_url: str
+    joined_at: str | None
+    created_at: str
+    roles: list[MemberRoleBadge]
+    bot: bool
+    in_guild: bool
+    top_role: str | None
+    top_role_color: int
+    join_position: int | None
+    member_count: int
+    mutual_guilds: int
+    permissions: int
+    boosting_since: str | None
+    public_flags: list[str]
+    status: str | None
+    muted: bool
+    mute_role_configured: bool
+    timed_out_until: str | None
+    leveling: MemberLeveling | None
+    cases: list[MemberCase]
+    case_count: int
+    warning_count: int
+    command_stats: MemberCommandStats | None
+    last_seen: str | None
+    names: MemberNameHistory | None
+    avatar_count: int
+    owned_tags: list[MemberOwnedTag]
+
+
+class MemberSelf(BaseModel):
+    """Personal profile for a non-admin member: leveling, economy, command stats; no cases."""
+
+    id: str
+    name: str
+    display_name: str
+    avatar_url: str
+    joined_at: str | None
+    created_at: str
+    roles: list[MemberRoleBadge]
+    top_role: str | None
+    top_role_color: int
+    join_position: int | None
+    member_count: int
+    boosting_since: str | None
+    leveling: MemberSelfLeveling | None
+    economy: MemberEconomy | None
+    command_stats: MemberCommandStats | None
+    owned_tags: list[MemberOwnedTag]
+
+
+class MemberActionResult(BaseModel):
+    """Success body of a member action; failures are HTTP errors with their own status."""
+
+    ok: bool
+    #: The case action recorded (a mute with a duration is a ``tempmute``).
+    action: str
+    #: ``purge``: how many messages were deleted.
+    deleted: int | None = None
+    #: ``softban`` whose unban failed: the member is still banned.
+    warning: str | None = None
+    #: ``timeout``: ISO-8601 expiry.
+    until: str | None = None
+
+
+class MemberMessage(BaseModel):
+    id: str
+    channel_id: str
+    channel_name: str
+    content: str
+    created_at: str
+    edited_at: str | None
+    jump_url: str
+    attachments: list[str]
+    embed_count: int
+
+
+class MemberMessages(BaseModel):
+    """A bounded live scan: ``partial`` means some channels were skipped."""
+
+    messages: list[MemberMessage]
+    scanned_channels: int
+    partial: bool
+
+
+class MemberRolesResult(BaseModel):
+    ok: bool
+
+
+class AvatarEntry(BaseModel):
+    #: Base64-encoded image bytes.
+    image: str
+    changed_at: str | None
+
+
+class AvatarHistoryResponse(BaseModel):
+    avatars: list[AvatarEntry]
+    total: int
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _message_payload(message: discord.Message) -> dict:
-    return {
+def _message_payload(message: discord.Message) -> MemberMessage:
+    return MemberMessage.model_validate({
         'id': str(message.id),
         'channel_id': str(message.channel.id),
         'channel_name': getattr(message.channel, 'name', 'unknown'),
@@ -64,7 +249,7 @@ def _message_payload(message: discord.Message) -> dict:
         'jump_url': message.jump_url,
         'attachments': [a.url for a in message.attachments],
         'embed_count': len(message.embeds),
-    }
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +263,7 @@ async def get_guild_members(
     limit: int = Query(default=100, ge=1, le=1000),
     after: int = Query(default=0),
     search: str = Query(default=""),
-) -> dict:
+) -> MembersResponse:
     search_lower = search.lower()
     all_members = sorted((m for m in guild.members if m.id > after), key=lambda m: m.id)
 
@@ -98,7 +283,7 @@ async def get_guild_members(
         for member in all_members[:limit]
     ]
 
-    return {'members': members, 'total': len(all_members)}
+    return MembersResponse.model_validate({'members': members, 'total': len(all_members)})
 
 
 @router.get("/members/{user_id}/detail")
@@ -106,7 +291,7 @@ async def get_member_detail(
     user_id: int,
     bot: BotDep,
     guild: GuildDep,
-) -> dict:
+) -> MemberDetail:
     """Aggregated profile for one user: identity, leveling, moderation history, stats."""
     member = guild.get_member(user_id)
 
@@ -234,7 +419,7 @@ async def get_member_detail(
         for r in sorted(owned_tag_records, key=lambda r: r.get('uses', 0), reverse=True)[:50]
     ]
 
-    return {
+    return MemberDetail.model_validate({
         **identity,
         'leveling': leveling,
         'cases': cases,
@@ -245,7 +430,7 @@ async def get_member_detail(
         'names': names,
         'avatar_count': avatar_count,
         'owned_tags': owned_tags,
-    }
+    })
 
 
 @router.get("/members/{user_id}/self")
@@ -253,7 +438,7 @@ async def get_member_self(
     user_id: int,
     bot: BotDep,
     guild: GuildDep,
-) -> dict:
+) -> MemberSelf:
     """Personal profile: leveling, economy, command stats -- no moderation cases."""
     member = guild.get_member(user_id)
     if member is None:
@@ -317,16 +502,18 @@ async def get_member_self(
         for r in sorted(owned_tag_records, key=lambda r: r.get('uses', 0), reverse=True)[:50]
     ]
 
-    return {**identity, 'leveling': leveling, 'economy': economy, 'command_stats': command_stats, 'owned_tags': owned_tags}
+    return MemberSelf.model_validate(
+        {**identity, 'leveling': leveling, 'economy': economy, 'command_stats': command_stats, 'owned_tags': owned_tags}
+    )
 
 
-@router.post("/members/{user_id}/action")
+@router.post("/members/{user_id}/action", response_model_exclude_none=True)
 async def member_action(
     user_id: int,
     body: MemberActionBody,
     bot: BotDep,
     guild: GuildDep,
-) -> dict:
+) -> MemberActionResult:
     """Apply one moderation action to a member.
 
     Every action that changes a member's standing is recorded as a modlog case through the
@@ -343,7 +530,7 @@ async def member_action(
         )
     moderator = await resolve_moderator(guild, body.moderator_id, ACTION_PERMISSIONS[body.action])
     try:
-        return await apply_member_action(
+        return MemberActionResult.model_validate(await apply_member_action(
             bot,
             guild,
             moderator,
@@ -353,7 +540,7 @@ async def member_action(
             duration=body.duration,
             delete_message_days=body.delete_message_days,
             limit=body.limit,
-        )
+        ))
     except MemberActionError as e:
         raise HTTPException(status_code=e.status, detail=e.detail) from None
 
@@ -364,18 +551,18 @@ async def get_member_messages(
     guild: GuildDep,
     limit: int = Query(default=25, ge=1, le=100),
     per_channel: int = Query(default=100, ge=1, le=200),
-) -> dict:
+) -> MemberMessages:
     """A member's most recent messages, read live from channel history.
 
     Percy stores no message archive, so this is a bounded scan of the guild's most recently
     active channels (see :data:`MAX_SCAN_CHANNELS`) rather than a complete history.
     """
     messages, scanned = await scan_member_messages(guild, user_id, limit=limit, per_channel=per_channel)
-    return {
-        'messages': [_message_payload(m) for m in messages],
-        'scanned_channels': scanned,
-        'partial': len(guild.text_channels) > scanned,
-    }
+    return MemberMessages(
+        messages=[_message_payload(m) for m in messages],
+        scanned_channels=scanned,
+        partial=len(guild.text_channels) > scanned,
+    )
 
 
 @router.patch("/members/{user_id}/roles")
@@ -383,7 +570,7 @@ async def member_roles(
     user_id: int,
     body: MemberRolesBody,
     guild: GuildDep,
-) -> dict:
+) -> MemberRolesResult:
     member = guild.get_member(user_id)
     if member is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='member not found')
@@ -426,7 +613,7 @@ async def member_roles(
     except discord.HTTPException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
-    return {'ok': True}
+    return MemberRolesResult(ok=True)
 
 
 @router.get("/members/{user_id}/avatars")
@@ -434,7 +621,7 @@ async def get_member_avatars(
     user_id: int,
     bot: BotDep,
     limit: int = Query(default=20, ge=1, le=50),
-) -> dict:
+) -> AvatarHistoryResponse:
     records = await bot.db.stats.get_avatar_history(user_id, limit=limit)
     avatars = [
         {
@@ -443,4 +630,4 @@ async def get_member_avatars(
         }
         for record in records
     ]
-    return {'avatars': avatars, 'total': len(records)}
+    return AvatarHistoryResponse.model_validate({'avatars': avatars, 'total': len(records)})

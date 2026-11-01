@@ -33,7 +33,7 @@ def env() -> tuple[MagicMock, MagicMock, MagicMock]:
 
 async def test_summary(env: tuple[MagicMock, MagicMock, MagicMock]) -> None:
     bot, guild, _ = env
-    assert await api.notifications_summary(guild, bot, 10) == {'unread': 3, 'pending_requests': 2}
+    assert (await api.notifications_summary(guild, bot, 10)).model_dump() == {'unread': 3, 'pending_requests': 2}
 
 
 async def test_missing_bearer_is_401(monkeypatch: pytest.MonkeyPatch) -> None:
