@@ -1,9 +1,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1 – builder
 #
-# Official Rust image. git is needed because the shared crates (kls-web-core /
-# kls-ui / percy-client) are pulled from the public klappstuhlpy/kls-core repo as
-# a tag-pinned HTTPS git dependency — no credentials required.
+# Official Rust image. git is needed because the shared kls-web-core crate is pulled
+# from the public klappstuhlpy/kls-core repo as a tag-pinned HTTPS git dependency —
+# no credentials required. percy-client lives in-tree (crates/percy-client).
+# Build with dashboard/ as the context: docker build -t percy-dashboard dashboard
 # TLS is rustls (no OpenSSL) and SQLite is bundled, so no libssl/pkg-config here.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM rust:1.88-slim-bookworm AS builder

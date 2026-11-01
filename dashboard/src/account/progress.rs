@@ -72,7 +72,14 @@ pub(crate) fn toggle(map: &ProgressMap, signed_in: bool, media: &str, key: &str,
         status: status_for(media).to_string(),
         label: if comic { "Mark read" } else { "Mark watched" }.to_string(),
         marked_label: if comic { "Read" } else { "Watched" }.to_string(),
-        sign_in_href: format!("/login?next={}", redirect.replace('%', "%25").replace('&', "%26").replace('#', "%23").replace('+', "%2B")),
+        sign_in_href: format!(
+            "/login?next={}",
+            redirect
+                .replace('%', "%25")
+                .replace('&', "%26")
+                .replace('#', "%23")
+                .replace('+', "%2B")
+        ),
         redirect: redirect.to_string(),
         media: media.to_string(),
         release_key: key.to_string(),

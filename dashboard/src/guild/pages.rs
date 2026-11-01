@@ -15,10 +15,9 @@ use crate::{
     guilds::gate_and_load_guild,
     session::Session,
     templates::{
-        AnalyticsTemplate, BackupTemplate, BlacklistRow, CardField, ComicsTemplate,
-        CommandsTemplate, EconomyTemplate, EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate,
-        LevelRoleRow, LevelingTemplate, MultiplierRow, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate,
-        TempChannelsTemplate, WebhooksTemplate,
+        AnalyticsTemplate, BackupTemplate, BlacklistRow, CardField, ComicsTemplate, CommandsTemplate, EconomyTemplate,
+        EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate, LevelRoleRow, LevelingTemplate, MultiplierRow,
+        PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate, TempChannelsTemplate, WebhooksTemplate,
     },
     view::Viewer,
     AppState,

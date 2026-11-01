@@ -576,7 +576,7 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/api-info", get(api_info))
         // The public developer API (`/api/v1/*`) and its docs (`/api`).
         .merge(api::routes(state.clone()))
-        .nest("/kls", kls_ui::routes())
+        .nest("/kls", kls::routes())
         // The dashboard's own app-specific assets (percy CSS/JS/img), shipped as a
         // `static/` dir next to the binary. The shared design system lives at /kls.
         .nest_service("/static", tower_http::services::ServeDir::new("static"))
@@ -632,10 +632,14 @@ mod tests {
 
     #[test]
     fn encoded_separators_are_refused() {
-        assert!(has_encoded_separator("/dashboard/guild/1/members/1%2F..%2F..%2F2/action"));
+        assert!(has_encoded_separator(
+            "/dashboard/guild/1/members/1%2F..%2F..%2F2/action"
+        ));
         assert!(has_encoded_separator("/comics/dc/a%2f..%5Cb"));
         assert!(has_encoded_separator("/dashboard/guild/1/autoresponders/hi%3Fx"));
-        assert!(!has_encoded_separator("/dashboard/guild/1/autoresponders/hello%20world"));
+        assert!(!has_encoded_separator(
+            "/dashboard/guild/1/autoresponders/hello%20world"
+        ));
     }
 
     /// The router must compose without panicking (route/state conflicts).

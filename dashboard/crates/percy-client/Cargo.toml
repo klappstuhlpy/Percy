@@ -1,0 +1,16 @@
+[package]
+name = "percy-client"
+version = "0.19.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Typed client for Percy's internal HTTP API (shared between klappstuhl_me and the Percy dashboard)."
+
+[dependencies]
+# Kept in sync with the workspace root's reqwest features so Cargo feature
+# unification reuses a single reqwest build. rustls-tls is declared here too so
+# the crate also builds standalone (feature unification only adds features, it
+# never removes them).
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
+thiserror = "1"

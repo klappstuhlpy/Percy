@@ -2,7 +2,7 @@
 //!
 //! A configuration dashboard for [Percy](https://percy.klappstuhl.me) that runs
 //! **independently out of the box**, linking only the shared crates —
-//! [`kls_web_core`] (SQLite + crypto + migrations kernel), [`kls_ui`] (the design
+//! [`kls_web_core`] (SQLite + crypto + migrations kernel), the in-tree `kls` module (the design
 //! system, served at `/kls/*`), and [`percy_client`] (Percy's internal API) — with
 //! no dependency on the `klappstuhl_me` app crate.
 //!
@@ -26,6 +26,7 @@ mod api;
 mod catalogue;
 mod core;
 mod guild;
+mod kls;
 mod routes;
 mod site;
 mod templates;
@@ -65,9 +66,12 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("percy-dashboard listening on http://{addr}");
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
     Ok(())
 }
 
@@ -121,11 +125,7 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("reqwest client builds");
-        Arc::new(percy_client::PercyClient::new(
-            http,
-            url,
-            config.percy_api_token(),
-        ))
+        Arc::new(percy_client::PercyClient::new(http, url, config.percy_api_token()))
     });
 
     // Default scan endpoint: klappstuhl.me's external API (versioned /api/v1).
@@ -149,4 +149,3 @@ async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
     tracing::info!("shutdown signal received");
 }
-

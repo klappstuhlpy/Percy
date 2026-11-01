@@ -82,7 +82,10 @@ pub async fn guild_member_action(
     let Some(obj) = body.as_object_mut() else {
         return Json(serde_json::json!({"ok": false, "error": "expected a JSON object"})).into_response();
     };
-    obj.insert("moderator_id".into(), serde_json::Value::String(session.discord_user_id.clone()));
+    obj.insert(
+        "moderator_id".into(),
+        serde_json::Value::String(session.discord_user_id.clone()),
+    );
 
     match percy.member_action_json(guild_id, &user_id, &body).await {
         Ok(data) => Json(data).into_response(),

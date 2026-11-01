@@ -144,7 +144,10 @@ pub async fn guild_bulk_action(
     let Some(obj) = body.as_object_mut() else {
         return Json(serde_json::json!({"ok": false, "error": "expected a JSON object"})).into_response();
     };
-    obj.insert("moderator_id".into(), serde_json::Value::String(session.discord_user_id.clone()));
+    obj.insert(
+        "moderator_id".into(),
+        serde_json::Value::String(session.discord_user_id.clone()),
+    );
     match percy.bulk_member_action(guild_id, &body).await {
         Ok(resp) => Json(serde_json::json!(resp)).into_response(),
         Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),

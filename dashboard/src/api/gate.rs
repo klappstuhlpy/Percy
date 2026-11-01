@@ -206,10 +206,7 @@ fn client_ip(headers: &HeaderMap, peer: Option<IpAddr>, trusted_proxies: u8) -> 
 }
 
 fn request_ip(app: &AppState, request: &Request) -> String {
-    let peer = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|c| c.0.ip());
+    let peer = request.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| c.0.ip());
     client_ip(request.headers(), peer, app.config.trusted_proxies)
 }
 
