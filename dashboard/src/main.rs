@@ -12,6 +12,10 @@
 //! - [`migrations`] — the embedded schema, applied via the shared runner,
 //! - the routes below render through the shared design system via Askama.
 
+// Handlers return `Result<_, Response>` to short-circuit with a redirect or error page —
+// idiomatic axum; boxing every `Response` would only add noise.
+#![allow(clippy::result_large_err)]
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
