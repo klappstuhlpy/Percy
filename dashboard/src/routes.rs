@@ -276,6 +276,8 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/leveling/blacklist",
             post(actions::guild_leveling_blacklist),
         )
+        // One server-sent event stream replaces the pages' polling; controls stay plain HTTP.
+        .route("/dashboard/guild/:guild_id/events", get(actions::guild_events))
         // Music controls + live-player JSON.
         .route(
             "/dashboard/guild/:guild_id/music/status",

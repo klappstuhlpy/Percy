@@ -112,6 +112,29 @@ class Player(wavelink.Player):
             items += list(self.auto_queue)
         return items
 
+    def announce(self) -> None:
+        """Hint the dashboard's live streams that this player changed; they refetch over HTTP."""
+        if self.guild is not None:
+            self.client.events.publish(self.guild.id, 'music.state')
+
+    # Every control path (commands, panel buttons, dashboard) funnels through these wavelink calls.
+    async def pause(self, value: bool, /) -> None:
+        await super().pause(value)
+        self.announce()
+
+    async def seek(self, position: int = 0, /) -> None:
+        await super().seek(position)
+        self.announce()
+
+    async def set_volume(self, value: int = 100, /) -> None:
+        await super().set_volume(value)
+        self.announce()
+
+    async def skip(self, *, force: bool = True) -> Playable | None:  # ``stop`` is wavelink's alias of this
+        result = await super().skip(force=force)
+        self.announce()
+        return result
+
     def move_queued(self, source: int, target: int) -> wavelink.Playable:
         """Move the manual queue's track at 0-based ``source`` to ``target``; returns it.
 
@@ -140,6 +163,7 @@ class Player(wavelink.Player):
         config, or never started), so callers don't need to guard against the
         ``MISSING`` sentinel.
         """
+        self.announce()
         if self.panel is MISSING:
             return
         if self.panel.channel is MISSING:
@@ -587,6 +611,7 @@ class Player(wavelink.Player):
                 await self.channel.edit(status=None)
 
         await super().disconnect(**kwargs)
+        self.announce()
 
     async def on_voice_state_update(self, data: Any, /) -> None:
         # Someone else removed the bot from voice (an admin's "Disconnect", or the
@@ -705,6 +730,7 @@ class Player(wavelink.Player):
         short : bool
             Whether to send a short message.
         """
+        self.announce()
         is_playlist = isinstance(added, wavelink.Playlist)
         position = self.queue.all.index(added.tracks[0] if is_playlist else added) + 1
         length = sum(track.length for track in added.tracks) if is_playlist else added.length

@@ -106,7 +106,7 @@
     {# ─── Bot Stats ───────────────────────────────────────────────── #}
     <section class="config-section">
         <h2>Bot Stats</h2>
-        <p class="config-section-description">Global bot statistics across all servers. Updates live via WebSocket.</p>
+        <p class="config-section-description">Global bot statistics across all servers. Updates live every few seconds.</p>
         <div class="metric-tiles" id="bot-stats-tiles">
             {% match bot_stats.version %}
             {% when Some with (v) %}
@@ -151,5 +151,6 @@
 {% endblock %}
 
 {% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
 <script src="/static/js/guild/stats.js"></script>
 {% endblock %}

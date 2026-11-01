@@ -39,6 +39,7 @@ from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand, format_duration
+from app.services.event_hub import EventHub
 from app.services.klappstuhl_me import KlappstuhlClient, KlappstuhlInternalClient
 from app.utils import (
     GUILD_FEATURES,
@@ -108,6 +109,7 @@ class Bot(commands.Bot):
     context: type[Context]
     timers: TimerManager
     render: RenderingService
+    events: EventHub
     klappstuhlme_internal_client: KlappstuhlInternalClient
     klappstuhlme_client: KlappstuhlClient
     ai: AIService
@@ -274,6 +276,7 @@ class Bot(commands.Bot):
 
         self.timers = TimerManager(self)
         self.render = RenderingService()
+        self.events = EventHub()
         self._ollama_host = ollama_config.host
         self.ai = AIService(
             OllamaClient(

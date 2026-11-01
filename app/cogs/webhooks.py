@@ -113,6 +113,7 @@ class WebhookDispatcher(Cog, name="Webhooks"):
     @Cog.listener()
     async def on_percy_event(self, guild_id: int, event: str, data: dict) -> None:
         """Internal seam: ``bot.dispatch('percy_event', guild_id, event, data)`` from any cog."""
+        self.bot.events.publish(guild_id, event, data)  # also feeds the dashboard's live stream
         self.emit(guild_id, event, data)
 
     # -- dispatch + delivery ---------------------------------------------

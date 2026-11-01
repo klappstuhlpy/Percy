@@ -479,7 +479,7 @@
                 });
                 const d = await r.json();
                 if (!d.ok) { showToast('error', d.error || 'Action failed.'); return false; }
-                setTimeout(poll, 400);
+                if (!sseOpen) setTimeout(poll, 400);  // with the event stream open, Percy announces the change itself
                 return true;
             } catch (_) {
                 showToast('error', 'Could not reach the bot.');
@@ -628,6 +628,7 @@
 
         // ── Polling ─────────────────────────────────────────────────
         let pollTimer = null;
+        let sseOpen = false;        // true while the SSE stream is open (polling is then paused)
         async function poll() {
             try {
                 const r = await fetch(opts.statusUrl, { headers: { Accept: 'application/json' } });
@@ -674,6 +675,17 @@
             if (document.hidden) { clearInterval(pollTimer); }
             else { startPolling(5000); }
         });
+
+        // Server-sent events replace the interval: while the stream is open each `music.*` event
+        // is a hint to refetch status once. Whenever it is not open (unsupported browser, error,
+        // tab hidden) the 5 s poll above runs exactly as before.
+        if (window.PercyLive && typeof GUILD_ID !== 'undefined') {
+            window.PercyLive.connect(GUILD_ID, 'music', () => poll(), (isLive) => {
+                sseOpen = isLive;
+                if (isLive) { clearInterval(pollTimer); poll(); }  // poll once: catch up on anything missed
+                else if (!document.hidden) { startPolling(5000); }
+            });
+        }
 
         return { poll, refresh: poll };
     }

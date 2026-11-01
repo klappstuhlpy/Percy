@@ -93,6 +93,25 @@ impl PercyClient {
         Ok(resp.json().await?)
     }
 
+    // -- Live event stream ---------------------------------------------------
+
+    /// Opens Percy's server-sent event stream for a guild (`topics` is a comma list, empty = all)
+    /// and returns the response un-consumed: read it with `bytes_stream()`.
+    ///
+    /// The shared client's 30 s total timeout would kill a stream, so this request carries its
+    /// own much longer one (the connect timeout still applies). ponytail: the stream is recycled
+    /// after 12 h; the browser's `EventSource` reconnects on its own.
+    pub async fn events_stream(&self, guild_id: u64, topics: &str) -> Result<Response, PercyError> {
+        let mut req = self
+            .client
+            .get(self.url(&format!("/api/v1/guilds/{}/events", seg(&guild_id))))
+            .timeout(std::time::Duration::from_secs(12 * 60 * 60));
+        if !topics.is_empty() {
+            req = req.query(&[("topics", topics)]);
+        }
+        Self::check(req.bearer_auth(&self.token).send().await?).await
+    }
+
     // -- Notifications and action requests -----------------------------------
 
     /// A user's notification feed (newest first); `before` is the id cursor for the next page.
