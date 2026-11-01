@@ -690,108 +690,9 @@ pub struct UserHistory {
 
 // -- Polls types -------------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PollInfo {
-    pub id: i64,
-    pub channel_id: String,
-    pub message_id: String,
-    pub question: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub options: Vec<String>,
-    #[serde(default)]
-    pub image_url: String,
-    #[serde(default)]
-    pub color: String,
-    pub published: Option<String>,
-    pub expires: Option<String>,
-    #[serde(default)]
-    pub ended: bool,
-    #[serde(default)]
-    pub total_votes: u32,
-    #[serde(default)]
-    pub hide_results: bool,
-    #[serde(default)]
-    pub role_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PollsResponse {
-    pub polls: Vec<PollInfo>,
-    #[serde(default)]
-    pub total: u32,
-}
-
 // -- Giveaways types ---------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GiveawayInfo {
-    pub id: i64,
-    pub channel_id: String,
-    pub message_id: String,
-    pub author_id: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub winners_count: u32,
-    pub entries: u32,
-    #[serde(default)]
-    pub ended: bool,
-    pub ends_at: Option<String>,
-    #[serde(default)]
-    pub required_role_id: Option<String>,
-    #[serde(default)]
-    pub min_account_days: u32,
-    #[serde(default)]
-    pub min_join_days: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GiveawaysResponse {
-    pub giveaways: Vec<GiveawayInfo>,
-    #[serde(default)]
-    pub total: u32,
-}
-
 // -- Tags types --------------------------------------------------------------
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TagInfo {
-    pub id: i64,
-    pub name: String,
-    pub owner_id: Option<String>,
-    pub owner_name: Option<String>,
-    pub uses: u32,
-    pub created_at: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TagCreator {
-    pub user_id: Option<String>,
-    pub username: String,
-    pub count: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TagsResponse {
-    pub total: u32,
-    pub total_uses: u64,
-    pub tags: Vec<TagInfo>,
-    pub top_creators: Vec<TagCreator>,
-}
-
-/// Full content of a single tag, fetched on demand for the markdown preview.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TagDetail {
-    pub id: i64,
-    pub name: String,
-    pub content: String,
-    pub owner_id: Option<String>,
-    pub owner_name: Option<String>,
-    #[serde(default)]
-    pub uses: u32,
-    pub created_at: Option<String>,
-}
 
 /// One `(name, content)` row in a tag export/import payload.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1734,49 +1635,7 @@ mod music_app_tests {
 
 // -- Comics types ------------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ComicFeedEntry {
-    pub id: u64,
-    pub brand: String,
-    pub channel_id: String,
-    pub format: String,
-    pub day: u8,
-    pub ping: Option<String>,
-    pub pin: bool,
-    pub next_pull: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ComicsResponse {
-    pub feeds: Vec<ComicFeedEntry>,
-}
-
 // -- Temp Channels types -----------------------------------------------------
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ActiveTempChannel {
-    pub channel_id: String,
-    pub channel_name: String,
-    pub user_count: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TempChannelEntry {
-    pub channel_id: String,
-    pub channel_name: String,
-    pub format: String,
-    /// Live spawned channels for this hub (resolved by shared category). Empty
-    /// when nobody is using the hub. `#[serde(default)]` keeps it backward-safe.
-    #[serde(default)]
-    pub active_channels: Vec<ActiveTempChannel>,
-    #[serde(default)]
-    pub total_users: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TempChannelsResponse {
-    pub entries: Vec<TempChannelEntry>,
-}
 
 // -- Status Feed types -------------------------------------------------------
 
@@ -1788,35 +1647,7 @@ pub struct StatusFeedInfo {
 
 // -- Lockdowns types ---------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LockdownEntry {
-    pub channel_id: String,
-    pub channel_name: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LockdownsResponse {
-    pub entries: Vec<LockdownEntry>,
-}
-
 // -- Emoji Stats types -------------------------------------------------------
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct EmojiStatEntry {
-    pub emoji_id: String,
-    pub emoji_name: String,
-    pub emoji_url: Option<String>,
-    pub total: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct EmojiStatsResponse {
-    pub total_uses: u64,
-    pub distinct_emojis: u64,
-    pub entries: Vec<EmojiStatEntry>,
-    #[serde(default)]
-    pub total: u32,
-}
 
 // -- Audit log (cases) types -------------------------------------------------
 

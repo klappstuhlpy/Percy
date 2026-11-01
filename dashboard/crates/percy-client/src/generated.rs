@@ -2,6 +2,13 @@
 // Regenerate after any API change: `poetry run python scripts/export_openapi.py && cargo run -p percy-codegen`.
 // See GENERATION.md.
 
+///`ActiveTempChannel`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ActiveTempChannel {
+    pub channel_id: ::std::string::String,
+    pub channel_name: ::std::string::String,
+    pub user_count: i64,
+}
 ///A headline number paired with its delta vs the preceding equal window.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct AnalyticsMetric {
@@ -38,6 +45,163 @@ pub struct AnalyticsSummary {
 pub struct AnalyticsTopCommand {
     pub command: ::std::string::String,
     pub uses: i64,
+}
+///`ComicFeedEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ComicFeedEntry {
+    pub brand: ::std::string::String,
+    pub channel_id: ::std::string::String,
+    pub day: i64,
+    pub format: ::std::string::String,
+    pub id: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub next_pull: ::std::option::Option<::std::string::String>,
+    pub pin: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub ping: ::std::option::Option<::std::string::String>,
+}
+///`ComicsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ComicsResponse {
+    pub feeds: ::std::vec::Vec<ComicFeedEntry>,
+}
+///`EmojiStatEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct EmojiStatEntry {
+    pub emoji_id: ::std::string::String,
+    pub emoji_name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub emoji_url: ::std::option::Option<::std::string::String>,
+    pub total: i64,
+}
+///`EmojiStatsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct EmojiStatsResponse {
+    pub distinct_emojis: i64,
+    pub entries: ::std::vec::Vec<EmojiStatEntry>,
+    pub total: i64,
+    pub total_uses: i64,
+}
+///`GiveawayInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GiveawayInfo {
+    pub author_id: ::std::string::String,
+    pub channel_id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub description: ::std::option::Option<::std::string::String>,
+    pub ended: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub ends_at: ::std::option::Option<::std::string::String>,
+    pub entries: i64,
+    pub id: i64,
+    pub message_id: ::std::string::String,
+    pub min_account_days: i64,
+    pub min_join_days: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub required_role_id: ::std::option::Option<::std::string::String>,
+    pub title: ::std::string::String,
+    pub winners_count: i64,
+}
+///`GiveawaysResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GiveawaysResponse {
+    pub giveaways: ::std::vec::Vec<GiveawayInfo>,
+    pub total: i64,
+}
+///`LockdownEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LockdownEntry {
+    pub channel_id: ::std::string::String,
+    pub channel_name: ::std::string::String,
+}
+///`LockdownsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LockdownsResponse {
+    pub entries: ::std::vec::Vec<LockdownEntry>,
+}
+///`PollInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct PollInfo {
+    pub channel_id: ::std::string::String,
+    pub color: ::std::string::String,
+    pub description: ::std::string::String,
+    pub ended: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub expires: ::std::option::Option<::std::string::String>,
+    pub hide_results: bool,
+    pub id: i64,
+    pub image_url: ::std::string::String,
+    pub message_id: ::std::string::String,
+    pub options: ::std::vec::Vec<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub published: ::std::option::Option<::std::string::String>,
+    pub question: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub role_id: ::std::option::Option<::std::string::String>,
+    pub total_votes: i64,
+}
+///`PollsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct PollsResponse {
+    pub polls: ::std::vec::Vec<PollInfo>,
+    pub total: i64,
+}
+///`TagCreator`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TagCreator {
+    pub count: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub user_id: ::std::option::Option<::std::string::String>,
+    pub username: ::std::string::String,
+}
+///`TagDetail`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TagDetail {
+    pub content: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub created_at: ::std::option::Option<::std::string::String>,
+    pub id: i64,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_name: ::std::option::Option<::std::string::String>,
+    pub uses: i64,
+}
+///`TagInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TagInfo {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub created_at: ::std::option::Option<::std::string::String>,
+    pub id: i64,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_name: ::std::option::Option<::std::string::String>,
+    pub uses: i64,
+}
+///`TagsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TagsResponse {
+    pub tags: ::std::vec::Vec<TagInfo>,
+    pub top_creators: ::std::vec::Vec<TagCreator>,
+    pub total: i64,
+    pub total_uses: i64,
+}
+///`TempChannelEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TempChannelEntry {
+    pub active_channels: ::std::vec::Vec<ActiveTempChannel>,
+    pub channel_id: ::std::string::String,
+    pub channel_name: ::std::string::String,
+    pub format: ::std::string::String,
+    pub total_users: i64,
+}
+///`TempChannelsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TempChannelsResponse {
+    pub entries: ::std::vec::Vec<TempChannelEntry>,
 }
 /// Error types.
 pub mod error {

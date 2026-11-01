@@ -15,6 +15,29 @@
         "title": "AIAskBody",
         "type": "object"
       },
+      "ActiveTempChannel": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "title": "Channel Name",
+            "type": "string"
+          },
+          "user_count": {
+            "title": "User Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id",
+          "channel_name",
+          "user_count"
+        ],
+        "title": "ActiveTempChannel",
+        "type": "object"
+      },
       "AddRoleMenuRoleBody": {
         "properties": {
           "emoji": {
@@ -613,6 +636,84 @@
           "action"
         ],
         "title": "BulkActionBody",
+        "type": "object"
+      },
+      "ComicFeedEntry": {
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "day": {
+            "title": "Day",
+            "type": "integer"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "next_pull": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Pull"
+          },
+          "pin": {
+            "title": "Pin",
+            "type": "boolean"
+          },
+          "ping": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ping"
+          }
+        },
+        "required": [
+          "id",
+          "brand",
+          "channel_id",
+          "format",
+          "day",
+          "ping",
+          "pin",
+          "next_pull"
+        ],
+        "title": "ComicFeedEntry",
+        "type": "object"
+      },
+      "ComicsResponse": {
+        "properties": {
+          "feeds": {
+            "items": {
+              "$ref": "#/components/schemas/ComicFeedEntry"
+            },
+            "title": "Feeds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "feeds"
+        ],
+        "title": "ComicsResponse",
         "type": "object"
       },
       "ControlBody": {
@@ -1241,6 +1342,72 @@
         "title": "DecideBody",
         "type": "object"
       },
+      "EmojiStatEntry": {
+        "properties": {
+          "emoji_id": {
+            "title": "Emoji Id",
+            "type": "string"
+          },
+          "emoji_name": {
+            "title": "Emoji Name",
+            "type": "string"
+          },
+          "emoji_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji Url"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "emoji_id",
+          "emoji_name",
+          "emoji_url",
+          "total"
+        ],
+        "title": "EmojiStatEntry",
+        "type": "object"
+      },
+      "EmojiStatsResponse": {
+        "properties": {
+          "distinct_emojis": {
+            "title": "Distinct Emojis",
+            "type": "integer"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EmojiStatEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_uses": {
+            "title": "Total Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_uses",
+          "distinct_emojis",
+          "entries",
+          "total"
+        ],
+        "title": "EmojiStatsResponse",
+        "type": "object"
+      },
       "EqualizerBody": {
         "properties": {
           "bands": {
@@ -1365,6 +1532,121 @@
         "title": "GiveItemBody",
         "type": "object"
       },
+      "GiveawayInfo": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "ended": {
+            "title": "Ended",
+            "type": "boolean"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "entries": {
+            "title": "Entries",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "min_account_days": {
+            "title": "Min Account Days",
+            "type": "integer"
+          },
+          "min_join_days": {
+            "title": "Min Join Days",
+            "type": "integer"
+          },
+          "required_role_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Role Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "winners_count": {
+            "title": "Winners Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "message_id",
+          "author_id",
+          "title",
+          "description",
+          "winners_count",
+          "entries",
+          "ended",
+          "ends_at",
+          "required_role_id",
+          "min_account_days",
+          "min_join_days"
+        ],
+        "title": "GiveawayInfo",
+        "type": "object"
+      },
+      "GiveawaysResponse": {
+        "properties": {
+          "giveaways": {
+            "items": {
+              "$ref": "#/components/schemas/GiveawayInfo"
+            },
+            "title": "Giveaways",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "giveaways",
+          "total"
+        ],
+        "title": "GiveawaysResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1473,6 +1755,40 @@
           "channel_ids"
         ],
         "title": "LockChannelsBody",
+        "type": "object"
+      },
+      "LockdownEntry": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "title": "Channel Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id",
+          "channel_name"
+        ],
+        "title": "LockdownEntry",
+        "type": "object"
+      },
+      "LockdownsResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/LockdownEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "LockdownsResponse",
         "type": "object"
       },
       "ManagePlonkBody": {
@@ -2953,6 +3269,129 @@
         "title": "PlaylistPatchBody",
         "type": "object"
       },
+      "PollInfo": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "ended": {
+            "title": "Ended",
+            "type": "boolean"
+          },
+          "expires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires"
+          },
+          "hide_results": {
+            "title": "Hide Results",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "image_url": {
+            "title": "Image Url",
+            "type": "string"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Id"
+          },
+          "total_votes": {
+            "title": "Total Votes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "message_id",
+          "question",
+          "description",
+          "options",
+          "image_url",
+          "color",
+          "published",
+          "expires",
+          "ended",
+          "total_votes",
+          "hide_results",
+          "role_id"
+        ],
+        "title": "PollInfo",
+        "type": "object"
+      },
+      "PollsResponse": {
+        "properties": {
+          "polls": {
+            "items": {
+              "$ref": "#/components/schemas/PollInfo"
+            },
+            "title": "Polls",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "polls",
+          "total"
+        ],
+        "title": "PollsResponse",
+        "type": "object"
+      },
       "PostLevelingBlacklistBody": {
         "properties": {
           "action": {
@@ -3608,6 +4047,245 @@
           "subject_value"
         ],
         "title": "SubscriptionPatchBody",
+        "type": "object"
+      },
+      "TagCreator": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "count"
+        ],
+        "title": "TagCreator",
+        "type": "object"
+      },
+      "TagDetail": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "content",
+          "owner_id",
+          "owner_name",
+          "uses",
+          "created_at"
+        ],
+        "title": "TagDetail",
+        "type": "object"
+      },
+      "TagInfo": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner_id",
+          "owner_name",
+          "uses",
+          "created_at"
+        ],
+        "title": "TagInfo",
+        "type": "object"
+      },
+      "TagsResponse": {
+        "properties": {
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagInfo"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "top_creators": {
+            "items": {
+              "$ref": "#/components/schemas/TagCreator"
+            },
+            "title": "Top Creators",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_uses": {
+            "title": "Total Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "total_uses",
+          "tags",
+          "top_creators"
+        ],
+        "title": "TagsResponse",
+        "type": "object"
+      },
+      "TempChannelEntry": {
+        "properties": {
+          "active_channels": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveTempChannel"
+            },
+            "title": "Active Channels",
+            "type": "array"
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "title": "Channel Name",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "total_users": {
+            "title": "Total Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id",
+          "channel_name",
+          "format",
+          "active_channels",
+          "total_users"
+        ],
+        "title": "TempChannelEntry",
+        "type": "object"
+      },
+      "TempChannelsResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/TempChannelEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "TempChannelsResponse",
         "type": "object"
       },
       "TestMessageBody": {
@@ -7303,9 +7981,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Comics Api V1 Guilds  Guild Id  Comics Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComicsResponse"
                 }
               }
             },
@@ -10138,9 +10814,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Emoji Stats Api V1 Guilds  Guild Id  Emoji Stats Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EmojiStatsResponse"
                 }
               }
             },
@@ -10736,9 +11410,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Giveaways Api V1 Guilds  Guild Id  Giveaways Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GiveawaysResponse"
                 }
               }
             },
@@ -12319,9 +12991,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Lockdowns Api V1 Guilds  Guild Id  Lockdowns Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/LockdownsResponse"
                 }
               }
             },
@@ -16041,9 +16711,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Polls Api V1 Guilds  Guild Id  Polls Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PollsResponse"
                 }
               }
             },
@@ -18806,9 +19474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Tags Api V1 Guilds  Guild Id  Tags Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TagsResponse"
                 }
               }
             },
@@ -19291,9 +19957,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Tag Detail Api V1 Guilds  Guild Id  Tags  Tag Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TagDetail"
                 }
               }
             },
@@ -19489,9 +20153,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Temp Channels Api V1 Guilds  Guild Id  Temp Channels Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TempChannelsResponse"
                 }
               }
             },
