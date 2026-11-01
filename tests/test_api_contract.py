@@ -25,10 +25,6 @@ CALL_RE = re.compile(
 ALLOWLIST: set[tuple[str, str]] = {
     # Hidden legacy alias (include_in_schema=False in routers/guild.py) the client still targets on purpose.
     ('PATCH', '/api/v1/guilds/{}/config'),
-    # KNOWN DRIFT: the AutoMod feature (and its router) was removed from the bot; the client methods are dead.
-    # Delete these two and the client's automod methods, then drop the entries.
-    ('GET', '/api/v1/guilds/{}/automod'),
-    ('PUT', '/api/v1/guilds/{}/automod/{}'),
 }
 
 

@@ -3249,43 +3249,6 @@ pub struct StarboardTop {
     pub jump_url: String,
 }
 
-// -- AutoMod presets -----------------------------------------------------------
-
-/// `GET /guilds/{id}/automod` — every preset Percy offers and the state of its Discord rule.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AutoModInfo {
-    /// Percy lacks Manage Server: the presets are defaults and cannot be saved.
-    #[serde(default)]
-    pub missing_permission: bool,
-    #[serde(default)]
-    pub presets: Vec<AutoModPreset>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AutoModPreset {
-    /// URL-safe identity, used in `PUT /automod/{key}`.
-    pub key: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    /// A Discord rule for this preset exists.
-    #[serde(default)]
-    pub exists: bool,
-    #[serde(default)]
-    pub enabled: bool,
-    /// Human-readable actions, e.g. "Block the message".
-    #[serde(default)]
-    pub actions: Vec<String>,
-    #[serde(default)]
-    pub exempt_role_ids: Vec<String>,
-    #[serde(default)]
-    pub exempt_channel_ids: Vec<String>,
-    /// `Some` only for presets that match a keyword list.
-    #[serde(default)]
-    pub keywords: Option<Vec<String>>,
-}
-
 // -- Reminders -----------------------------------------------------------------
 
 /// `GET /users/{id}/reminders`.

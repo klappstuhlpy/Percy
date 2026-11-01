@@ -817,31 +817,6 @@ impl PercyClient {
         .await
     }
 
-    // -- AutoMod presets -------------------------------------------------------
-
-    pub async fn get_automod(&self, guild_id: u64) -> Result<AutoModInfo, PercyError> {
-        self.send_into(
-            self.client
-                .get(self.url(&format!("/api/v1/guilds/{}/automod", seg(&guild_id)))),
-        )
-        .await
-    }
-
-    /// Create or edit the Discord rule for one preset (`{enabled, exempt_role_ids, exempt_channel_ids, keywords?}`).
-    pub async fn put_automod_preset(
-        &self,
-        guild_id: u64,
-        preset: &str,
-        body: &serde_json::Value,
-    ) -> Result<(), PercyError> {
-        self.send_unit(
-            self.client
-                .put(self.url(&format!("/api/v1/guilds/{}/automod/{}", seg(&guild_id), seg(&preset))))
-                .json(body),
-        )
-        .await
-    }
-
     // -- Tags (write) ------------------------------------------------------------
 
     /// Create a tag owned by `owner_id` (the dashboard user).
