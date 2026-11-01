@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The dashboard now lives inside the Percy repo at `dashboard/` (git subtree, history kept) as a Cargo workspace.
+- `percy-client` moved from `kls-core` to `dashboard/crates/percy-client` (path dependency): API, client and dashboard changes ship in one commit, no kls-core tag bump.
+- `kls-ui` is gone; design assets are vendored in `static/kls/` (served at `/kls/*`). `kls-web-core` is consumed from kls-core v0.20.0.
+- CI: `.github/workflows/dashboard.yml` (fmt, clippy `-D warnings`, `cargo test --workspace`); the bot CI ignores `dashboard/**`.
+
 ## [0.21.0] - 2026-11-01
 
 ### Removed

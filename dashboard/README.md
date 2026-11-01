@@ -16,7 +16,7 @@ optionally connects to [klappstuhl.me](https://github.com/klappstuhlpy/klappstuh
 </div>
 
 ```
-Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──▶ PostgreSQL
+Browser ──▶ dashboard (this app) ──▶ Percy internal API ──▶ PostgreSQL
               │  Discord OAuth login                 │  cache.invalidate()
               └─ dashboard.db (its own SQLite)
 ```
@@ -43,9 +43,11 @@ Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──
 - **BFF (backend-for-frontend).** Every configuration change is proxied to Percy's internal
   HTTP API, which owns the database and cache invalidation — the dashboard **never** touches
   Percy's PostgreSQL directly.
-- **Shared foundation.** Its design system, signed-cookie crypto, and Percy API client come
-  from the tag-pinned [`kls-core`](https://github.com/klappstuhlpy/kls-core)
-  crates, so it stays visually and behaviourally consistent with the main site — without a common monolith.
+- **In-tree.** It lives in the Percy repo at `dashboard/` (a Cargo workspace: this binary plus
+  `crates/percy-client`, the typed Percy API client, as a path dependency). An internal-API change,
+  its client update and the dashboard change land in one commit. Session/DB/migration/SSO primitives come
+  from the tag-pinned [`kls-core`](https://github.com/klappstuhlpy/kls-core) `kls-web-core` crate; the
+  design assets are vendored in `static/kls/`.
 
 ---
 
@@ -57,7 +59,7 @@ Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──
 | **Access control** | "Can this Discord user manage this guild?" — computed from Percy's `get_user_guilds` (Manage-Server ⇒ full config; shares-a-guild ⇒ read-only member views). Acting user/moderator ids always come from the session, never the request body.                                     |
 | **Own database**   | `dashboard.db` (SQLite via the shared `kls-web-core` kernel) holds only the two dashboard-owned tables: `user_discord_admin_guilds` (the "add Percy to your server" list) and `percy_leaderboard_vanity` (public-leaderboard vanity slugs). Migrations in `sql/` run on startup. |
 | **Percy API**      | The one hard runtime dependency. All guild data + mutations flow through it (`percy-client`, paths under `/api/v1`). Optional at *boot* — the server still starts with no Percy configured; pages degrade gracefully.                                                            |
-| **Design**         | `kls-ui` crate — `base.css`, theme bootstrap and relative-time JS, embedded and served at `/kls/*`. The dashboard's own page CSS/JS live in `static/` and are served at `/static/*`.                                                                                             |
+| **Design**         | vendored `static/kls/` (`base.css`, theme bootstrap, relative-time JS), embedded by `src/kls.rs` and served at `/kls/*`. The dashboard's own page CSS/JS live in `static/` and are served at `/static/*`.                                                                                             |
 
 ---
 
@@ -141,7 +143,7 @@ Run alongside klappstuhl.me on the same registrable domain and the two interoper
 database and no shared session store**, each deriving the other's URL from its own config:
 
 - **Cross-navigation** — the main site links here via its `/percy` redirect; the dashboard links back via `base_url`.
-- **Shared look-and-feel** — both pull `kls-ui` at the same pinned tag.
+- **Shared look-and-feel** — each app vendors its own copy of the design assets (`static/kls/` here), so the two can diverge.
 - **Optional single sign-on** — see below.
 
 ### Single sign-on
