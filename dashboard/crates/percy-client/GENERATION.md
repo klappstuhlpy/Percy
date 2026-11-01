@@ -121,8 +121,8 @@ small and self-contained first.
 | `webhooks.py` (vote webhooks) | 2 | no dashboard consumer; skip unless wanted |
 | `rolemenus.py` | 6 | |
 | `backup.py` | 6 | export blob is intentionally free-form JSON: leave as `dict` |
-| `notifications.py` | 7 | |
-| `members.py` | 7 | |
+| `notifications.py` | 7 | **done** |
+| `members.py` | 7 | **done** |
 | `subscriptions.py` (outbound webhooks) | 7 | |
 | `comics.py` | 5 | shaping in `app/services/comics/payload.py` |
 | `stats.py` | 9 | mixed scope |
