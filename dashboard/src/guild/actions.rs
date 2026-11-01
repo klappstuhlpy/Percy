@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 
 use axum::{
+    body::Body,
     extract::{Multipart, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
@@ -19,7 +20,7 @@ use serde::Deserialize;
 use crate::{
     errors::percy_message,
     forms::json_or_redirect,
-    guilds::user_can_manage,
+    guilds::{user_can_manage, user_is_member},
     mutations::{gate_json, ok_or_err},
     scan,
     session::Session,
@@ -652,6 +653,54 @@ pub async fn guild_leveling_blacklist(
     ok_or_err(percy.post_leveling_blacklist(guild_id, &body).await)
 }
 
+// ── Live events ─────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct EventsQuery {
+    #[serde(default)]
+    topics: String,
+}
+
+/// Whether a `topics` list names only topics any guild member may watch (the player). An empty
+/// list means "everything" to Percy, so it needs the manage gate like the pages it serves.
+fn member_visible_topics(topics: &str) -> bool {
+    !topics.trim().is_empty() && topics.split(',').all(|t| t.trim() == "music")
+}
+
+/// `GET /dashboard/guild/:guild_id/events?topics=` — Percy's server-sent event stream, relayed
+/// byte for byte. Gated like the data the topics carry: `music` alone is the overview player's
+/// (membership); anything else (cases, stats, ...) needs Manage Server. A GET, so the change
+/// log never records it.
+pub async fn guild_events(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Query(q): Query<EventsQuery>,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let discord_id = &session.discord_user_id;
+    let allowed = if member_visible_topics(&q.topics) {
+        user_is_member(&app, discord_id, guild_id).await
+    } else {
+        user_can_manage(&app, discord_id, guild_id).await
+    };
+    if !allowed {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match percy.events_stream(guild_id, &q.topics).await {
+        Ok(upstream) => Response::builder()
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .header("x-accel-buffering", "no")
+            .body(Body::from_stream(upstream.bytes_stream()))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+        Err(PercyError::NotFound) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
+    }
+}
+
 // ── Music ───────────────────────────────────────────────────────────────────
 
 /// `GET /dashboard/guild/:guild_id/music/status` — live player poll.
@@ -967,4 +1016,21 @@ fn detect_mime(data: &[u8]) -> String {
     } else {
         "image/png".to_string()
     } // default safe fallback
+}
+
+#[cfg(test)]
+mod tests {
+    use super::member_visible_topics;
+
+    #[test]
+    fn only_music_is_member_visible() {
+        assert!(member_visible_topics("music"));
+        assert!(member_visible_topics(" music , music"));
+        assert!(
+            !member_visible_topics(""),
+            "empty means every topic, so it needs manage"
+        );
+        assert!(!member_visible_topics("music,case"));
+        assert!(!member_visible_topics("stats"));
+    }
 }

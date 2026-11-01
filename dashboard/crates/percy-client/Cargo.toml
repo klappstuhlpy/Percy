@@ -10,7 +10,7 @@ description = "Typed client for Percy's internal HTTP API (shared between klapps
 # unification reuses a single reqwest build. rustls-tls is declared here too so
 # the crate also builds standalone (feature unification only adds features, it
 # never removes them).
-reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls", "stream"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 thiserror = "1"

@@ -34,7 +34,7 @@ percy-client = { path = "crates/percy-client" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.
-reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls", "stream"] }
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"

@@ -102,8 +102,20 @@
         } catch { /* silent */ }
     }
 
-    // Poll every 15 seconds for new cases
-    setInterval(pollNewCases, 15000);
+    // A `case.created` event is the cue to fetch; the 15 s poll is only the fallback for when the
+    // event stream is not open (unsupported browser, error, hidden tab).
+    let pollTimer = null;
+    function startPolling() {
+        clearInterval(pollTimer);
+        pollTimer = setInterval(pollNewCases, 15000);
+    }
+    startPolling();
+    if (window.PercyLive) {
+        window.PercyLive.connect(GUILD_ID, 'case', () => pollNewCases(), (live) => {
+            if (live) { clearInterval(pollTimer); pollNewCases(); }
+            else startPolling();
+        });
+    }
 
     // Convert ISO dates in filter inputs to local format
     document.querySelectorAll('input[type="date"]').forEach(input => {

@@ -64,3 +64,13 @@ async def test_stream_forwards_events_heartbeats_and_unsubscribes_on_close() -> 
     assert b'music.state' in await asyncio.wait_for(anext(stream), T)
     await stream.aclose()
     assert not bot.events.has_subscribers(1)
+
+
+def test_events_route_is_registered_and_authenticated() -> None:
+    from app.internal_api.dependencies import verify_token
+    from app.internal_api.routers import ALL_ROUTERS
+    from app.internal_api.routers.events import router as events_router
+
+    routes = [r for router in ALL_ROUTERS for r in router.routes if getattr(r, 'path', '') == '/guilds/{guild_id}/events']
+    assert len(routes) == 1
+    assert any(d.dependency is verify_token for d in events_router.dependencies)
