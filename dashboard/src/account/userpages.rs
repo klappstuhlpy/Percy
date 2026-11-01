@@ -425,7 +425,7 @@ pub async fn guild_overview(
     let economy = economy.unwrap_or(EconomyInfo {
         items: Vec::new(),
         lottery: None,
-        settings: None,
+        settings: percy_client::EconomySettings::default(),
     });
     let games = games.unwrap_or_default();
     let balances = balances.unwrap_or(BalancesResponse {

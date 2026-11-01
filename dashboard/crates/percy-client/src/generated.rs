@@ -39,6 +39,248 @@ pub struct AnalyticsTopCommand {
     pub command: ::std::string::String,
     pub uses: i64,
 }
+///`BalanceEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct BalanceEntry {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub avatar_url: ::std::option::Option<::std::string::String>,
+    pub bank: i64,
+    pub cash: i64,
+    pub total: i64,
+    pub user_id: ::std::string::String,
+    pub username: ::std::string::String,
+}
+///`BalancesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct BalancesResponse {
+    pub entries: ::std::vec::Vec<BalanceEntry>,
+    pub total: i64,
+}
+///One rank card preset as offered by a picker.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CardOption {
+    pub label: ::std::string::String,
+    pub value: ::std::string::String,
+}
+///`EconomyInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct EconomyInfo {
+    pub items: ::std::vec::Vec<ShopItem>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub lottery: ::std::option::Option<LotteryInfo>,
+    pub settings: EconomySettings,
+}
+///`EconomySettings`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct EconomySettings {
+    pub bank_cap: bool,
+    pub daily_base: i64,
+    pub drops_enabled: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub max_bet: ::std::option::Option<i64>,
+    pub payout_multiplier: f64,
+    pub rob_enabled: bool,
+}
+///`InventoryChange`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct InventoryChange {
+    pub item_id: i64,
+    pub ok: bool,
+    pub quantity: i64,
+}
+///`InventoryItem`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct InventoryItem {
+    pub effect: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub emoji: ::std::option::Option<::std::string::String>,
+    pub item_id: i64,
+    pub name: ::std::string::String,
+    pub quantity: i64,
+    pub rarity: ::std::string::String,
+}
+///`LeaderboardEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LeaderboardEntry {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub avatar_url: ::std::option::Option<::std::string::String>,
+    pub level: i64,
+    pub total_xp: i64,
+    pub user_id: ::std::string::String,
+    pub username: ::std::string::String,
+    pub xp: i64,
+}
+///`LeaderboardResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LeaderboardResponse {
+    pub entries: ::std::vec::Vec<LeaderboardEntry>,
+    pub total: i64,
+}
+/**Guild leveling config. An unconfigured guild answers only ``enabled``/``configured``
+(the route uses ``response_model_exclude_unset``), so every other field has a default.*/
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LevelingConfig {
+    #[serde(default = "defaults::default_u64::<i64, 100>")]
+    pub base: i64,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub blacklisted_channels: ::std::vec::Vec<i64>,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub blacklisted_roles: ::std::vec::Vec<i64>,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub blacklisted_users: ::std::vec::Vec<i64>,
+    #[serde(default)]
+    pub card_locked: bool,
+    #[serde(default, skip_serializing_if = ":: std :: collections :: HashMap::is_empty")]
+    pub card_options: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::vec::Vec<CardOption>,
+    >,
+    #[serde(default, skip_serializing_if = ":: std :: collections :: HashMap::is_empty")]
+    pub card_style: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::string::String,
+    >,
+    #[serde(default)]
+    pub configured: bool,
+    #[serde(default = "defaults::default_u64::<i64, 40>")]
+    pub cooldown_per: i64,
+    #[serde(default)]
+    pub delete_after_leave: bool,
+    pub enabled: bool,
+    #[serde(default = "defaults::leveling_config_factor")]
+    pub factor: f64,
+    #[serde(default, skip_serializing_if = ":: std :: collections :: HashMap::is_empty")]
+    pub level_roles: ::std::collections::HashMap<::std::string::String, i64>,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub level_up_channel: i64,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub level_up_message: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub level_up_variables: ::std::vec::Vec<TemplateVariable>,
+    #[serde(default = "defaults::default_u64::<i64, 15>")]
+    pub max_gain: i64,
+    #[serde(default = "defaults::default_u64::<i64, 8>")]
+    pub min_gain: i64,
+    #[serde(default, skip_serializing_if = ":: std :: collections :: HashMap::is_empty")]
+    pub multiplier_channels: ::std::collections::HashMap<::std::string::String, f64>,
+    #[serde(default, skip_serializing_if = ":: std :: collections :: HashMap::is_empty")]
+    pub multiplier_roles: ::std::collections::HashMap<::std::string::String, f64>,
+    #[serde(default)]
+    pub role_stack: bool,
+    #[serde(default, skip_serializing_if = ":: std :: collections :: HashMap::is_empty")]
+    pub special_level_up_messages: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::string::String,
+    >,
+    #[serde(default)]
+    pub voice_enabled: bool,
+}
+///`LotteryInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LotteryInfo {
+    pub channel_id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub ends_at: ::std::option::Option<::std::string::String>,
+    pub jackpot: i64,
+    pub ticket_price: i64,
+}
+///`MemberBalance`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberBalance {
+    pub bank: i64,
+    pub cash: i64,
+    pub total: i64,
+    pub user_id: ::std::string::String,
+}
+///`MemberInventory`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberInventory {
+    pub items: ::std::vec::Vec<InventoryItem>,
+    pub user_id: ::std::string::String,
+}
+///`MemberLevel`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MemberLevel {
+    pub level: i64,
+    pub messages: i64,
+    pub rank: i64,
+    pub user_id: ::std::string::String,
+    pub xp: i64,
+}
+///`ShopItem`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ShopItem {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub available_until: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub builtin_key: ::std::option::Option<::std::string::String>,
+    pub category: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub description: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub duration_minutes: ::std::option::Option<i64>,
+    pub effect: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub effect_value: ::std::option::Option<i64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub emoji: ::std::option::Option<::std::string::String>,
+    pub for_sale: bool,
+    pub id: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub image_url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub max_per_user: ::std::option::Option<i64>,
+    pub name: ::std::string::String,
+    pub price: i64,
+    pub rarity: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub remove_role_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub reply_message: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub required_role_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub stock: ::std::option::Option<i64>,
+}
+///One ``{placeholder}`` a message template accepts.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TemplateVariable {
+    pub description: ::std::string::String,
+    pub name: ::std::string::String,
+}
+///`XpHistoryPoint`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct XpHistoryPoint {
+    pub day: ::std::string::String,
+    pub gainers: i64,
+    pub total_xp: i64,
+}
+///`XpHistoryResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct XpHistoryResponse {
+    pub days: i64,
+    pub points: ::std::vec::Vec<XpHistoryPoint>,
+}
+/// Generation of default values for serde.
+pub mod defaults {
+    pub(super) fn default_i64<T, const V: i64>() -> T
+    where
+        T: ::std::convert::TryFrom<i64>,
+        <T as ::std::convert::TryFrom<i64>>::Error: ::std::fmt::Debug,
+    {
+        T::try_from(V).unwrap()
+    }
+    pub(super) fn default_u64<T, const V: u64>() -> T
+    where
+        T: ::std::convert::TryFrom<u64>,
+        <T as ::std::convert::TryFrom<u64>>::Error: ::std::fmt::Debug,
+    {
+        T::try_from(V).unwrap()
+    }
+    pub(super) fn leveling_config_factor() -> f64 {
+        1.0_f64
+    }
+}
 /// Error types.
 pub mod error {
     /// Error from a `TryFrom` or `FromStr` implementation.

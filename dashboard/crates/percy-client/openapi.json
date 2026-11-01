@@ -377,6 +377,72 @@
         "title": "AudioBody",
         "type": "object"
       },
+      "BalanceEntry": {
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "bank": {
+            "title": "Bank",
+            "type": "integer"
+          },
+          "cash": {
+            "title": "Cash",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "avatar_url",
+          "cash",
+          "bank",
+          "total"
+        ],
+        "title": "BalanceEntry",
+        "type": "object"
+      },
+      "BalancesResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entries",
+          "total"
+        ],
+        "title": "BalancesResponse",
+        "type": "object"
+      },
       "BatchGuildConfigBody": {
         "properties": {
           "operations": {
@@ -613,6 +679,25 @@
           "action"
         ],
         "title": "BulkActionBody",
+        "type": "object"
+      },
+      "CardOption": {
+        "description": "One rank card preset as offered by a picker.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "CardOption",
         "type": "object"
       },
       "ControlBody": {
@@ -1241,6 +1326,82 @@
         "title": "DecideBody",
         "type": "object"
       },
+      "EconomyInfo": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShopItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lottery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LotteryInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settings": {
+            "$ref": "#/components/schemas/EconomySettings"
+          }
+        },
+        "required": [
+          "items",
+          "lottery",
+          "settings"
+        ],
+        "title": "EconomyInfo",
+        "type": "object"
+      },
+      "EconomySettings": {
+        "properties": {
+          "bank_cap": {
+            "title": "Bank Cap",
+            "type": "boolean"
+          },
+          "daily_base": {
+            "title": "Daily Base",
+            "type": "integer"
+          },
+          "drops_enabled": {
+            "title": "Drops Enabled",
+            "type": "boolean"
+          },
+          "max_bet": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Bet"
+          },
+          "payout_multiplier": {
+            "title": "Payout Multiplier",
+            "type": "number"
+          },
+          "rob_enabled": {
+            "title": "Rob Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "payout_multiplier",
+          "rob_enabled",
+          "daily_base",
+          "max_bet",
+          "bank_cap",
+          "drops_enabled"
+        ],
+        "title": "EconomySettings",
+        "type": "object"
+      },
       "EqualizerBody": {
         "properties": {
           "bands": {
@@ -1437,6 +1598,140 @@
         "title": "ImportTagsBody",
         "type": "object"
       },
+      "InventoryChange": {
+        "properties": {
+          "item_id": {
+            "title": "Item Id",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "item_id",
+          "quantity"
+        ],
+        "title": "InventoryChange",
+        "type": "object"
+      },
+      "InventoryItem": {
+        "properties": {
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "rarity": {
+            "title": "Rarity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "name",
+          "quantity",
+          "emoji",
+          "rarity",
+          "effect"
+        ],
+        "title": "InventoryItem",
+        "type": "object"
+      },
+      "LeaderboardEntry": {
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "total_xp": {
+            "title": "Total Xp",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "xp": {
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "avatar_url",
+          "level",
+          "xp",
+          "total_xp"
+        ],
+        "title": "LeaderboardEntry",
+        "type": "object"
+      },
+      "LeaderboardResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entries",
+          "total"
+        ],
+        "title": "LeaderboardResponse",
+        "type": "object"
+      },
       "LevelUpTestBody": {
         "properties": {
           "user_id": {
@@ -1450,6 +1745,169 @@
           "user_id"
         ],
         "title": "LevelUpTestBody",
+        "type": "object"
+      },
+      "LevelingConfig": {
+        "description": "Guild leveling config. An unconfigured guild answers only ``enabled``/``configured``\n(the route uses ``response_model_exclude_unset``), so every other field has a default.",
+        "properties": {
+          "base": {
+            "default": 100,
+            "title": "Base",
+            "type": "integer"
+          },
+          "blacklisted_channels": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Blacklisted Channels",
+            "type": "array"
+          },
+          "blacklisted_roles": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Blacklisted Roles",
+            "type": "array"
+          },
+          "blacklisted_users": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Blacklisted Users",
+            "type": "array"
+          },
+          "card_locked": {
+            "default": false,
+            "title": "Card Locked",
+            "type": "boolean"
+          },
+          "card_options": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/CardOption"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "Card Options",
+            "type": "object"
+          },
+          "card_style": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Card Style",
+            "type": "object"
+          },
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "cooldown_per": {
+            "default": 40,
+            "title": "Cooldown Per",
+            "type": "integer"
+          },
+          "delete_after_leave": {
+            "default": false,
+            "title": "Delete After Leave",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "factor": {
+            "default": 1.0,
+            "title": "Factor",
+            "type": "number"
+          },
+          "level_roles": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Level Roles",
+            "type": "object"
+          },
+          "level_up_channel": {
+            "default": 1,
+            "title": "Level Up Channel",
+            "type": "integer"
+          },
+          "level_up_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Up Message"
+          },
+          "level_up_variables": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TemplateVariable"
+            },
+            "title": "Level Up Variables",
+            "type": "array"
+          },
+          "max_gain": {
+            "default": 15,
+            "title": "Max Gain",
+            "type": "integer"
+          },
+          "min_gain": {
+            "default": 8,
+            "title": "Min Gain",
+            "type": "integer"
+          },
+          "multiplier_channels": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Multiplier Channels",
+            "type": "object"
+          },
+          "multiplier_roles": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Multiplier Roles",
+            "type": "object"
+          },
+          "role_stack": {
+            "default": false,
+            "title": "Role Stack",
+            "type": "boolean"
+          },
+          "special_level_up_messages": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Special Level Up Messages",
+            "type": "object"
+          },
+          "voice_enabled": {
+            "default": false,
+            "title": "Voice Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LevelingConfig",
         "type": "object"
       },
       "LockChannelsBody": {
@@ -1473,6 +1931,41 @@
           "channel_ids"
         ],
         "title": "LockChannelsBody",
+        "type": "object"
+      },
+      "LotteryInfo": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "jackpot": {
+            "title": "Jackpot",
+            "type": "integer"
+          },
+          "ticket_price": {
+            "title": "Ticket Price",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ticket_price",
+          "jackpot",
+          "channel_id",
+          "ends_at"
+        ],
+        "title": "LotteryInfo",
         "type": "object"
       },
       "ManagePlonkBody": {
@@ -1575,6 +2068,88 @@
           "action"
         ],
         "title": "MemberActionBody",
+        "type": "object"
+      },
+      "MemberBalance": {
+        "properties": {
+          "bank": {
+            "title": "Bank",
+            "type": "integer"
+          },
+          "cash": {
+            "title": "Cash",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "cash",
+          "bank",
+          "total"
+        ],
+        "title": "MemberBalance",
+        "type": "object"
+      },
+      "MemberInventory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "items"
+        ],
+        "title": "MemberInventory",
+        "type": "object"
+      },
+      "MemberLevel": {
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "messages": {
+            "title": "Messages",
+            "type": "integer"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "xp": {
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "level",
+          "xp",
+          "messages",
+          "rank"
+        ],
+        "title": "MemberLevel",
         "type": "object"
       },
       "MemberRolesBody": {
@@ -3464,6 +4039,193 @@
         "title": "SetupSentinelBody",
         "type": "object"
       },
+      "ShopItem": {
+        "properties": {
+          "available_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Until"
+          },
+          "builtin_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builtin Key"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "effect_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Value"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "for_sale": {
+            "title": "For Sale",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "max_per_user": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Per User"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          },
+          "rarity": {
+            "title": "Rarity",
+            "type": "string"
+          },
+          "remove_role_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remove Role Id"
+          },
+          "reply_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Message"
+          },
+          "required_role_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Role Id"
+          },
+          "stock": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "price",
+          "effect",
+          "effect_value",
+          "duration_minutes",
+          "emoji",
+          "rarity",
+          "category",
+          "stock",
+          "max_per_user",
+          "required_role_id",
+          "available_until",
+          "remove_role_id",
+          "reply_message",
+          "image_url",
+          "builtin_key",
+          "for_sale"
+        ],
+        "title": "ShopItem",
+        "type": "object"
+      },
       "SubscribeBody": {
         "description": "A follow, as the picker or a Discord command submits it.",
         "properties": {
@@ -3608,6 +4370,25 @@
           "subject_value"
         ],
         "title": "SubscriptionPatchBody",
+        "type": "object"
+      },
+      "TemplateVariable": {
+        "description": "One ``{placeholder}`` a message template accepts.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "TemplateVariable",
         "type": "object"
       },
       "TestMessageBody": {
@@ -3832,6 +4613,50 @@
           "depth"
         ],
         "title": "WobbleBody",
+        "type": "object"
+      },
+      "XpHistoryPoint": {
+        "properties": {
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "gainers": {
+            "title": "Gainers",
+            "type": "integer"
+          },
+          "total_xp": {
+            "title": "Total Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "total_xp",
+          "gainers"
+        ],
+        "title": "XpHistoryPoint",
+        "type": "object"
+      },
+      "XpHistoryResponse": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/XpHistoryPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points",
+          "days"
+        ],
+        "title": "XpHistoryResponse",
         "type": "object"
       },
       "app__internal_api__routers__releases__ProgressBody": {
@@ -8557,9 +9382,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Economy Api V1 Guilds  Guild Id  Economy Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EconomyInfo"
                 }
               }
             },
@@ -8670,9 +9493,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Economy Balances Api V1 Guilds  Guild Id  Economy Balances Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BalancesResponse"
                 }
               }
             },
@@ -8772,9 +9593,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Economy Balance Api V1 Guilds  Guild Id  Economy Balances  User Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberBalance"
                 }
               }
             },
@@ -8992,9 +9811,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Adjust Economy Balance Api V1 Guilds  Guild Id  Economy Balances  User Id  Adjust Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberBalance"
                 }
               }
             },
@@ -9093,9 +9910,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Economy Inventory Api V1 Guilds  Guild Id  Economy Inventory  User Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberInventory"
                 }
               }
             },
@@ -9202,9 +10017,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Give Economy Item Api V1 Guilds  Guild Id  Economy Inventory  User Id  Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/InventoryChange"
                 }
               }
             },
@@ -9326,9 +10139,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Take Economy Item Api V1 Guilds  Guild Id  Economy Inventory  User Id   Item Id  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/InventoryChange"
                 }
               }
             },
@@ -11313,9 +12124,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Leveling Config Api V1 Guilds  Guild Id  Leveling Config Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/LevelingConfig"
                 }
               }
             },
@@ -11524,9 +12333,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Leveling Leaderboard Api V1 Guilds  Guild Id  Leveling Leaderboard Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/LeaderboardResponse"
                 }
               }
             },
@@ -12018,9 +12825,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Leveling User Api V1 Guilds  Guild Id  Leveling Users  User Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MemberLevel"
                 }
               }
             },
@@ -12229,9 +13034,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Leveling Xp History Api V1 Guilds  Guild Id  Leveling Xp History Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/XpHistoryResponse"
                 }
               }
             },

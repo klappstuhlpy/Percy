@@ -129,8 +129,8 @@ small and self-contained first.
 | `releases.py` | 9 | `progress` map: `dict[str, dict[str, Row]]` |
 | `watchlist.py` | 11 | large nested payloads |
 | `moderation.py` | 12 | 1 route has no JSON body |
-| `leveling.py` | 12 | |
-| `economy.py` | 15 | |
+| `leveling.py` | 12 | **done (read routes; `{ok}`/`{ok,message}` actions left as dict)** |
+| `economy.py` | 15 | **done (read routes + inventory change; `{ok}` actions left as dict)** |
 | `music.py` | 18 | |
 | `guild.py` | 20 | biggest config surface; `Option` leniency matters most here |
 | `users.py` | 21 | includes PNG-preview and data-export routes (leave non-JSON alone) |

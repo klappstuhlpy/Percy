@@ -37,6 +37,97 @@ _Snowflake = Field(default=None, ge=1, le=_MAX_ID)
 
 
 # ---------------------------------------------------------------------------
+# Response models — the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md). Class names are the Rust type names.
+# ---------------------------------------------------------------------------
+
+
+class ShopItem(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    price: int
+    effect: str
+    effect_value: int | None
+    duration_minutes: int | None
+    emoji: str | None
+    rarity: str
+    category: str
+    stock: int | None
+    max_per_user: int | None
+    required_role_id: str | None
+    available_until: str | None
+    remove_role_id: str | None
+    reply_message: str | None
+    image_url: str | None
+    builtin_key: str | None
+    for_sale: bool
+
+
+class LotteryInfo(BaseModel):
+    ticket_price: int
+    jackpot: int
+    channel_id: str
+    ends_at: str | None
+
+
+class EconomySettings(BaseModel):
+    payout_multiplier: float
+    rob_enabled: bool
+    daily_base: int
+    max_bet: int | None
+    bank_cap: bool
+    drops_enabled: bool
+
+
+class EconomyInfo(BaseModel):
+    items: list[ShopItem]
+    lottery: LotteryInfo | None
+    settings: EconomySettings
+
+
+class BalanceEntry(BaseModel):
+    user_id: str
+    username: str
+    avatar_url: str | None
+    cash: int
+    bank: int
+    total: int
+
+
+class BalancesResponse(BaseModel):
+    entries: list[BalanceEntry]
+    total: int
+
+
+class MemberBalance(BaseModel):
+    user_id: str
+    cash: int
+    bank: int
+    total: int
+
+
+class InventoryItem(BaseModel):
+    item_id: int
+    name: str
+    quantity: int
+    emoji: str | None
+    rarity: str
+    effect: str
+
+
+class MemberInventory(BaseModel):
+    user_id: str
+    items: list[InventoryItem]
+
+
+class InventoryChange(BaseModel):
+    ok: bool
+    item_id: int
+    quantity: int
+
+
+# ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
 
@@ -153,7 +244,7 @@ def _settings_payload(settings: GuildEconomySettings) -> dict:
 
 
 @router.get("/economy")
-async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
+async def get_economy(guild: GuildDep, bot: BotDep) -> EconomyInfo:
     await bot.db.economy.ensure_builtins(guild.id, [i for i in CATALOGUE if i.for_sale])
     items = await bot.db.economy.get_items(guild.id)
     lottery = await bot.db.economy.get_lottery(guild.id)
@@ -192,7 +283,7 @@ async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
             'ends_at': lottery['ends_at'].isoformat() if lottery.get('ends_at') else None,
         }
 
-    return {'items': shop, 'lottery': lottery_data, 'settings': _settings_payload(settings)}
+    return EconomyInfo.model_validate({'items': shop, 'lottery': lottery_data, 'settings': _settings_payload(settings)})
 
 
 @router.patch("/economy/settings")
@@ -323,7 +414,7 @@ async def get_economy_balances(
     bot: BotDep,
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> dict:
+) -> BalancesResponse:
     records = await bot.db.users.get_top_balance_records(guild.id, limit + offset)
     total = await bot.db.economy.count_balances(guild.id)
     entries = []
@@ -338,7 +429,7 @@ async def get_economy_balances(
             'total': r['total'],
         })
     entries = entries[offset:offset + limit]
-    return {'entries': entries, 'total': total}
+    return BalancesResponse.model_validate({'entries': entries, 'total': total})
 
 
 @router.patch("/economy/balances/{user_id}")
@@ -428,19 +519,19 @@ async def delete_lottery(guild: GuildDep, bot: BotDep) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _balance_payload(user_id: int, row) -> dict:
+def _balance_payload(user_id: int, row) -> MemberBalance:
     cash, bank = (row['cash'], row['bank']) if row else (0, 0)
-    return {'user_id': str(user_id), 'cash': cash, 'bank': bank, 'total': cash + bank}
+    return MemberBalance.model_validate({'user_id': str(user_id), 'cash': cash, 'bank': bank, 'total': cash + bank})
 
 
 @router.get("/economy/balances/{user_id}")
-async def get_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId) -> dict:
+async def get_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId) -> MemberBalance:
     """One member's wallet; a member with no row is a zero wallet (and no row is created)."""
     return _balance_payload(user_id, await bot.db.users.find_balance_record(user_id, guild.id))
 
 
 @router.post("/economy/balances/{user_id}/adjust")
-async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId, body: AdjustBalanceBody) -> dict:
+async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId, body: AdjustBalanceBody) -> MemberBalance:
     if body.cash == 0 and body.bank == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify cash or bank')
     if abs(body.cash) > _MAX_DELTA or abs(body.bank) > _MAX_DELTA:
@@ -452,9 +543,9 @@ async def adjust_economy_balance(guild: GuildDep, bot: BotDep, user_id: UserId, 
 
 
 @router.get("/economy/inventory/{user_id}")
-async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: UserId) -> dict:
+async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: UserId) -> MemberInventory:
     rows = await bot.db.economy.get_inventory(user_id, guild.id)
-    return {
+    return MemberInventory.model_validate({
         'user_id': str(user_id),
         'items': [
             {
@@ -467,11 +558,11 @@ async def get_economy_inventory(guild: GuildDep, bot: BotDep, user_id: UserId) -
             }
             for r in rows
         ],
-    }
+    })
 
 
 @router.post("/economy/inventory/{user_id}")
-async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: UserId, body: GiveItemBody) -> dict:
+async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: UserId, body: GiveItemBody) -> InventoryChange:
     if not 1 <= body.quantity <= 10_000:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='quantity must be between 1 and 10000')
     result, owned = await bot.db.economy.give_item(user_id, guild.id, body.item_id, body.quantity)
@@ -479,17 +570,17 @@ async def give_economy_item(guild: GuildDep, bot: BotDep, user_id: UserId, body:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
     if result == 'limit':
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='per-user item limit reached')
-    return {'ok': True, 'item_id': body.item_id, 'quantity': owned}
+    return InventoryChange.model_validate({'ok': True, 'item_id': body.item_id, 'quantity': owned})
 
 
 @router.delete("/economy/inventory/{user_id}/{item_id}")
 async def take_economy_item(
     guild: GuildDep, bot: BotDep, user_id: UserId, item_id: ItemId, quantity: int = Query(default=1, ge=1, le=10_000)
-) -> dict:
+) -> InventoryChange:
     left = await bot.db.economy.consume_item(user_id, guild.id, item_id, quantity)
     if left is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='member does not own that many')
-    return {'ok': True, 'item_id': item_id, 'quantity': left}
+    return InventoryChange.model_validate({'ok': True, 'item_id': item_id, 'quantity': left})
 
 
 @router.delete("/economy/items/by-id/{item_id}")

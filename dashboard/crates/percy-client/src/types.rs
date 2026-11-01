@@ -1,6 +1,7 @@
 //! Typed response models for Percy's internal API.
 
 use serde::{Deserialize, Serialize};
+use crate::generated::{CardOption, LevelingConfig};
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -261,70 +262,6 @@ pub struct SentinelInfo {
 
 // -- Leveling types ----------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LevelingConfig {
-    pub enabled: bool,
-    #[serde(default)]
-    pub configured: bool,
-    /// 0 = don't send, 1 = source channel, 2 = DM, else channel id.
-    #[serde(default = "default_level_up_channel")]
-    pub level_up_channel: i64,
-    pub level_up_message: Option<String>,
-    /// Map of level (as string) -> custom message.
-    #[serde(default)]
-    pub special_level_up_messages: HashMap<String, String>,
-    #[serde(default)]
-    pub blacklisted_roles: Vec<i64>,
-    #[serde(default)]
-    pub blacklisted_channels: Vec<i64>,
-    #[serde(default)]
-    pub blacklisted_users: Vec<i64>,
-    /// Map of role id (as string) -> level threshold.
-    #[serde(default)]
-    pub level_roles: HashMap<String, i64>,
-    /// Map of role id (as string) -> XP multiplier.
-    #[serde(default)]
-    pub multiplier_roles: HashMap<String, f64>,
-    /// Map of channel id (as string) -> XP multiplier.
-    #[serde(default)]
-    pub multiplier_channels: HashMap<String, f64>,
-    #[serde(default)]
-    pub role_stack: bool,
-    #[serde(default)]
-    pub voice_enabled: bool,
-    #[serde(default)]
-    pub delete_after_leave: bool,
-    #[serde(default = "default_factor")]
-    pub factor: f64,
-    #[serde(default = "default_base")]
-    pub base: i64,
-    #[serde(default = "default_min_gain")]
-    pub min_gain: i64,
-    #[serde(default = "default_max_gain")]
-    pub max_gain: i64,
-    #[serde(default = "default_cooldown_per")]
-    pub cooldown_per: i64,
-    /// The server's default rank card style: a partial map of preset keys.
-    #[serde(default)]
-    pub card_style: HashMap<String, String>,
-    /// Members may not override the server's card style (the editor is hidden).
-    #[serde(default)]
-    pub card_locked: bool,
-    /// Every preset per field (`theme`, `accent`, `bar`, `font`).
-    #[serde(default)]
-    pub card_options: HashMap<String, Vec<CardOption>>,
-    /// The `{placeholders}` a level-up message may use, in display order.
-    #[serde(default)]
-    pub level_up_variables: Vec<TemplateVariable>,
-}
-
-/// One `{placeholder}` a message template accepts.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TemplateVariable {
-    pub name: String,
-    pub description: String,
-}
-
 /// `{ok, message}` answer of an action that reports what it did in words.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ActionMessage {
@@ -332,13 +269,6 @@ pub struct ActionMessage {
     pub ok: bool,
     #[serde(default)]
     pub message: String,
-}
-
-/// One rank card preset as offered by a picker.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CardOption {
-    pub value: String,
-    pub label: String,
 }
 
 /// `GET /users/{id}/rank-card?guild_id=` — a member's rank card style on one server.
@@ -359,87 +289,6 @@ pub struct RankCard {
     pub options: HashMap<String, Vec<CardOption>>,
 }
 
-fn default_factor() -> f64 {
-    1.0
-}
-fn default_level_up_channel() -> i64 {
-    1
-}
-fn default_base() -> i64 {
-    100
-}
-fn default_min_gain() -> i64 {
-    8
-}
-fn default_max_gain() -> i64 {
-    15
-}
-fn default_cooldown_per() -> i64 {
-    40
-}
-
-impl Default for LevelingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            configured: false,
-            level_up_channel: default_level_up_channel(),
-            level_up_message: None,
-            special_level_up_messages: HashMap::new(),
-            blacklisted_roles: Vec::new(),
-            blacklisted_channels: Vec::new(),
-            blacklisted_users: Vec::new(),
-            level_roles: HashMap::new(),
-            multiplier_roles: HashMap::new(),
-            multiplier_channels: HashMap::new(),
-            role_stack: false,
-            voice_enabled: false,
-            delete_after_leave: false,
-            factor: default_factor(),
-            base: default_base(),
-            min_gain: default_min_gain(),
-            max_gain: default_max_gain(),
-            cooldown_per: default_cooldown_per(),
-            card_style: HashMap::new(),
-            card_locked: false,
-            card_options: HashMap::new(),
-            level_up_variables: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LeaderboardEntry {
-    pub user_id: String,
-    pub username: String,
-    pub avatar_url: Option<String>,
-    pub level: u32,
-    pub xp: u64,
-    pub total_xp: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LeaderboardResponse {
-    pub entries: Vec<LeaderboardEntry>,
-    pub total: u32,
-}
-
-/// One day of the cumulative-XP time series for a guild.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct XpHistoryPoint {
-    /// ISO date (YYYY-MM-DD).
-    pub day: String,
-    pub total_xp: i64,
-    pub gainers: i64,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct XpHistoryResponse {
-    #[serde(default)]
-    pub points: Vec<XpHistoryPoint>,
-    #[serde(default)]
-    pub days: u32,
-}
 
 // -- Member detail (user lookup) ---------------------------------------------
 
@@ -638,6 +487,13 @@ pub struct UserSettings {
     pub track_presence: bool,
     #[serde(default = "default_true")]
     pub track_history: bool,
+}
+
+impl LevelingConfig {
+    /// What the pages show when Percy is unreachable: the server-side defaults of an unconfigured guild.
+    pub fn unconfigured() -> Self {
+        serde_json::from_value(serde_json::json!({ "enabled": false })).unwrap_or_default()
+    }
 }
 
 fn default_true() -> bool {
@@ -1073,97 +929,6 @@ pub struct GuildOverview {
 
 // -- Economy types -----------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ShopItem {
-    pub id: u64,
-    pub name: String,
-    pub description: Option<String>,
-    pub price: u64,
-    #[serde(default)]
-    pub effect: Option<String>,
-    #[serde(default)]
-    pub effect_value: Option<i64>,
-    #[serde(default)]
-    pub duration_minutes: Option<i64>,
-    // -- Item overhaul fields (absent on older Percy builds) --
-    #[serde(default)]
-    pub emoji: Option<String>,
-    #[serde(default)]
-    pub rarity: Option<String>,
-    #[serde(default)]
-    pub category: Option<String>,
-    #[serde(default)]
-    pub stock: Option<i64>,
-    #[serde(default)]
-    pub max_per_user: Option<i64>,
-    #[serde(default)]
-    pub required_role_id: Option<String>,
-    #[serde(default)]
-    pub available_until: Option<String>,
-    #[serde(default)]
-    pub remove_role_id: Option<String>,
-    #[serde(default)]
-    pub reply_message: Option<String>,
-    /// https link shown as the item card's thumbnail in Discord (absent on older Percy builds).
-    #[serde(default)]
-    pub image_url: Option<String>,
-    /// Set for Percy's own catalogue items; those are not editable or deletable from the dashboard.
-    #[serde(default)]
-    pub builtin_key: Option<String>,
-    /// Absent on older Percy builds, where every item is for sale.
-    #[serde(default = "default_true")]
-    pub for_sale: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LotteryInfo {
-    pub ticket_price: u64,
-    pub jackpot: u64,
-    pub channel_id: String,
-    pub ends_at: Option<String>,
-}
-
-/// Per-guild economy tuning; Percy answers defaults when never configured.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct EconomySettings {
-    pub payout_multiplier: f64,
-    pub rob_enabled: bool,
-    pub daily_base: i64,
-    /// `None` = uncapped.
-    pub max_bet: Option<i64>,
-}
-
-impl Default for EconomySettings {
-    /// Mirrors Percy's server-side defaults for guilds that never configured anything.
-    fn default() -> Self {
-        Self {
-            payout_multiplier: 1.0,
-            rob_enabled: true,
-            daily_base: 250,
-            max_bet: None,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct EconomyInfo {
-    pub items: Vec<ShopItem>,
-    pub lottery: Option<LotteryInfo>,
-    /// Absent on Percy versions predating the economy expansion.
-    #[serde(default)]
-    pub settings: Option<EconomySettings>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BalanceEntry {
-    pub user_id: String,
-    pub username: String,
-    pub avatar_url: Option<String>,
-    pub cash: i64,
-    pub bank: i64,
-    pub total: i64,
-}
-
 /// One game's guild-wide totals from `GET /guilds/{id}/games`.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct GameOverviewEntry {
@@ -1197,13 +962,6 @@ pub struct GamesStats {
     pub games: Vec<GameOverviewEntry>,
     #[serde(default)]
     pub top_players: Vec<GamePlayerEntry>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BalancesResponse {
-    pub entries: Vec<BalanceEntry>,
-    #[serde(default)]
-    pub total: u32,
 }
 
 // -- Music types -------------------------------------------------------------
@@ -3446,66 +3204,6 @@ mod notification_tests {
 }
 
 // -- Public-API support types --------------------------------------------------
-
-/// One member's wallet (`GET`/`POST .../economy/balances/{uid}[/adjust]`).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MemberBalance {
-    #[serde(default)]
-    pub user_id: String,
-    #[serde(default)]
-    pub cash: i64,
-    #[serde(default)]
-    pub bank: i64,
-    #[serde(default)]
-    pub total: i64,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct InventoryItem {
-    pub item_id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub quantity: i64,
-    #[serde(default)]
-    pub emoji: Option<String>,
-    #[serde(default)]
-    pub rarity: Option<String>,
-    #[serde(default)]
-    pub effect: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MemberInventory {
-    #[serde(default)]
-    pub user_id: String,
-    #[serde(default)]
-    pub items: Vec<InventoryItem>,
-}
-
-/// Result of giving or taking an item: the member's new quantity.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct InventoryChange {
-    #[serde(default)]
-    pub item_id: u64,
-    #[serde(default)]
-    pub quantity: i64,
-}
-
-/// `GET .../leveling/users/{uid}`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MemberLevel {
-    #[serde(default)]
-    pub user_id: String,
-    #[serde(default)]
-    pub level: i64,
-    #[serde(default)]
-    pub xp: i64,
-    #[serde(default)]
-    pub messages: i64,
-    #[serde(default)]
-    pub rank: i64,
-}
 
 // -- Warn policy types ---------------------------------------------------------
 

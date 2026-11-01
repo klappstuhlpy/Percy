@@ -76,8 +76,8 @@
                         {% if !item.for_sale %}<span class="badge badge-muted">Not for sale</span>{% endif %}
                         <div class="text-muted">{{ item.description.as_deref().unwrap_or("-") }}</div>
                     </td>
-                    <td data-label="Rarity"><span class="badge rarity-{{ item.rarity.as_deref().unwrap_or("common") }}">{{ item.rarity.as_deref().unwrap_or("common") }}</span></td>
-                    <td data-label="Category">{{ item.category.as_deref().unwrap_or("-") }}</td>
+                    <td data-label="Rarity"><span class="badge rarity-{{ item.rarity }}">{{ item.rarity }}</span></td>
+                    <td data-label="Category">{{ item.category }}</td>
                     <td data-label="Price">{{ item.price }}</td>
                     <td data-label="Stock">{{ self.stock_label(item) }}</td>
                     <td data-label="Limit">{% match item.max_per_user %}{% when Some with (n) %}{{ n }} each{% when None %}-{% endmatch %}</td>
@@ -89,8 +89,8 @@
                             data-id="{{ item.id }}" data-name="{{ item.name }}" data-price="{{ item.price }}"
                             data-description="{{ item.description.as_deref().unwrap_or("") }}"
                             data-emoji="{{ item.emoji.as_deref().unwrap_or("") }}"
-                            data-rarity="{{ item.rarity.as_deref().unwrap_or("common") }}"
-                            data-effect="{{ item.effect.as_deref().unwrap_or("none") }}"
+                            data-rarity="{{ item.rarity }}"
+                            data-effect="{{ item.effect }}"
                             data-stock="{% if let Some(n) = item.stock %}{{ n }}{% endif %}"
                             data-max-per-user="{% if let Some(n) = item.max_per_user %}{{ n }}{% endif %}"
                             data-required-role="{{ item.required_role_id.as_deref().unwrap_or("") }}"
