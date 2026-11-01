@@ -18,6 +18,13 @@ use serde::de::DeserializeOwned;
 mod types;
 pub use types::*;
 
+// Generated from Percy's OpenAPI schema (see GENERATION.md). Only the domains already migrated
+// are re-exported, by name, so the hand-written `types` and the generated types never collide and
+// the dashboard keeps importing `percy_client::AnalyticsSummary` unchanged.
+#[rustfmt::skip]
+pub mod generated;
+pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+
 /// A typed client for Percy's internal API.
 #[derive(Clone)]
 pub struct PercyClient {
@@ -3181,6 +3188,18 @@ mod tests {
         assert!(!d.ok && d.message == "already denied" && d.status == "denied");
         let d = refusal_from_body(r#"{"detail":"moderator not in server"}"#);
         assert!(!d.ok && d.message == "moderator not in server");
+    }
+
+    /// The generated analytics types read the exact body `tests/test_internal_api_analytics.py` pins on the Python side.
+    #[test]
+    fn generated_analytics_summary_reads_the_wire_shape() {
+        let s: AnalyticsSummary = serde_json::from_str(
+            r#"{"range":"7d","commands":{"value":10,"delta":6},"new_members":{"value":1,"delta":1},
+                "member_count":null,"top_commands":[{"command":"ping","uses":7}]}"#,
+        )
+        .unwrap();
+        assert_eq!((s.commands.delta, s.member_count, s.top_commands[0].uses), (6, None, 7));
+        assert_eq!(AnalyticsSummary::default().range, "");
     }
 
     fn client() -> PercyClient {

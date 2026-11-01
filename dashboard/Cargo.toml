@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/percy-client"]
+members = [".", "crates/percy-client", "crates/percy-codegen"]
 
 [package]
 name = "dashboard"
