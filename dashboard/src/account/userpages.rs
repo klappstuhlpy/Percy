@@ -383,6 +383,7 @@ pub async fn guild_overview(
     };
 
     let bot_stats = bot_stats.unwrap_or(BotStats {
+        ai: None,
         version: None,
         guild_count: 0,
         user_count: 0,

@@ -536,6 +536,79 @@
         "title": "Body_upload_gallery_api_v1_guilds__guild_id__gallery_post",
         "type": "object"
       },
+      "BotStats": {
+        "properties": {
+          "ai": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai"
+          },
+          "channel_count": {
+            "title": "Channel Count",
+            "type": "integer"
+          },
+          "cog_count": {
+            "title": "Cog Count",
+            "type": "integer"
+          },
+          "command_count": {
+            "title": "Command Count",
+            "type": "integer"
+          },
+          "guild_count": {
+            "title": "Guild Count",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "total_commands_used": {
+            "title": "Total Commands Used",
+            "type": "integer"
+          },
+          "uptime_seconds": {
+            "title": "Uptime Seconds",
+            "type": "number"
+          },
+          "user_count": {
+            "title": "User Count",
+            "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "guild_count",
+          "user_count",
+          "channel_count",
+          "total_commands_used",
+          "cog_count",
+          "command_count",
+          "latency_ms",
+          "uptime_seconds",
+          "ai"
+        ],
+        "title": "BotStats",
+        "type": "object"
+      },
       "BulkActionBody": {
         "properties": {
           "action": {
@@ -613,6 +686,128 @@
           "action"
         ],
         "title": "BulkActionBody",
+        "type": "object"
+      },
+      "ChangelogEntry": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ChangelogSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "date",
+          "sections"
+        ],
+        "title": "ChangelogEntry",
+        "type": "object"
+      },
+      "ChangelogResponse": {
+        "properties": {
+          "current_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ChangelogEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entries",
+          "current_version"
+        ],
+        "title": "ChangelogResponse",
+        "type": "object"
+      },
+      "ChangelogSection": {
+        "properties": {
+          "entries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "slug",
+          "entries"
+        ],
+        "title": "ChangelogSection",
+        "type": "object"
+      },
+      "ChannelRef": {
+        "description": "A channel as ``resolve_channel`` shapes it (``type`` is the Discord channel type name).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "ChannelRef",
+        "type": "object"
+      },
+      "CommandUsage": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command",
+          "uses"
+        ],
+        "title": "CommandUsage",
         "type": "object"
       },
       "ControlBody": {
@@ -1345,6 +1540,130 @@
         "title": "FiltersBody",
         "type": "object"
       },
+      "GameOverviewEntry": {
+        "properties": {
+          "game": {
+            "title": "Game",
+            "type": "string"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "played": {
+            "title": "Played",
+            "type": "integer"
+          },
+          "players": {
+            "title": "Players",
+            "type": "integer"
+          },
+          "profit": {
+            "title": "Profit",
+            "type": "integer"
+          },
+          "won": {
+            "title": "Won",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "game",
+          "label",
+          "icon",
+          "played",
+          "won",
+          "players",
+          "profit"
+        ],
+        "title": "GameOverviewEntry",
+        "type": "object"
+      },
+      "GamePlayerEntry": {
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "played": {
+            "title": "Played",
+            "type": "integer"
+          },
+          "profit": {
+            "title": "Profit",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "winrate": {
+            "title": "Winrate",
+            "type": "number"
+          },
+          "won": {
+            "title": "Won",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "avatar_url",
+          "played",
+          "won",
+          "winrate",
+          "profit"
+        ],
+        "title": "GamePlayerEntry",
+        "type": "object"
+      },
+      "GamesStats": {
+        "properties": {
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/GameOverviewEntry"
+            },
+            "title": "Games",
+            "type": "array"
+          },
+          "top_players": {
+            "items": {
+              "$ref": "#/components/schemas/GamePlayerEntry"
+            },
+            "title": "Top Players",
+            "type": "array"
+          }
+        },
+        "required": [
+          "games",
+          "top_players"
+        ],
+        "title": "GamesStats",
+        "type": "object"
+      },
       "GiveItemBody": {
         "properties": {
           "item_id": {
@@ -1363,6 +1682,293 @@
           "item_id"
         ],
         "title": "GiveItemBody",
+        "type": "object"
+      },
+      "GuildOverview": {
+        "properties": {
+          "bot": {
+            "$ref": "#/components/schemas/GuildOverviewBot"
+          },
+          "features": {
+            "$ref": "#/components/schemas/GuildOverviewFeatures"
+          },
+          "guild": {
+            "$ref": "#/components/schemas/GuildOverviewGuild"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/GuildOverviewStats"
+          }
+        },
+        "required": [
+          "guild",
+          "stats",
+          "bot",
+          "features"
+        ],
+        "title": "GuildOverview",
+        "type": "object"
+      },
+      "GuildOverviewBot": {
+        "properties": {
+          "command_count": {
+            "title": "Command Count",
+            "type": "integer"
+          },
+          "guild_count": {
+            "title": "Guild Count",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "user_count": {
+            "title": "User Count",
+            "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "guild_count",
+          "user_count",
+          "command_count",
+          "latency_ms"
+        ],
+        "title": "GuildOverviewBot",
+        "type": "object"
+      },
+      "GuildOverviewFeatures": {
+        "properties": {
+          "audit_log": {
+            "title": "Audit Log",
+            "type": "boolean"
+          },
+          "economy": {
+            "title": "Economy",
+            "type": "boolean"
+          },
+          "leveling": {
+            "title": "Leveling",
+            "type": "boolean"
+          },
+          "music": {
+            "title": "Music",
+            "type": "boolean"
+          },
+          "sentinel": {
+            "title": "Sentinel",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "leveling",
+          "economy",
+          "music",
+          "sentinel",
+          "audit_log"
+        ],
+        "title": "GuildOverviewFeatures",
+        "type": "object"
+      },
+      "GuildOverviewGuild": {
+        "properties": {
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "member_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Count"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon_url",
+          "member_count"
+        ],
+        "title": "GuildOverviewGuild",
+        "type": "object"
+      },
+      "GuildOverviewStats": {
+        "properties": {
+          "boost_count": {
+            "title": "Boost Count",
+            "type": "integer"
+          },
+          "boost_tier": {
+            "title": "Boost Tier",
+            "type": "integer"
+          },
+          "bot_count": {
+            "title": "Bot Count",
+            "type": "integer"
+          },
+          "channel_count": {
+            "title": "Channel Count",
+            "type": "integer"
+          },
+          "emoji_count": {
+            "title": "Emoji Count",
+            "type": "integer"
+          },
+          "online_count": {
+            "title": "Online Count",
+            "type": "integer"
+          },
+          "recent_cases": {
+            "title": "Recent Cases",
+            "type": "integer"
+          },
+          "role_count": {
+            "title": "Role Count",
+            "type": "integer"
+          },
+          "total_commands": {
+            "title": "Total Commands",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "online_count",
+          "bot_count",
+          "channel_count",
+          "role_count",
+          "emoji_count",
+          "boost_count",
+          "boost_tier",
+          "total_commands",
+          "recent_cases"
+        ],
+        "title": "GuildOverviewStats",
+        "type": "object"
+      },
+      "GuildStats": {
+        "properties": {
+          "boost_count": {
+            "title": "Boost Count",
+            "type": "integer"
+          },
+          "boost_tier": {
+            "title": "Boost Tier",
+            "type": "integer"
+          },
+          "bot_count": {
+            "title": "Bot Count",
+            "type": "integer"
+          },
+          "channel_count": {
+            "title": "Channel Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "emoji_count": {
+            "title": "Emoji Count",
+            "type": "integer"
+          },
+          "human_count": {
+            "title": "Human Count",
+            "type": "integer"
+          },
+          "member_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Count"
+          },
+          "online_count": {
+            "title": "Online Count",
+            "type": "integer"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "role_count": {
+            "title": "Role Count",
+            "type": "integer"
+          },
+          "top_commands": {
+            "items": {
+              "$ref": "#/components/schemas/CommandUsage"
+            },
+            "title": "Top Commands",
+            "type": "array"
+          },
+          "total_commands": {
+            "title": "Total Commands",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "member_count",
+          "online_count",
+          "bot_count",
+          "human_count",
+          "channel_count",
+          "role_count",
+          "emoji_count",
+          "boost_count",
+          "boost_tier",
+          "total_commands",
+          "top_commands",
+          "created_at",
+          "owner_id",
+          "owner_name"
+        ],
+        "title": "GuildStats",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -3281,6 +3887,193 @@
         "title": "RequestSettingsBody",
         "type": "object"
       },
+      "RoleMenu": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "jump_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jump Url"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleMenuRole"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unique": {
+            "title": "Unique",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "unique",
+          "channel",
+          "jump_url",
+          "roles"
+        ],
+        "title": "RoleMenu",
+        "type": "object"
+      },
+      "RoleMenuCreated": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "id",
+          "message"
+        ],
+        "title": "RoleMenuCreated",
+        "type": "object"
+      },
+      "RoleMenuNotice": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "message"
+        ],
+        "title": "RoleMenuNotice",
+        "type": "object"
+      },
+      "RoleMenuRole": {
+        "properties": {
+          "assignable": {
+            "title": "Assignable",
+            "type": "boolean"
+          },
+          "color": {
+            "title": "Color",
+            "type": "integer"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role_id": {
+            "title": "Role Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_id",
+          "name",
+          "color",
+          "emoji",
+          "label",
+          "assignable"
+        ],
+        "title": "RoleMenuRole",
+        "type": "object"
+      },
+      "RoleMenusResponse": {
+        "properties": {
+          "max_roles": {
+            "title": "Max Roles",
+            "type": "integer"
+          },
+          "menus": {
+            "items": {
+              "$ref": "#/components/schemas/RoleMenu"
+            },
+            "title": "Menus",
+            "type": "array"
+          }
+        },
+        "required": [
+          "menus",
+          "max_roles"
+        ],
+        "title": "RoleMenusResponse",
+        "type": "object"
+      },
       "SendSentinelMessageBody": {
         "properties": {
           "channel_id": {
@@ -3464,6 +4257,199 @@
         "title": "SetupSentinelBody",
         "type": "object"
       },
+      "StarboardInfo": {
+        "description": "Settings plus the ten most-starred messages.",
+        "properties": {
+          "allow_nsfw": {
+            "title": "Allow Nsfw",
+            "type": "boolean"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ignored_channels": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ChannelRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Ignored Channels",
+            "type": "array"
+          },
+          "max_age_hours": {
+            "title": "Max Age Hours",
+            "type": "integer"
+          },
+          "self_star": {
+            "title": "Self Star",
+            "type": "boolean"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "integer"
+          },
+          "top": {
+            "items": {
+              "$ref": "#/components/schemas/StarboardTop"
+            },
+            "title": "Top",
+            "type": "array"
+          }
+        },
+        "required": [
+          "configured",
+          "enabled",
+          "channel",
+          "threshold",
+          "emoji",
+          "self_star",
+          "ignored_channels",
+          "max_age_hours",
+          "allow_nsfw",
+          "top"
+        ],
+        "title": "StarboardInfo",
+        "type": "object"
+      },
+      "StarboardSaved": {
+        "properties": {
+          "allow_nsfw": {
+            "title": "Allow Nsfw",
+            "type": "boolean"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ignored_channels": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ChannelRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Ignored Channels",
+            "type": "array"
+          },
+          "max_age_hours": {
+            "title": "Max Age Hours",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "self_star": {
+            "title": "Self Star",
+            "type": "boolean"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "configured",
+          "enabled",
+          "channel",
+          "threshold",
+          "emoji",
+          "self_star",
+          "ignored_channels",
+          "max_age_hours",
+          "allow_nsfw",
+          "ok"
+        ],
+        "title": "StarboardSaved",
+        "type": "object"
+      },
+      "StarboardTop": {
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jump_url": {
+            "title": "Jump Url",
+            "type": "string"
+          },
+          "stars": {
+            "title": "Stars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stars",
+          "author",
+          "channel",
+          "jump_url"
+        ],
+        "title": "StarboardTop",
+        "type": "object"
+      },
       "SubscribeBody": {
         "description": "A follow, as the picker or a Discord command submits it.",
         "properties": {
@@ -3608,6 +4594,88 @@
           "subject_value"
         ],
         "title": "SubscriptionPatchBody",
+        "type": "object"
+      },
+      "TemplateEntry": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "downloads": {
+            "title": "Downloads",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "downloads",
+          "created_at"
+        ],
+        "title": "TemplateEntry",
+        "type": "object"
+      },
+      "TemplatesResponse": {
+        "properties": {
+          "own": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateEntry"
+            },
+            "title": "Own",
+            "type": "array"
+          },
+          "public": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateEntry"
+            },
+            "title": "Public",
+            "type": "array"
+          }
+        },
+        "required": [
+          "public",
+          "own"
+        ],
+        "title": "TemplatesResponse",
         "type": "object"
       },
       "TestMessageBody": {
@@ -3812,6 +4880,246 @@
         "title": "WarnThresholdBody",
         "type": "object"
       },
+      "WebhookCreateResponse": {
+        "description": "Create and patch both answer with the saved subscription.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/WebhookSubscription"
+          }
+        },
+        "required": [
+          "ok",
+          "subscription"
+        ],
+        "title": "WebhookCreateResponse",
+        "type": "object"
+      },
+      "WebhookDeliveriesResponse": {
+        "properties": {
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookDelivery"
+            },
+            "title": "Deliveries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deliveries"
+        ],
+        "title": "WebhookDeliveriesResponse",
+        "type": "object"
+      },
+      "WebhookDelivery": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "event": {
+            "title": "Event",
+            "type": "string"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "event",
+          "success",
+          "status_code",
+          "attempts",
+          "error",
+          "created_at"
+        ],
+        "title": "WebhookDelivery",
+        "type": "object"
+      },
+      "WebhookEventsResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "WebhookEventsResponse",
+        "type": "object"
+      },
+      "WebhookSubscription": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "last_delivery_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Delivery At"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "events",
+          "label",
+          "enabled",
+          "secret",
+          "created_at",
+          "last_delivery_at",
+          "last_status",
+          "failure_count"
+        ],
+        "title": "WebhookSubscription",
+        "type": "object"
+      },
+      "WebhookSubscriptionsResponse": {
+        "properties": {
+          "subscriptions": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookSubscription"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscriptions"
+        ],
+        "title": "WebhookSubscriptionsResponse",
+        "type": "object"
+      },
+      "WebhookTestResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "result"
+        ],
+        "title": "WebhookTestResponse",
+        "type": "object"
+      },
       "WobbleBody": {
         "properties": {
           "depth": {
@@ -3986,9 +5294,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Changelog Api V1 Bot Changelog Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChangelogResponse"
                 }
               }
             },
@@ -4150,9 +5456,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Bot Stats Api V1 Bot Stats Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BotStats"
                 }
               }
             },
@@ -10623,9 +11927,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Guild Games Api V1 Guilds  Guild Id  Games Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GamesStats"
                 }
               }
             },
@@ -15828,9 +17130,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Guild Overview Api V1 Guilds  Guild Id  Overview Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GuildOverview"
                 }
               }
             },
@@ -16848,9 +18148,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Role Menus Api V1 Guilds  Guild Id  Rolemenus Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RoleMenusResponse"
                 }
               }
             },
@@ -16946,9 +18244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Role Menu Api V1 Guilds  Guild Id  Rolemenus Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RoleMenuCreated"
                 }
               }
             },
@@ -17261,9 +18557,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Add Role Menu Role Api V1 Guilds  Guild Id  Rolemenus  Menu Id  Roles Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RoleMenuNotice"
                 }
               }
             },
@@ -18251,9 +19545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Starboard Api V1 Guilds  Guild Id  Starboard Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/StarboardInfo"
                 }
               }
             },
@@ -18349,9 +19641,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Starboard Api V1 Guilds  Guild Id  Starboard Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/StarboardSaved"
                 }
               }
             },
@@ -18440,9 +19730,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Guild Stats Api V1 Guilds  Guild Id  Stats Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GuildStats"
                 }
               }
             },
@@ -19896,9 +21184,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Templates Api V1 Guilds  Guild Id  Templates Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TemplatesResponse"
                 }
               }
             },
@@ -20787,9 +22073,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Subscriptions Api V1 Guilds  Guild Id  Webhooks Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WebhookSubscriptionsResponse"
                 }
               }
             },
@@ -20886,9 +22170,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Subscription Api V1 Guilds  Guild Id  Webhooks Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WebhookCreateResponse"
                 }
               }
             },
@@ -20968,9 +22250,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Events Api V1 Guilds  Guild Id  Webhooks Events Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WebhookEventsResponse"
                 }
               }
             },
@@ -21176,9 +22456,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Subscription Api V1 Guilds  Guild Id  Webhooks  Sub Id  Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WebhookCreateResponse"
                 }
               }
             },
@@ -21288,9 +22566,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Deliveries Api V1 Guilds  Guild Id  Webhooks  Sub Id  Deliveries Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WebhookDeliveriesResponse"
                 }
               }
             },
@@ -21388,9 +22664,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Test Subscription Api V1 Guilds  Guild Id  Webhooks  Sub Id  Test Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WebhookTestResponse"
                 }
               }
             },

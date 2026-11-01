@@ -24,6 +24,16 @@ pub use types::*;
 #[rustfmt::skip]
 pub mod generated;
 pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+// stats / outbound webhooks / backup templates / role menus / starboard domain (`ChannelRef` stays
+// hand-written: it is shared with the channel lists).
+#[rustfmt::skip]
+pub use generated::{
+    BotStats, ChangelogEntry, ChangelogResponse, ChangelogSection, CommandUsage, GameOverviewEntry, GamePlayerEntry,
+    GamesStats, GuildOverview, GuildOverviewBot, GuildOverviewFeatures, GuildOverviewGuild, GuildOverviewStats,
+    GuildStats, RoleMenu, RoleMenuRole, RoleMenusResponse, StarboardInfo, StarboardTop, TemplateEntry,
+    TemplatesResponse, WebhookCreateResponse, WebhookDeliveriesResponse, WebhookDelivery, WebhookEventsResponse,
+    WebhookSubscription, WebhookSubscriptionsResponse, WebhookTestResponse,
+};
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

@@ -36,7 +36,7 @@ async def test_enabling_without_a_channel_is_refused() -> None:
 
 async def test_ignored_channels_are_deduplicated_and_written_through_the_cog() -> None:
     bot, cog = _bot(_config(channel_id=5))
-    guild = MagicMock()
-    guild.id = 1
+    guild = MagicMock(id=1)
+    guild.get_channel.return_value = None  # a deleted channel resolves as "deleted-channel"
     await api.patch_starboard(guild, bot, api.PatchStarboardBody(ignored_channel_ids=[9, 7, 9]))
     cog.update_config.assert_awaited_once_with(1, ignored_channel_ids=[7, 9])

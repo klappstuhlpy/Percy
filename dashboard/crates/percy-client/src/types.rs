@@ -915,45 +915,6 @@ pub struct CommandsResponse {
 
 // -- Stats types -------------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct CommandUsage {
-    pub command: String,
-    pub uses: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildStats {
-    pub member_count: Option<u32>,
-    pub online_count: u32,
-    pub bot_count: u32,
-    pub human_count: u32,
-    pub channel_count: u32,
-    pub role_count: u32,
-    pub emoji_count: u32,
-    pub boost_count: u32,
-    pub boost_tier: u32,
-    pub total_commands: u64,
-    pub top_commands: Vec<CommandUsage>,
-    pub created_at: String,
-    pub owner_id: String,
-    pub owner_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BotStats {
-    #[serde(default)]
-    pub version: Option<String>,
-    pub guild_count: u32,
-    pub user_count: u32,
-    pub channel_count: u32,
-    pub total_commands_used: u64,
-    pub cog_count: u32,
-    pub command_count: u32,
-    pub latency_ms: f64,
-    #[serde(default)]
-    pub uptime_seconds: f64,
-}
-
 // -- Batch operations --------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -993,83 +954,7 @@ pub struct SentinelSaved {
 
 // -- Changelog ---------------------------------------------------------------
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ChangelogResponse {
-    pub entries: Vec<ChangelogEntry>,
-    #[serde(default)]
-    pub current_version: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ChangelogEntry {
-    pub version: String,
-    pub date: String,
-    #[serde(default)]
-    pub sections: Vec<ChangelogSection>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ChangelogSection {
-    pub name: String,
-    pub slug: String,
-    pub entries: Vec<String>,
-}
-
 // -- Composite endpoint types ------------------------------------------------
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildOverviewGuild {
-    pub id: u64,
-    pub name: String,
-    pub icon_url: Option<String>,
-    pub member_count: Option<u32>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildOverviewStats {
-    pub online_count: u32,
-    pub bot_count: u32,
-    pub channel_count: u32,
-    pub role_count: u32,
-    pub emoji_count: u32,
-    pub boost_count: u32,
-    pub boost_tier: u32,
-    pub total_commands: u64,
-    #[serde(default)]
-    pub recent_cases: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildOverviewBot {
-    #[serde(default)]
-    pub version: Option<String>,
-    pub guild_count: u32,
-    pub user_count: u32,
-    pub command_count: u32,
-    pub latency_ms: f64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildOverviewFeatures {
-    #[serde(default)]
-    pub leveling: bool,
-    #[serde(default)]
-    pub economy: bool,
-    #[serde(default)]
-    pub music: bool,
-    #[serde(default)]
-    pub sentinel: bool,
-    #[serde(default)]
-    pub audit_log: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GuildOverview {
-    pub guild: GuildOverviewGuild,
-    pub stats: GuildOverviewStats,
-    pub bot: GuildOverviewBot,
-    pub features: GuildOverviewFeatures,
-}
 
 // -- Economy types -----------------------------------------------------------
 
@@ -1162,41 +1047,6 @@ pub struct BalanceEntry {
     pub cash: i64,
     pub bank: i64,
     pub total: i64,
-}
-
-/// One game's guild-wide totals from `GET /guilds/{id}/games`.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GameOverviewEntry {
-    pub game: String,
-    pub label: String,
-    #[serde(default)]
-    pub icon: Option<String>,
-    pub played: i64,
-    pub won: i64,
-    pub players: i64,
-    pub profit: i64,
-}
-
-/// One member on the guild's games leaderboard.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GamePlayerEntry {
-    pub user_id: String,
-    pub username: String,
-    #[serde(default)]
-    pub avatar_url: Option<String>,
-    pub played: i64,
-    pub won: i64,
-    pub winrate: f64,
-    pub profit: i64,
-}
-
-/// Guild-wide game statistics (per-game totals + top players).
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct GamesStats {
-    #[serde(default)]
-    pub games: Vec<GameOverviewEntry>,
-    #[serde(default)]
-    pub top_players: Vec<GamePlayerEntry>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1950,120 +1800,7 @@ pub struct CustomBotProfile {
 
 // -- Outbound webhook (event subscription) types -----------------------------
 
-/// A single outbound-webhook subscription. `secret` is only ever populated on the
-/// create response (Percy masks it to `None` on every subsequent read), so store
-/// it the moment a subscription is created.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookSubscription {
-    #[serde(default)]
-    pub id: i64,
-    #[serde(default)]
-    pub url: String,
-    #[serde(default)]
-    pub events: Vec<String>,
-    #[serde(default)]
-    pub label: Option<String>,
-    #[serde(default)]
-    pub enabled: bool,
-    /// The HMAC signing secret — present only on the create response.
-    #[serde(default)]
-    pub secret: Option<String>,
-    #[serde(default)]
-    pub created_at: Option<String>,
-    #[serde(default)]
-    pub last_delivery_at: Option<String>,
-    #[serde(default)]
-    pub last_status: Option<i64>,
-    #[serde(default)]
-    pub failure_count: i64,
-}
-
-/// The `GET /webhooks` listing (secrets always masked here).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookSubscriptionsResponse {
-    #[serde(default)]
-    pub subscriptions: Vec<WebhookSubscription>,
-}
-
-/// The `POST /webhooks` create response, carrying the newly-minted subscription
-/// (with its `secret` revealed exactly once).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookCreateResponse {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub subscription: WebhookSubscription,
-}
-
-/// The catalogue of events a subscription may listen for.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookEventsResponse {
-    #[serde(default)]
-    pub events: Vec<String>,
-}
-
-/// A single delivery attempt in a subscription's health log.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookDelivery {
-    #[serde(default)]
-    pub event: String,
-    #[serde(default)]
-    pub success: bool,
-    #[serde(default)]
-    pub status_code: Option<i64>,
-    #[serde(default)]
-    pub attempts: i64,
-    #[serde(default)]
-    pub error: Option<String>,
-    #[serde(default)]
-    pub created_at: Option<String>,
-}
-
-/// The `GET /webhooks/{id}/deliveries` response.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookDeliveriesResponse {
-    #[serde(default)]
-    pub deliveries: Vec<WebhookDelivery>,
-}
-
-/// The synchronous result of a `POST /webhooks/{id}/test`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct WebhookTestResponse {
-    #[serde(default)]
-    pub ok: bool,
-    /// The raw per-attempt result Percy reports (status code, error, attempts…).
-    #[serde(default)]
-    pub result: serde_json::Value,
-}
-
 // -- Backup & template types -------------------------------------------------
-
-/// A public template card in the gallery.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct TemplateEntry {
-    #[serde(default)]
-    pub slug: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub downloads: i64,
-    #[serde(default)]
-    pub created_at: Option<String>,
-    /// Only present on the caller's own templates.
-    #[serde(default)]
-    pub public: Option<bool>,
-}
-
-/// The `GET /templates` response: the public gallery plus the caller's own.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct TemplatesResponse {
-    #[serde(default)]
-    pub public: Vec<TemplateEntry>,
-    #[serde(default)]
-    pub own: Vec<TemplateEntry>,
-}
 
 // -- Watchlist types ---------------------------------------------------------
 
@@ -3170,84 +2907,7 @@ pub struct HealthFeature {
 
 // -- Role menus ----------------------------------------------------------------
 
-/// `GET /guilds/{id}/rolemenus`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct RoleMenusResponse {
-    #[serde(default)]
-    pub menus: Vec<RoleMenu>,
-    #[serde(default)]
-    pub max_roles: u32,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoleMenu {
-    pub id: i64,
-    pub title: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub unique: bool,
-    /// `None` when the channel was deleted.
-    #[serde(default)]
-    pub channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub jump_url: Option<String>,
-    #[serde(default)]
-    pub roles: Vec<RoleMenuRole>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoleMenuRole {
-    pub role_id: String,
-    /// `None` when the role was deleted.
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub color: u32,
-    #[serde(default)]
-    pub emoji: Option<String>,
-    #[serde(default)]
-    pub label: Option<String>,
-    #[serde(default = "default_true")]
-    pub assignable: bool,
-}
-
 // -- Starboard -----------------------------------------------------------------
-
-/// `GET /guilds/{id}/starboard` — settings plus the ten most-starred messages.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct StarboardInfo {
-    #[serde(default)]
-    pub configured: bool,
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default)]
-    pub channel: Option<ChannelRef>,
-    #[serde(default)]
-    pub threshold: u32,
-    #[serde(default)]
-    pub emoji: String,
-    #[serde(default)]
-    pub self_star: bool,
-    #[serde(default)]
-    pub ignored_channels: Vec<Option<ChannelRef>>,
-    #[serde(default)]
-    pub max_age_hours: u32,
-    #[serde(default)]
-    pub allow_nsfw: bool,
-    #[serde(default)]
-    pub top: Vec<StarboardTop>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct StarboardTop {
-    pub stars: u32,
-    #[serde(default)]
-    pub author: Option<String>,
-    #[serde(default)]
-    pub channel: Option<ChannelRef>,
-    pub jump_url: String,
-}
 
 // -- Reminders -----------------------------------------------------------------
 

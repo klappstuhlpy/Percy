@@ -27,12 +27,139 @@ class FeatureFlagBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response models: the source of truth for percy-client's generated types (GENERATION.md).
+# ``/bot/metrics``, ``/feature-flags`` and ``/commands/public`` stay untyped: free-form maps
+# (and ``CommandInfo``, which the guild commands route shares).
+# ---------------------------------------------------------------------------
+
+
+class CommandUsage(BaseModel):
+    command: str
+    uses: int
+
+
+class GuildStats(BaseModel):
+    member_count: int | None
+    online_count: int
+    bot_count: int
+    human_count: int
+    channel_count: int
+    role_count: int
+    emoji_count: int
+    boost_count: int
+    boost_tier: int
+    total_commands: int
+    top_commands: list[CommandUsage]
+    created_at: str
+    owner_id: str
+    owner_name: str | None
+
+
+class GuildOverviewGuild(BaseModel):
+    id: int
+    name: str
+    icon_url: str | None
+    member_count: int | None
+
+
+class GuildOverviewStats(BaseModel):
+    online_count: int
+    bot_count: int
+    channel_count: int
+    role_count: int
+    emoji_count: int
+    boost_count: int
+    boost_tier: int
+    total_commands: int
+    recent_cases: int
+
+
+class GuildOverviewBot(BaseModel):
+    version: str | None
+    guild_count: int
+    user_count: int
+    command_count: int
+    latency_ms: float
+
+
+class GuildOverviewFeatures(BaseModel):
+    leveling: bool
+    economy: bool
+    music: bool
+    sentinel: bool
+    audit_log: bool
+
+
+class GuildOverview(BaseModel):
+    guild: GuildOverviewGuild
+    stats: GuildOverviewStats
+    bot: GuildOverviewBot
+    features: GuildOverviewFeatures
+
+
+class GameOverviewEntry(BaseModel):
+    game: str
+    label: str
+    icon: str | None
+    played: int
+    won: int
+    players: int
+    profit: int
+
+
+class GamePlayerEntry(BaseModel):
+    user_id: str
+    username: str
+    avatar_url: str | None
+    played: int
+    won: int
+    winrate: float
+    profit: int
+
+
+class GamesStats(BaseModel):
+    games: list[GameOverviewEntry]
+    top_players: list[GamePlayerEntry]
+
+
+class BotStats(BaseModel):
+    version: str | None
+    guild_count: int
+    user_count: int
+    channel_count: int
+    total_commands_used: int
+    cog_count: int
+    command_count: int
+    latency_ms: float
+    uptime_seconds: float
+    #: AI engine health snapshot (``AIHealth`` dataclass as a map); ``None`` before the AI service is wired.
+    ai: dict[str, Any] | None
+
+
+class ChangelogSection(BaseModel):
+    name: str
+    slug: str
+    entries: list[str]
+
+
+class ChangelogEntry(BaseModel):
+    version: str
+    date: str
+    sections: list[ChangelogSection]
+
+
+class ChangelogResponse(BaseModel):
+    entries: list[ChangelogEntry]
+    current_version: str | None
+
+
+# ---------------------------------------------------------------------------
 # Guild-scoped endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.get("/guilds/{guild_id}/stats")
-async def get_guild_stats(bot: BotDep, guild: GuildDep) -> dict:
+async def get_guild_stats(bot: BotDep, guild: GuildDep) -> GuildStats:
     """Member counts, channel/role/emoji counts, boosts, top commands."""
     command_summary = await bot.db.stats.get_command_summary(guild.id)
     command_usage = await bot.db.stats.get_command_usage(guild_id=guild.id, group_by='command', limit=10)
@@ -46,7 +173,7 @@ async def get_guild_stats(bot: BotDep, guild: GuildDep) -> dict:
         for r in command_usage
     ]
 
-    return {
+    return GuildStats.model_validate({
         'member_count': guild.member_count,
         'online_count': online,
         'bot_count': bots,
@@ -61,11 +188,11 @@ async def get_guild_stats(bot: BotDep, guild: GuildDep) -> dict:
         'created_at': guild.created_at.isoformat(),
         'owner_id': str(guild.owner_id),
         'owner_name': guild.owner.display_name if guild.owner else None,
-    }
+    })
 
 
 @router.get("/guilds/{guild_id}/overview")
-async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
+async def get_guild_overview(bot: BotDep, guild: GuildDep) -> GuildOverview:
     """Composite endpoint: guild config + guild stats + bot stats in one round-trip."""
     guild_config = await bot.db.get_guild_config(guild.id)
     command_summary = await bot.db.stats.get_command_summary(guild.id)
@@ -75,7 +202,7 @@ async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
     online = sum(1 for m in guild.members if m.status.name != 'offline')
     bots = sum(1 for m in guild.members if m.bot)
 
-    return {
+    return GuildOverview.model_validate({
         'guild': {
             'id': guild_config.id,
             'name': guild.name,
@@ -107,11 +234,11 @@ async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
             'sentinel': guild_config.flags.sentinel,
             'audit_log': guild_config.flags.audit_log,
         },
-    }
+    })
 
 
 @router.get("/guilds/{guild_id}/games")
-async def get_guild_games(bot: BotDep, guild: GuildDep) -> dict:
+async def get_guild_games(bot: BotDep, guild: GuildDep) -> GamesStats:
     """Guild-wide game statistics: per-game totals and the top players by wins."""
     # Deferred import: pulling a cog module in at import time would drag discord
     # extension setup into the API module graph; the enum itself is pure.
@@ -153,7 +280,7 @@ async def get_guild_games(bot: BotDep, guild: GuildDep) -> dict:
             'profit': row['profit'],
         })
 
-    return {'games': games, 'top_players': top_players}
+    return GamesStats.model_validate({'games': games, 'top_players': top_players})
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +289,7 @@ async def get_guild_games(bot: BotDep, guild: GuildDep) -> dict:
 
 
 @router.get("/bot/stats")
-async def get_bot_stats(bot: BotDep) -> dict:
+async def get_bot_stats(bot: BotDep) -> BotStats:
     """Global bot statistics: guilds, users, latency, uptime, AI engine health."""
     total_commands = await bot.db.stats.count_all_commands()
 
@@ -171,7 +298,7 @@ async def get_bot_stats(bot: BotDep) -> dict:
     ai_service = getattr(bot, 'ai', None)
     ai_health = asdict(await ai_service.health()) if ai_service is not None else None
 
-    return {
+    return BotStats.model_validate({
         'version': get_full_version(),
         'guild_count': len(bot.guilds),
         'user_count': sum(g.member_count or 0 for g in bot.guilds),
@@ -182,7 +309,7 @@ async def get_bot_stats(bot: BotDep) -> dict:
         'latency_ms': round(bot.latency * 1000, 1),
         'uptime_seconds': (datetime.datetime.now(datetime.UTC) - bot.startup_timestamp).total_seconds(),
         'ai': ai_health,
-    }
+    })
 
 
 @router.get("/bot/metrics")
@@ -195,7 +322,7 @@ async def get_bot_metrics(bot: BotDep) -> dict:
 
 
 @router.get("/bot/changelog")
-async def get_changelog(limit: int = Query(default=20, ge=1, le=50)) -> dict:
+async def get_changelog(limit: int = Query(default=20, ge=1, le=50)) -> ChangelogResponse:
     """Parsed CHANGELOG.md releases with categorized sections."""
     from ..changelog import RELEASES
 
@@ -210,7 +337,7 @@ async def get_changelog(limit: int = Query(default=20, ge=1, le=50)) -> dict:
         }
         for r in RELEASES[:limit]
     ]
-    return {'entries': entries, 'current_version': get_full_version()}
+    return ChangelogResponse.model_validate({'entries': entries, 'current_version': get_full_version()})
 
 
 @router.get("/commands/public")
