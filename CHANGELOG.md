@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-01
+
+### Removed
+- The Highlights and Autoresponders pages, their sidebar links and proxy routes (Percy dropped both features). Backups no longer mention autoresponders.
+
 ## [0.20.1] - 2026-10-30
 
 ### Changed

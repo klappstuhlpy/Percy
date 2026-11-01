@@ -89,10 +89,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
             post(music_app::account_music_playlist_remove),
         )
         .route(
-            "/dashboard/guild/:guild_id/autoresponders",
-            get(pages::guild_autoresponders).post(actions::guild_autoresponders_action),
-        )
-        .route(
             "/dashboard/guild/:guild_id/comics",
             get(pages::guild_comics).post(crud::guild_comic_create),
         )
@@ -111,10 +107,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/temp-channels/:channel_id",
             patch(crud::guild_temp_channel_patch).delete(crud::guild_temp_channel_delete),
-        )
-        .route(
-            "/dashboard/guild/:guild_id/autoresponders/:trigger",
-            patch(crud::guild_autoresponder_patch).delete(crud::guild_autoresponder_delete),
         )
         .route(
             "/dashboard/guild/:guild_id/economy/items",
@@ -139,10 +131,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/status-feed",
             post(crud::guild_status_feed_subscribe).delete(crud::guild_status_feed_unsubscribe),
-        )
-        .route(
-            "/dashboard/guild/:guild_id/highlights/:user_id",
-            delete(crud::guild_highlight_delete),
         )
         .route(
             "/dashboard/guild/:guild_id/polls",
@@ -190,7 +178,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/tags/:tag_id",
             get(actions::guild_tag_detail).delete(actions::guild_tag_delete),
         )
-        .route("/dashboard/guild/:guild_id/highlights", get(pages::guild_highlights))
         .route("/dashboard/guild/:guild_id/emoji-stats", get(pages::guild_emoji_stats))
         // Analytics: the page + its two JSON feeds (series for the chart, summary
         // for the headline tiles) that the range/metric pickers re-fetch.

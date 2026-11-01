@@ -216,18 +216,6 @@ pub(crate) struct StatsTemplate {
 
 #[allow(dead_code)]
 #[derive(Template)]
-#[template(path = "guild/autoresponders.html")]
-pub(crate) struct AutorespondersTemplate {
-    pub(crate) account: Option<Viewer>,
-    pub(crate) guild_id: u64,
-    pub(crate) guild_name: String,
-    pub(crate) nav_active: &'static str,
-    pub(crate) page_title: &'static str,
-    pub(crate) data: AutorespondersResponse,
-}
-
-#[allow(dead_code)]
-#[derive(Template)]
 #[template(path = "guild/economy.html")]
 pub(crate) struct EconomyTemplate {
     pub(crate) account: Option<Viewer>,
@@ -602,18 +590,6 @@ pub(crate) struct TempChannelsTemplate {
     pub(crate) page_title: &'static str,
     pub(crate) data: TempChannelsResponse,
     pub(crate) channels: Vec<Channel>,
-}
-
-#[allow(dead_code)]
-#[derive(Template)]
-#[template(path = "guild/highlights.html")]
-pub(crate) struct HighlightsTemplate {
-    pub(crate) account: Option<Viewer>,
-    pub(crate) guild_id: u64,
-    pub(crate) guild_name: String,
-    pub(crate) nav_active: &'static str,
-    pub(crate) page_title: &'static str,
-    pub(crate) data: HighlightsResponse,
 }
 
 #[allow(dead_code)]

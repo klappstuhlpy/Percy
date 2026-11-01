@@ -40,11 +40,11 @@
        coloured bar Discord draws down the left of the embed. The logo is a
        240x240 square, so we use a `summary` (small-thumbnail) card rather than a
        stretched large banner. #}
-    <meta name="description" content="{% block meta_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, autoresponders, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}">
     <meta property="og:site_name" content="Percy">
     <meta property="og:type" content="{% block og_type %}website{% endblock %}"/>
     <meta property="og:title" content="{% block og_title %}Percy — Discord Bot &amp; Dashboard{% endblock %}"/>
-    <meta property="og:description" content="{% block og_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, autoresponders, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}"/>
+    <meta property="og:description" content="{% block og_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}"/>
     <meta property="og:url" content="{% block og_url %}{{ crate::config::public_base_url() }}{% endblock %}"/>
     {% block og_image %}
     <meta property="og:image" content="{{ crate::config::public_base_url() }}/static/img/logo.png"/>

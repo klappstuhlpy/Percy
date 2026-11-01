@@ -15,8 +15,8 @@ use crate::{
     guilds::gate_and_load_guild,
     session::Session,
     templates::{
-        AnalyticsTemplate, AutorespondersTemplate, BackupTemplate, BlacklistRow, CardField, ComicsTemplate,
-        CommandsTemplate, EconomyTemplate, EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate, HighlightsTemplate,
+        AnalyticsTemplate, BackupTemplate, BlacklistRow, CardField, ComicsTemplate,
+        CommandsTemplate, EconomyTemplate, EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate,
         LevelRoleRow, LevelingTemplate, MultiplierRow, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate,
         TempChannelsTemplate, WebhooksTemplate,
     },
@@ -227,37 +227,6 @@ pub async fn guild_stats(State(app): State<AppState>, session: Session, Path(gui
     .into_response()
 }
 
-/// `GET /dashboard/guild/{id}/autoresponders`
-pub async fn guild_autoresponders(
-    State(app): State<AppState>,
-    session: Session,
-    Path(guild_id): Path<u64>,
-) -> Response {
-    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
-        Ok(guild) => guild,
-        Err(response) => return response,
-    };
-    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
-
-    let data = percy
-        .get_autoresponders(guild_id)
-        .await
-        .unwrap_or(AutorespondersResponse {
-            entries: Vec::new(),
-            total: 0,
-        });
-
-    AutorespondersTemplate {
-        account: Some(Viewer::from_session(&session)),
-        guild_id,
-        guild_name: guild.name,
-        nav_active: "autoresponders",
-        page_title: "Autoresponders",
-        data,
-    }
-    .into_response()
-}
-
 /// `GET /dashboard/guild/{id}/economy`
 pub async fn guild_economy(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
     let guild = match gate_and_load_guild(&app, &session, guild_id).await {
@@ -352,30 +321,6 @@ pub async fn guild_temp_channels(State(app): State<AppState>, session: Session, 
         page_title: "Temp Channels",
         data: data.unwrap_or(TempChannelsResponse { entries: Vec::new() }),
         channels: channels.unwrap_or_default(),
-    }
-    .into_response()
-}
-
-/// `GET /dashboard/guild/{id}/highlights`
-pub async fn guild_highlights(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
-    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
-        Ok(guild) => guild,
-        Err(response) => return response,
-    };
-    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
-
-    let data = percy.get_highlights(guild_id).await.unwrap_or(HighlightsResponse {
-        entries: Vec::new(),
-        total: 0,
-    });
-
-    HighlightsTemplate {
-        account: Some(Viewer::from_session(&session)),
-        guild_id,
-        guild_name: guild.name,
-        nav_active: "highlights",
-        page_title: "Highlights",
-        data,
     }
     .into_response()
 }

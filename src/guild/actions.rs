@@ -649,29 +649,6 @@ pub async fn guild_leveling_blacklist(
     ok_or_err(percy.post_leveling_blacklist(guild_id, &body).await)
 }
 
-// ── Autoresponders ──────────────────────────────────────────────────────────
-
-/// `POST /dashboard/guild/:guild_id/autoresponders` — create an autoresponder.
-pub async fn guild_autoresponders_action(
-    State(app): State<AppState>,
-    session: Session,
-    headers: HeaderMap,
-    Path(guild_id): Path<u64>,
-    Json(body): Json<serde_json::Value>,
-) -> Response {
-    let Some(percy) = &app.percy else {
-        return Redirect::to("/").into_response();
-    };
-    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
-        return json_or_redirect(&headers, false, "Access denied.", "/dashboard");
-    }
-    let redirect_url = format!("/dashboard/guild/{guild_id}/autoresponders");
-    match percy.create_autoresponder(guild_id, &body).await {
-        Ok(()) => json_or_redirect(&headers, true, "Autoresponder created.", &redirect_url),
-        Err(e) => json_or_redirect(&headers, false, &percy_message(&e), &redirect_url),
-    }
-}
-
 // ── Music ───────────────────────────────────────────────────────────────────
 
 /// `GET /dashboard/guild/:guild_id/music/status` — live player poll.

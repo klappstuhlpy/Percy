@@ -161,7 +161,7 @@ no `sso_secret` — falls back to the dashboard's own Discord login.
 - **`/`, `/login`, `/logout`, `/auth/discord/callback`** — landing + Discord OAuth.
 - **`/auth/handoff`** — accepts a signed SSO handoff from the main site (see [Single sign-on](#single-sign-on)).
 - **`/dashboard`** — guild list (managed / public / "add Percy" cards).
-- **`/dashboard/guild/:id/...`** — the full config surface: members, leveling, economy, autoresponders, comics, temp-channels, polls, giveaways, tags, commands, highlights, emoji-stats, audit log, music, AI, sentinel, moderation cases. Plus the JSON/mutation endpoints the page JS calls.
+- **`/dashboard/guild/:id/...`** — the full config surface: members, leveling, economy, comics, temp-channels, polls, giveaways, tags, commands, emoji-stats, audit log, music, AI, sentinel, moderation cases. Plus the JSON/mutation endpoints the page JS calls.
 - **Public** — `/dashboard/guild/:id/overview`, `/lb/:target` (public leaderboard by guild id or vanity slug), commands catalogue, changelog, privacy/terms.
 - **`/account/discord/avatar`** — live avatar via Percy.
 - **`/health`, `/api-info`** — liveness + Percy-configured status.

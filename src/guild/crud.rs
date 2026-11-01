@@ -1,5 +1,5 @@
 //! CRUD sub-resource proxies (economy items/lottery/balances, comics, temp
-//! channels, autoresponders, highlights, status feed) — ported 1:1 from the
+//! channels, status feed) — ported 1:1 from the
 //! monolith. Each gates on a manage-access session then forwards the payload to
 //! Percy's internal API and answers the dashboard JS's `{ok}` / `{ok,error}` JSON.
 
@@ -36,31 +36,6 @@ pub async fn guild_comics_push(
     match percy.push_comic(guild_id, &brand).await {
         Ok(()) => json_or_redirect(&headers, true, "Feed pushed.", &redirect_url),
         Err(e) => json_or_redirect(&headers, false, &percy_message(&e), &redirect_url),
-    }
-}
-
-/// `PATCH /dashboard/guild/:guild_id/autoresponders/:trigger`
-pub async fn guild_autoresponder_patch(
-    State(app): State<AppState>,
-    session: Session,
-    Path((guild_id, trigger)): Path<(u64, String)>,
-    Json(body): Json<serde_json::Value>,
-) -> Response {
-    match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => ok_or_err(percy.patch_autoresponder(guild_id, &trigger, &body).await),
-        Err(response) => response,
-    }
-}
-
-/// `DELETE /dashboard/guild/:guild_id/autoresponders/:trigger`
-pub async fn guild_autoresponder_delete(
-    State(app): State<AppState>,
-    session: Session,
-    Path((guild_id, trigger)): Path<(u64, String)>,
-) -> Response {
-    match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => ok_or_err(percy.delete_autoresponder(guild_id, &trigger).await),
-        Err(response) => response,
     }
 }
 
@@ -271,18 +246,6 @@ pub async fn guild_temp_channel_delete(
 ) -> Response {
     match gate_json(&app, &session, guild_id).await {
         Ok(percy) => ok_or_err(percy.delete_temp_channel(guild_id, channel_id).await),
-        Err(response) => response,
-    }
-}
-
-/// `DELETE /dashboard/guild/:guild_id/highlights/:user_id`
-pub async fn guild_highlight_delete(
-    State(app): State<AppState>,
-    session: Session,
-    Path((guild_id, user_id)): Path<(u64, String)>,
-) -> Response {
-    match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => ok_or_err(percy.delete_highlight(guild_id, &user_id).await),
         Err(response) => response,
     }
 }
