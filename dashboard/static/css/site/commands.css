@@ -1,0 +1,67 @@
+/* Public commands page (/commands). Uses base.css tokens only. */
+
+.cmd-page { max-width: 1180px; margin: 2rem auto; padding: 0 1.5rem; }
+.cmd-lead { color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem; }
+.cmd-empty { text-align: center; color: var(--text-muted); padding: 3rem 0; }
+
+/* Toolbar */
+.cmd-toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem; }
+.cmd-search { flex: 1 1 260px; padding: 0.6rem 1rem; background: var(--form-input-background); border: 1px solid var(--form-input-border); border-radius: 6px; color: var(--foreground); font-size: 0.85rem; }
+.cmd-search:focus { outline: none; border-color: var(--form-input-focus-border); }
+.cmd-select { display: none; padding: 0.6rem 0.75rem; background: var(--form-input-background); border: 1px solid var(--form-input-border); border-radius: 6px; color: var(--foreground); font-size: 0.85rem; }
+.cmd-types { display: inline-flex; border: 1px solid var(--box-border); border-radius: 6px; overflow: hidden; }
+.cmd-type, .cmd-bulk button { background: var(--box); color: var(--text-muted); border: 0; padding: 0.5rem 0.85rem; font: inherit; font-size: 0.8rem; cursor: pointer; }
+.cmd-type + .cmd-type { border-left: 1px solid var(--box-border); }
+.cmd-type.active { background: var(--branding-dim); color: var(--foreground); }
+.cmd-bulk { display: inline-flex; gap: 0.5rem; }
+.cmd-bulk button { border: 1px solid var(--box-border); border-radius: 6px; }
+.cmd-bulk button:hover, .cmd-type:hover { color: var(--foreground); }
+
+/* Layout: sidebar + list */
+.cmd-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 2rem; align-items: start; }
+.cmd-sidebar { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 2rem); overflow-y: auto; }
+.cmd-sidebar a { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.4rem 0.7rem; border-radius: 6px; color: var(--nav-link); text-decoration: none; font-size: 0.85rem; }
+.cmd-sidebar a span { color: var(--text-muted); font-size: 0.75rem; }
+.cmd-sidebar a:hover { color: var(--nav-link-hover); background: var(--box-shade); }
+.cmd-sidebar a.active { color: var(--foreground); background: var(--branding-dim); }
+
+.cmd-category { margin-bottom: 2rem; scroll-margin-top: 1rem; }
+.cmd-category h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--box-border); }
+.cmd-count { color: var(--text-muted); font-weight: 400; font-size: 0.8rem; margin-left: 0.4rem; }
+
+/* One command */
+.cmd { border: 1px solid var(--box-border); border-radius: 8px; background: var(--box); margin-bottom: 0.5rem; scroll-margin-top: 1rem; }
+.cmd[hidden] { display: none; }
+.cmd summary { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: baseline; padding: 0.6rem 0.9rem; cursor: pointer; list-style: none; }
+.cmd summary::-webkit-details-marker { display: none; }
+.cmd summary::before { content: "▸"; color: var(--text-muted); font-size: 0.75rem; }
+.cmd[open] > summary::before { content: "▾"; }
+.cmd-name { font-weight: 600; font-size: 0.85rem; color: var(--branding); }
+.cmd-desc { font-size: 0.82rem; color: var(--text-muted); flex: 1 1 200px; min-width: 0; }
+.cmd-badge { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.4rem; border: 1px solid var(--box-border); border-radius: 4px; color: var(--text-muted); }
+.cmd-badge.slash { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
+
+.cmd-body { padding: 0.25rem 0.9rem 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.82rem; }
+.cmd-help { margin: 0; white-space: pre-line; color: var(--foreground); }
+.cmd-field { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; align-items: baseline; }
+.cmd-label { flex: 0 0 6.5rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.cmd-code { flex: 1 1 260px; min-width: 0; display: flex; align-items: center; gap: 0.5rem; background: var(--box-shade); border: 1px solid var(--box-border); border-radius: 6px; padding: 0.3rem 0.3rem 0.3rem 0.7rem; }
+.cmd-code code { flex: 1; min-width: 0; overflow-x: auto; white-space: pre; scrollbar-width: thin; }
+.cmd-copy { background: var(--box); color: var(--text-muted); border: 1px solid var(--box-border); border-radius: 4px; padding: 0.15rem 0.5rem; font: inherit; font-size: 0.72rem; cursor: pointer; }
+.cmd-copy:hover { color: var(--foreground); }
+.cmd-chips { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
+.cmd-chips code, .cmd-perm { background: var(--box-shade); border: 1px solid var(--box-border); border-radius: 4px; padding: 0.05rem 0.45rem; font-size: 0.78rem; }
+.cmd-anchor { color: var(--link-text); font-size: 0.75rem; text-decoration: none; }
+.cmd-anchor:hover { color: var(--link-hover-text); }
+.cmd-subs { margin: 0 0.9rem 0.9rem; padding-top: 0.75rem; border-top: 1px solid var(--box-border); }
+.cmd-subs > .cmd-label { display: block; margin-bottom: 0.5rem; }
+.cmd.sub { background: var(--background); }
+
+/* Mobile: the category select replaces the sidebar (only once JS is there to drive it). */
+@media (max-width: 768px) {
+    .cmd-layout { grid-template-columns: minmax(0, 1fr); }
+    .cmd-page.js .cmd-sidebar { display: none; }
+    .cmd-page.js .cmd-select { display: block; }
+    .cmd-sidebar { position: static; max-height: none; flex-direction: row; flex-wrap: wrap; }
+    .cmd-label { flex-basis: 100%; }
+}

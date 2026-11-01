@@ -1,0 +1,32 @@
+{# The read/watched control (§6.2). Imported, not included: an Askama include renders
+   against the root context and could not see a loop's row.
+
+   A real <form> first. With JS off this is a plain POST that Percy answers and the
+   handler redirects back to `redirect`, so the mark sticks without a line of script.
+   `progress.js` only intercepts the submit to write localStorage and debounce the same
+   call. Nothing here is registered with PercyUnsaved — it is an action, not an edit. #}
+{% macro toggle(p) %}
+{% if p.signed_in %}
+<form class="pg{% if p.marked %} pg--on{% endif %}" method="post"
+      action="{% if p.marked %}/account/progress/remove{% else %}/account/progress{% endif %}"
+      data-progress data-media="{{ p.media }}" data-key="{{ p.release_key }}"
+      data-status="{{ p.status }}" data-label="{{ p.label }}" data-marked-label="{{ p.marked_label }}">
+    <input type="hidden" name="media" value="{{ p.media }}">
+    {# The card's key exactly as Percy handed it over — composing one from parts here
+       would file the mark against something that may not exist. #}
+    <input type="hidden" name="release_key" value="{{ p.release_key }}">
+    <input type="hidden" name="status" value="{{ p.status }}">
+    <input type="hidden" name="redirect" value="{{ p.redirect }}">
+    <button class="pg__button" type="submit"
+            aria-pressed="{% if p.marked %}true{% else %}false{% endif %}">
+        <span class="pg__tick" aria-hidden="true"></span>
+        <span class="pg__label">{% if p.marked %}{{ p.marked_label }}{% else %}{{ p.label }}{% endif %}</span>
+    </button>
+    {# Filled in by progress.js when a write fails, so a lost mark is stated rather than
+       silently kept in localStorage. Empty (and invisible) otherwise. #}
+    <span class="pg__note" role="status"></span>
+</form>
+{% else %}
+<a class="pg-signin" href="{{ p.sign_in_href }}">Sign in to track</a>
+{% endif %}
+{% endmacro %}

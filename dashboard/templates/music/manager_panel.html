@@ -1,0 +1,74 @@
+{# Music panel channel setup. Admin-only: it posts to the guild-admin route. Moved from the retired guild/music.html. #}
+{% if let Some(music) = music %}
+    {# ─── Music Panel ─────────────────────────────────────────────────── #}
+    <section class="config-section" id="setup-section">
+        <h2>Music Panel</h2>
+
+        {% match music.setup %}
+        {% when Some with (setup) %}
+        <div class="panel-list">
+            <label class="config-toggle panel-item">
+                <div>
+                    <span class="config-label">Use Music Panel</span>
+                    <span class="config-description">Interactive now-playing controls — temporary, or pinned to the channel below.</span>
+                </div>
+                <input type="checkbox" id="panel-toggle" {% if setup.use_panel %}checked{% endif %}>
+            </label>
+
+            {% match setup.channel_id %}
+            {% when Some with (cid) %}
+            <div class="config-toggle panel-item">
+                <div>
+                    <span class="config-label">Dedicated channel</span>
+                    <span class="config-description">Pinned in <strong id="setup-channel-name">{% for ch in channels %}{% if ch.id == cid.as_str() %}#{{ ch.name }}{% endif %}{% endfor %}</strong> · auto-cleanup. Remove for a temporary panel.</span>
+                </div>
+                <button type="button" class="button small danger" id="reset-setup-btn">Remove</button>
+            </div>
+            {% when None %}
+            <div class="config-toggle panel-item">
+                <div>
+                    <span class="config-label">Dedicated channel</span>
+                    <span class="config-description">Optional — pin a persistent panel, or leave it temporary.</span>
+                </div>
+                <div class="panel-item-action">
+                    <select id="setup-channel" class="config-select panel-channel-select">
+                        <option value="">New channel</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="button primary small" id="run-setup-btn">Set</button>
+                </div>
+            </div>
+            {% endmatch %}
+        </div>
+
+        {% when None %}
+        {# Fallback when the live music state couldn't be fetched. #}
+        <div class="panel-list">
+            <label class="config-toggle panel-item">
+                <div>
+                    <span class="config-label">Use Music Panel</span>
+                    <span class="config-description">Interactive now-playing controls — temporary, or pinned to the channel below.</span>
+                </div>
+                <input type="checkbox" id="panel-toggle">
+            </label>
+            <div class="config-toggle panel-item">
+                <div>
+                    <span class="config-label">Dedicated channel</span>
+                    <span class="config-description">Optional — pin a persistent panel, or leave it temporary.</span>
+                </div>
+                <div class="panel-item-action">
+                    <select id="setup-channel" class="config-select panel-channel-select">
+                        <option value="">New channel</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="button primary small" id="run-setup-btn">Set</button>
+                </div>
+            </div>
+        </div>
+        {% endmatch %}
+    </section>
+{% endif %}

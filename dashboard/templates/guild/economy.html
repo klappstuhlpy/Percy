@@ -1,0 +1,290 @@
+﻿{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Manage shop items, member balances, and lottery.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/guild/economy.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Every member has a <strong>cash/bank wallet</strong> scoped to this server. Stock the shop, adjust balances, and run a timed lottery from here — members earn through <code>work</code>, <code>crime</code>, <code>daily</code>, <code>fish</code>/<code>hunt</code> and the casino games.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Items can grant cash, lootboxes, roles, or timed XP/loot boosts</li>
+                <li>The lottery draws a weighted winner automatically when it ends</li>
+                <li>Balances and inventories never leave this server</li>
+            </ul>
+        </div>
+    </div>
+
+    {# ─── Guild Settings ─────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Economy Settings</h2>
+        <p class="config-section-description">Server-wide tuning: scale every payout, cap casino stakes, and toggle robbing.</p>
+        <div class="config-grid eco-settings-grid">
+            <div class="config-field">
+                <label class="config-label" for="eco_payout_multiplier">Payout Multiplier</label>
+                <div class="eco-input-wrap">
+                    <input type="number" id="eco_payout_multiplier" class="config-input" min="0.1" max="10" step="0.05"
+                           value="{{ eco_settings.payout_multiplier }}">
+                    <span class="eco-input-suffix">×</span>
+                </div>
+                <span class="config-description">Scales every earning activity — work, fish, hunt, beg, dig, search and timed claims. Range 0.1–10.</span>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="eco_daily_base">Daily Base Reward</label>
+                <input type="number" id="eco_daily_base" class="config-input" min="10" max="100000"
+                       value="{{ eco_settings.daily_base }}">
+                <span class="config-description">The base <code>daily</code> payout before streak bonuses. Range 10–100,000.</span>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="eco_max_bet">Max Casino Bet</label>
+                <input type="number" id="eco_max_bet" class="config-input" min="0" max="100000000"
+                       value="{{ eco_settings.max_bet.unwrap_or(0) }}" placeholder="0">
+                <span class="config-description">Caps stakes across blackjack, slots, roulette, poker, coinflip and the other casino games. <code>0</code> = uncapped.</span>
+            </div>
+        </div>
+        <label class="config-toggle eco-rob-toggle">
+            <div>
+                <span class="config-label">Allow <code>rob</code></span>
+                <span class="config-description">When off, members cannot rob each other's cash at all.</span>
+            </div>
+            <input type="checkbox" id="eco_rob_enabled" {% if eco_settings.rob_enabled %}checked{% endif %}>
+        </label>
+    </section>
+
+    {# ─── Shop Items ─────────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Shop Items</h2>
+        <p class="config-section-description">Items available for purchase in this server's shop.</p>
+        <button class="button primary small mb-md" id="add-item-btn">Add Item</button>
+        {% if economy.items.is_empty() %}
+        <p class="text-muted">No shop items configured.</p>
+        {% else %}
+        <table class="data-table">
+            <thead><tr><th>Item</th><th>Rarity</th><th>Category</th><th>Price</th><th>Stock</th><th>Limit</th><th>Role gate</th><th>Sale ends</th><th></th></tr></thead>
+            <tbody>
+                {% for item in economy.items %}
+                <tr>
+                    <td data-label="Item">
+                        {% if let Some(src) = item.image_url %}<img class="item-thumb" src="{{ src }}" alt="" width="32" height="32" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+                        {% if let Some(e) = item.emoji %}{{ e }} {% endif %}<strong>{{ item.name }}</strong>
+                        {% if item.builtin_key.is_some() %}<span class="badge badge-info">Percy item</span>{% endif %}
+                        {% if !item.for_sale %}<span class="badge badge-muted">Not for sale</span>{% endif %}
+                        <div class="text-muted">{{ item.description.as_deref().unwrap_or("-") }}</div>
+                    </td>
+                    <td data-label="Rarity"><span class="badge rarity-{{ item.rarity.as_deref().unwrap_or("common") }}">{{ item.rarity.as_deref().unwrap_or("common") }}</span></td>
+                    <td data-label="Category">{{ item.category.as_deref().unwrap_or("-") }}</td>
+                    <td data-label="Price">{{ item.price }}</td>
+                    <td data-label="Stock">{{ self.stock_label(item) }}</td>
+                    <td data-label="Limit">{% match item.max_per_user %}{% when Some with (n) %}{{ n }} each{% when None %}-{% endmatch %}</td>
+                    <td data-label="Role gate">{% match item.required_role_id.as_deref() %}{% when Some with (rid) %}{{ self.role_name(rid) }}{% when None %}-{% endmatch %}</td>
+                    <td data-label="Sale ends">{% match item.available_until.as_deref() %}{% when Some with (t) %}{{ t }} UTC{% when None %}-{% endmatch %}</td>
+                    <td>
+                        {% if item.builtin_key.is_none() %}
+                        <button type="button" class="button small edit-item-btn"
+                            data-id="{{ item.id }}" data-name="{{ item.name }}" data-price="{{ item.price }}"
+                            data-description="{{ item.description.as_deref().unwrap_or("") }}"
+                            data-emoji="{{ item.emoji.as_deref().unwrap_or("") }}"
+                            data-rarity="{{ item.rarity.as_deref().unwrap_or("common") }}"
+                            data-effect="{{ item.effect.as_deref().unwrap_or("none") }}"
+                            data-stock="{% if let Some(n) = item.stock %}{{ n }}{% endif %}"
+                            data-max-per-user="{% if let Some(n) = item.max_per_user %}{{ n }}{% endif %}"
+                            data-required-role="{{ item.required_role_id.as_deref().unwrap_or("") }}"
+                            data-remove-role="{{ item.remove_role_id.as_deref().unwrap_or("") }}"
+                            data-available-until="{{ item.available_until.as_deref().unwrap_or("") }}"
+                            data-reply="{{ item.reply_message.as_deref().unwrap_or("") }}"
+                            data-image="{{ item.image_url.as_deref().unwrap_or("") }}">Edit</button>
+                        <button type="button" class="button small danger delete-item-btn" data-id="{{ item.id }}" data-name="{{ item.name }}">Delete</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </section>
+
+    {# ─── Lottery ────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Lottery</h2>
+        {% match economy.lottery %}
+        {% when Some with (lot) %}
+        <div class="sentinel-status active">
+            <span>Active — Jackpot: {{ lot.jackpot }} | Ticket: {{ lot.ticket_price }}</span>
+            {% match lot.ends_at %}{% when Some with (t) %}<span class="badge">Ends: <time class="js-ts" datetime="{{ t }}">{{ t }}</time></span>{% when None %}{% endmatch %}
+        </div>
+        <button class="button small danger" id="cancel-lottery-btn">Cancel Lottery</button>
+        {% when None %}
+        <p class="text-muted">No active lottery.</p>
+        <button class="button primary small" id="start-lottery-btn">Start Lottery</button>
+        {% endmatch %}
+    </section>
+
+    {# ─── Balances ────────────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Top Balances</h2>
+        {% if balances.entries.is_empty() %}
+        <p class="text-muted">No balance data available.</p>
+        {% else %}
+        <table class="data-table">
+            <thead><tr><th>Member</th><th>Cash</th><th>Bank</th><th>Total</th><th></th></tr></thead>
+            <tbody>
+                {% for b in balances.entries %}
+                <tr>
+                    <td data-label="Member">{{ b.username }}</td>
+                    <td data-label="Cash">{{ b.cash }}</td>
+                    <td data-label="Bank">{{ b.bank }}</td>
+                    <td data-label="Total"><strong>{{ b.total }}</strong></td>
+                    <td>
+                        <button class="button small edit-balance-btn"
+                                data-user-id="{{ b.user_id }}"
+                                data-username="{{ b.username }}"
+                                data-cash="{{ b.cash }}"
+                                data-bank="{{ b.bank }}">Edit</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </section>
+
+<!-- Edit Balance Modal -->
+<div class="modal-overlay" id="edit-balance-modal" hidden>
+    <div class="modal-card">
+        <h3>Edit Balance — <span id="balance-username"></span></h3>
+        <div class="modal-form">
+            <label class="config-label">Cash</label>
+            <input type="number" id="balance_cash" class="config-input">
+            <label class="config-label">Bank</label>
+            <input type="number" id="balance_bank" class="config-input">
+            <div class="modal-actions">
+                <button type="button" class="button small" id="balance-modal-cancel">Cancel</button>
+                <button type="button" class="button primary small" id="balance-modal-confirm">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add / Edit Item Modal (one modal; the effect is create-only) -->
+<div class="modal-overlay" id="add-item-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3 id="item-modal-title">Add Shop Item</h3>
+        <div class="modal-form">
+            <label class="config-label">Name</label>
+            <input type="text" id="item_name" class="config-input" maxlength="64">
+            <label class="config-label">Price</label>
+            <input type="number" id="item_price" class="config-input" min="1">
+            <label class="config-label">Description</label>
+            <input type="text" id="item_desc" class="config-input" maxlength="256">
+            <label class="config-label">Emoji</label>
+            <input type="text" id="item_emoji" class="config-input" maxlength="64">
+            <label class="config-label" for="item_image">Image link</label>
+            <input type="url" id="item_image" class="config-input" maxlength="500" placeholder="https://…" pattern="https://.*">
+            <span class="config-description">Shown on the item's card in Discord. Use a permanent https link — Discord attachment links expire.</span>
+            <label class="config-label">Rarity</label>
+            <select id="item_rarity" class="config-select">
+                <option value="common">Common</option>
+                <option value="uncommon">Uncommon</option>
+                <option value="rare">Rare</option>
+                <option value="epic">Epic</option>
+                <option value="legendary">Legendary</option>
+            </select>
+            <label class="config-label">Effect <span class="text-muted" id="effect-fixed-note" hidden>(cannot be changed)</span></label>
+            <select id="item_effect" class="config-select">
+                <option value="none">None (collectible)</option>
+                <option value="cash">Cash Voucher</option>
+                <option value="lootbox">Lootbox</option>
+                <option value="role">Role Grant</option>
+                <option value="xp_boost">XP Boost</option>
+                <option value="loot_boost">Loot Boost</option>
+            </select>
+            <div id="effect-value-group" hidden>
+                <label class="config-label" id="effect-value-label">Value</label>
+                <input type="number" id="item_effect_value" class="config-input" min="1">
+            </div>
+            <div id="effect-role-group" hidden>
+                <label class="config-label">Role to Grant</label>
+                <select id="item_effect_role" class="config-select" data-needs="assign">
+                    <option value="">Select a role…</option>
+                    {% for role in roles %}
+                    {% if !role.managed && role.name != "@everyone" %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="effect-duration-group" hidden>
+                <label class="config-label">Duration (minutes)</label>
+                <input type="number" id="item_duration" class="config-input" min="1" max="10080">
+            </div>
+            <label class="config-label">Stock (empty = unlimited)</label>
+            <input type="number" id="item_stock" class="config-input" min="0">
+            <label class="config-label">Per-member limit (empty = none)</label>
+            <input type="number" id="item_max_per_user" class="config-input" min="1">
+            <label class="config-label">Required role</label>
+            <select id="item_required_role" class="config-select">
+                <option value="">None</option>
+                {% for role in roles %}
+                {% if !role.managed && role.name != "@everyone" %}
+                <option value="{{ role.id }}">{{ role.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+            <label class="config-label">Remove this role on use</label>
+            <select id="item_remove_role" class="config-select" data-needs="assign">
+                <option value="">None</option>
+                {% for role in roles %}
+                {% if !role.managed && role.name != "@everyone" %}
+                <option value="{{ role.id }}">{{ role.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+            <label class="config-label">Available until (UTC)</label>
+            <input type="datetime-local" id="item_available_until" class="config-input">
+            <label class="config-label">Reply message (max 500)</label>
+            <textarea id="item_reply" class="config-input" maxlength="500" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="item-modal-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="item-modal-confirm">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Start Lottery Modal -->
+<div class="modal-overlay" id="lottery-modal" hidden>
+    <div class="modal-card">
+        <h3>Start Lottery</h3>
+        <div class="modal-form">
+            <label class="config-label">Ticket Price</label>
+            <input type="number" id="lottery_price" class="config-input" min="1" value="100">
+            <label class="config-label">Duration (minutes)</label>
+            <input type="number" id="lottery_duration" class="config-input" min="5" max="43200" value="60">
+            <label class="config-label">Announcement Channel</label>
+            <select id="lottery_channel" class="config-select">
+                <option value="">Select a channel…</option>
+                {% for ch in channels %}
+                {% if ch.channel_type == "text" || ch.channel_type == "news" %}
+                <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="lottery-modal-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="lottery-modal-confirm">Start</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/guild/economy.js"></script>
+{% endblock %}

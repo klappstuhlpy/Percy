@@ -1,0 +1,23 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_dashboard_active %} active{% endblock %}
+
+{% block title %}Connect Discord | Percy{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/md.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<article class="md-doc">
+    <header class="md-doc-head">
+        <span class="eyebrow">Dashboard</span>
+        <h1>Connect Discord</h1>
+    </header>
+    <div class="md-body">
+        <p>Link your Discord account to access the bot dashboard and manage your servers.</p>
+        <p><a href="/auth/discord" class="button primary">Connect Discord</a></p>
+    </div>
+</article>
+{% endblock %}

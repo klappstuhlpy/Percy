@@ -1,0 +1,1270 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+* {
+    box-sizing: border-box;
+}
+
+/* ── Design tokens ───────────────────────────────────────────── */
+
+:root {
+    /* Core */
+    --foreground: #fafafa;
+    --background: #09090b;
+    --header: #111113;
+    --text-muted: #71717a;
+
+    /* Brand — Claude coral/clay */
+    --branding: #d97757;
+    --branding-bright: #e8916f;
+    --branding-dim: color-mix(in srgb, var(--branding) 16%, transparent);
+
+    /* Terminal / TUI chrome */
+    --tui-border: #3a3a3e;
+    --tui-bg: #0e0e10;
+    --cursor: #d97757;
+    --prompt: #86efac;
+
+    /* Semantic colours */
+    --success-text: #86efac;
+    --success-bg:   #052e16;
+    --success-border: #166534;
+    --info-text:    #7dd3fc;
+    --info-bg:      #082f49;
+    --info-border:  #0c4a6e;
+    --error-text:   #fca5a5;
+    --error-bg:     #450a0a;
+    --error-border: #991b1b;
+    --warning-text: #fde68a;
+    --warning-bg:   #422006;
+    --warning-border: #92400e;
+
+    /* Surfaces */
+    --box:        #18181b;
+    --box-shade:  #1e1e21;
+    --box-border: #27272a;
+    --box-border-light: #a0a0a1;
+
+    /* Forms */
+    --form-input-background:    #1c1c1f;
+    --form-input-border:        #3f3f46;
+    --form-input-focus-border:  #d97757;
+    --form-input-error-border:  #ef4444;
+
+    /* Navigation */
+    --nav-link:       #a1a1aa;
+    --nav-link-hover: #fafafa;
+
+    /* Buttons */
+    --button-text:          #fafafa;
+    --default-button-rgb:   39,39,42;
+    --primary-button-rgb:   217,119,87;
+    --danger-button-rgb:    185,28,28;
+
+    /* Close button */
+    --close-button-bg:       rgba(255,255,255,.1);
+    --close-button-text:     #fafafa;
+    --close-button-bg-hover: rgba(255,255,255,.2);
+
+    /* Links */
+    --link-text:       #e0a08a;
+    --link-hover-text: #eec3b1;
+}
+
+/* ── Light theme ─────────────────────────────────────────────────
+   Dark is the default (the `:root` tokens above). The light theme only
+   re-maps the colour tokens; every component reads them, so the whole UI
+   flips. The coral brand accent is kept; the dark neutrals are inverted to
+   warm off-whites and the semantic / form / button colours get light-mode
+   variants so text stays legible on a pale background. Set on <html> by the
+   inline theme-init script in layout.html and toggled in base.js. */
+[data-theme="light"] {
+    /* Core */
+    --foreground: #1f1e1d;
+    --background: #f7f6f3;
+    --header: #fffefb;
+    --text-muted: #6b6a66;
+
+    /* Brand — coral stays; the "bright" emphasis tone darkens for contrast. */
+    --branding: #d97757;
+    --branding-bright: #b8542f;
+    --branding-dim: color-mix(in srgb, var(--branding) 16%, transparent);
+
+    /* Terminal / TUI chrome */
+    --tui-border: #d8d4cc;
+    --tui-bg: #f0eee9;
+    --cursor: #d97757;
+    --prompt: #15803d;
+
+    /* Semantic colours */
+    --success-text: #166534;
+    --success-bg:   #dcfce7;
+    --success-border: #86efac;
+    --info-text:    #075985;
+    --info-bg:      #e0f2fe;
+    --info-border:  #7dd3fc;
+    --error-text:   #b91c1c;
+    --error-bg:     #fee2e2;
+    --error-border: #fca5a5;
+    --warning-text: #92400e;
+    --warning-bg:   #fef3c7;
+    --warning-border: #fde68a;
+
+    /* Surfaces */
+    --box:        #efede8;
+    --box-shade:  #e6e3dc;
+    --box-border: #ddd9d1;
+    --box-border-light: #57534e;
+
+    /* Forms */
+    --form-input-background:    #ffffff;
+    --form-input-border:        #d6d2ca;
+    --form-input-focus-border:  #d97757;
+    --form-input-error-border:  #ef4444;
+
+    /* Navigation */
+    --nav-link:       #57534e;
+    --nav-link-hover: #1f1e1d;
+
+    /* Buttons — primary/danger keep white text; the neutral default button
+       darkens to a warm grey so its white label stays readable on light. */
+    --button-text:          #fafafa;
+    --default-button-rgb:   87,83,78;
+    --primary-button-rgb:   217,119,87;
+    --danger-button-rgb:    185,28,28;
+
+    /* Close button */
+    --close-button-bg:       rgba(0,0,0,.06);
+    --close-button-text:     #1f1e1d;
+    --close-button-bg-hover: rgba(0,0,0,.12);
+
+    /* Links */
+    --link-text:       #bf5e3c;
+    --link-hover-text: #a04a2c;
+}
+
+/* While a theme switch is in flight, base.js adds `.theme-transition` to
+   <html> so colour-bearing properties cross-fade instead of snapping. It's
+   removed once the fade completes, so it never interferes with normal hover
+   transitions. The `.theme-icon` rule below opts the toggle's sun/moon back
+   into their own transform animation (the blanket rule would clobber it). */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+    transition: background-color 400ms ease, color 400ms ease, border-color 400ms ease,
+                fill 400ms ease, stroke 400ms ease, box-shadow 400ms ease !important;
+}
+html.theme-transition .theme-icon {
+    transition: opacity 400ms ease, transform 500ms cubic-bezier(.4, 0, .2, 1) !important;
+}
+
+/* ── Reset / base ────────────────────────────────────────────── */
+
+html { height: 100%; }
+
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    line-height: 1.5;
+}
+
+body, button, input, optgroup, select, textarea {
+    font-family: Jetbrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco,
+        Consolas, Liberation Mono, Courier New, monospace;
+    font-size: 16px;
+}
+
+[hidden], .hidden { display: none !important; }
+
+/* ── Typography ──────────────────────────────────────────────── */
+
+hr {
+    border: 1px solid var(--box-border);
+    margin: 1rem 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    font-weight: normal;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.8rem; }
+h3 { font-size: 1.3rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1.05rem; }
+h6 { font-size: 1rem; }
+
+p {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+:not(pre) > code {
+    border: 1px solid var(--box-border);
+    background: var(--box);
+    border-radius: 0.25rem;
+    padding: 0 2px;
+}
+
+/* ── Links ───────────────────────────────────────────────────── */
+
+a:not(.button) {
+    text-decoration: none;
+    color: var(--link-text);
+}
+
+a:not(.button, .button-card):hover {
+    text-decoration: none;
+    color: var(--link-hover-text);
+}
+
+/* ── Forms ───────────────────────────────────────────────────── */
+
+form > .form-field:not(:last-child) {
+    margin-bottom: 0.5rem;
+}
+
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="text"],
+input[type="tel"],
+input[type="url"],
+input[type="password"],
+textarea,
+select {
+    height: 2rem;
+    padding: 0 0.5rem;
+    background-color: var(--form-input-background);
+    border: 2px solid var(--form-input-border);
+    color: var(--foreground);
+    border-radius: 0.25rem;
+    width: auto;
+    box-shadow: none;
+    transition: border-color 150ms ease;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 5rem;
+}
+
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="text"],
+input[type="tel"],
+input[type="url"],
+input[type="password"],
+textarea {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+input[type="email"]:focus,
+input[type="number"]:focus,
+input[type="search"]:focus,
+input[type="text"]:focus,
+input[type="tel"]:focus,
+input[type="url"]:focus,
+input[type="password"]:focus,
+textarea:focus,
+select:focus {
+    border: 2px solid var(--form-input-focus-border);
+    outline: 0;
+}
+
+input[type="email"]:not(:placeholder-shown):invalid,
+input[type="number"]:not(:placeholder-shown):invalid,
+input[type="search"]:not(:placeholder-shown):invalid,
+input[type="text"]:not(:placeholder-shown):invalid,
+input[type="tel"]:not(:placeholder-shown):invalid,
+input[type="url"]:not(:placeholder-shown):invalid,
+input[type="password"]:not(:placeholder-shown):invalid,
+textarea:invalid,
+select:invalid {
+    border: 2px solid var(--form-input-error-border);
+    outline: 0;
+}
+
+input::-webkit-search-cancel-button { display: none; }
+
+/* Checkbox */
+input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.2rem;
+    height: 1.2rem;
+    border: 2px solid var(--form-input-focus-border);
+    border-radius: 50%;
+    background-color: rgba(39, 56, 81, 0.3);
+    display: inline-block;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+input[type="checkbox"]:hover {
+    background-color: rgba(39, 56, 81, 0.6);
+    box-shadow: 0 0 4px rgba(var(--primary-button-rgb), 0.4);
+}
+
+input[type="checkbox"]:checked {
+    background-color: rgb(var(--primary-button-rgb));
+    border-color: rgb(var(--primary-button-rgb));
+}
+
+input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 0.6rem;
+    height: 0.6rem;
+    background: var(--button-text);
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.form-container {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+
+.form-container > .input-hint {
+    font-size: 80%;
+    color: var(--text-muted);
+    margin-bottom: 0;
+}
+
+.form-container > .form-field {
+    margin-top: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.button-container {
+    display: flex;
+    justify-content: space-evenly;
+}
+
+.checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-container > label { margin-left: 0.5rem; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+
+.button {
+    display: flex;
+    min-height: 2rem;
+    justify-content: center;
+    align-items: center;
+    color: var(--button-text);
+    background: none;
+    border: 1px solid rgb(var(--default-button-rgb));
+    border-radius: 0.25rem;
+    font-weight: 500;
+    padding: 0.125rem 1rem;
+    text-decoration: none;
+    user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    width: max-content;
+    transition: opacity 150ms ease, background-color 150ms ease;
+}
+
+.button:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.button:not(.outline) {
+    background-color: rgb(var(--default-button-rgb));
+}
+
+.button:hover:not(:disabled) {
+    background-color: rgb(var(--default-button-rgb));
+    opacity: 0.9;
+}
+
+.button.outline {
+    border: 2px solid var(--box-border-light);
+}
+
+.button.primary:not(.outline) {
+    background-color: rgb(var(--primary-button-rgb));
+    border-color: rgb(var(--primary-button-rgb));
+}
+
+.button.primary:not(.outline):hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.button.primary.outline {
+    color: rgb(var(--primary-button-rgb));
+    background-color: transparent;
+    border-color: rgb(var(--primary-button-rgb));
+}
+
+.button.danger:not(.outline) {
+    background-color: rgb(var(--danger-button-rgb));
+    border-color: rgb(var(--danger-button-rgb));
+}
+
+.button.danger:not(.outline):hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.button.danger.outline {
+    background-color: transparent;
+    border-color: rgb(var(--danger-button-rgb));
+    color: var(--button-text);
+}
+
+.button.danger.outline:hover:not(:disabled) {
+    background-color: rgb(var(--danger-button-rgb));
+    opacity: 0.9;
+}
+
+/* Compact button modifier (toolbars, table actions, drawers). */
+.button.small {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+}
+
+/* Outline buttons in light mode. The base `.button` colour is `--button-text`
+   (white), which is meant for filled buttons; on a transparent outline button
+   over a pale page that's white-on-white. Give them readable dark / intent
+   text at rest, and white again on hover when the button fills with colour.
+   Primary outline buttons keep their coral text (set elsewhere), so they're
+   excluded here; danger outline gets its own red text below. */
+[data-theme="light"] .button.outline:not(.primary):not(.danger) {
+    color: var(--foreground);
+}
+[data-theme="light"] .button.outline:not(.primary):not(.danger):hover:not(:disabled) {
+    color: var(--button-text);
+}
+[data-theme="light"] .button.danger.outline {
+    color: rgb(var(--danger-button-rgb));
+}
+[data-theme="light"] .button.danger.outline:hover:not(:disabled) {
+    color: var(--button-text);
+}
+
+/* ── Tables ──────────────────────────────────────────────────── */
+
+table {
+    color: var(--foreground);
+    width: 100%;
+    background-color: var(--background);
+    margin-bottom: 1rem;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+table td, table th {
+    padding: 0.75rem;
+    vertical-align: top;
+}
+
+table thead th {
+    border-bottom: 2px solid var(--box-border);
+    vertical-align: bottom;
+}
+
+tbody tr {
+    border-bottom: 2px solid var(--box-border);
+}
+
+table tbody tr:hover {
+    background-color: var(--box);
+}
+
+@media (max-width: 480px) {
+    table th { display: none; }
+
+    /* Flex layout puts the label (::before) next to the cell content
+       even when that content is itself a block element like a bar-cell
+       or button row. !important defeats page-specific text-align rules
+       (e.g. .container-table .numeric { text-align: right }) that would
+       otherwise re-align the value in the stacked layout. */
+    table td {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: flex-start;
+        column-gap: 0.5rem;
+        padding: 0.25rem;
+        border-top: none;
+        border-bottom: 1px solid var(--box-border);
+        overflow-wrap: anywhere;
+        text-align: left !important;
+    }
+
+    table td:last-child { border-bottom: none; }
+
+    /* Direct children become flex items that share the row with the
+       label and fill the remaining space rather than dropping below. */
+    table td > * {
+        min-width: 0;
+        text-align: left;
+    }
+
+    button {
+        justify-content: center;
+    }
+
+    /* Only render the column-name prefix when a non-empty label exists.
+       Reset font/color so the label stays consistent even when the cell
+       itself uses a smaller, muted, or monospace style for the value. */
+    table td[data-th]:not([data-th=""])::before {
+        content: attr(data-th) ": ";
+        font-weight: bold;
+        font-size: 1rem;
+        font-style: normal;
+        font-variant-numeric: normal;
+        color: var(--foreground);
+        text-transform: none;
+        letter-spacing: normal;
+        white-space: normal;
+        flex: 0 0 40%;
+    }
+}
+
+/* ── Page grid ───────────────────────────────────────────────── */
+
+.grid {
+    display: grid;
+    min-height: 100%;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas: "h" "c" "f";
+}
+
+header.grid-item {
+    background-color: var(--header);
+    grid-area: h;
+    border-bottom: 1px solid var(--box-border);
+    margin-bottom: 1.5rem;
+    /* Match the percy subdomain topbar height (0.65rem vertical padding). The
+       safe-area-inset-top is for standalone PWA mode (phone clock / battery). */
+    padding: calc(0.65rem + env(safe-area-inset-top)) 1.5rem 0.65rem 1.5rem;
+}
+
+main.grid-item { grid-area: c; }
+
+footer.grid-item {
+    grid-area: f;
+    text-align: center;
+    background-color: var(--background);
+    padding: 2.5rem 0.75rem;
+}
+
+footer > .copyright {
+    margin: 0 auto;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+footer > .copyright .footer-link {
+    margin-left: 0.75rem;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+footer > .copyright .footer-link:hover {
+    color: var(--branding);
+}
+
+.grid-item {
+    max-width: 100vw;
+    padding: 0.75rem;
+}
+
+.not-mobile { display: none; }
+
+@media (min-width: 480px) {
+    .mobile-only { display: none; }
+    .not-mobile  { display: unset; }
+}
+
+@media (min-width: 840px) {
+    main.grid-item {
+        padding-left: 5rem;
+        padding-right: 5rem;
+    }
+}
+
+@media (min-width: 1200px) {
+    main.grid-item {
+        padding-left: 10rem;
+        padding-right: 10rem;
+    }
+}
+
+/* ── Navigation ──────────────────────────────────────────────── */
+
+nav.main-navigation {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    /* Center items vertically so links sit on the same line as taller items
+       (the account button, the Percy section badge) instead of top-aligning. */
+    align-items: center;
+}
+
+nav.main-navigation .nav-item {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    color: var(--nav-link);
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
+}
+
+nav.main-navigation .branding {
+    color: var(--branding);
+    width: max-content;
+    text-align: left;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+/* Section indicator in the top nav (e.g. the Percy badge). Rendered only on
+   pages that fill layout.html's `nav_section` block — purely visual. The
+   wrapper is a `.nav-item`, so it picks up the nav's vertical margins and the
+   1rem right-margin between items; here we only need to align its contents. */
+.nav-section {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.nav-section-sep {
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.nav-section-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+    color: var(--branding-bright);
+    background: var(--branding-dim);
+    border: 1px solid color-mix(in srgb, var(--branding) 35%, transparent);
+    border-radius: 999px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nav-section-badge:hover {
+    color: var(--foreground);
+    border-color: var(--branding);
+}
+
+.nav-section-glyph { font-size: 0.7em; }
+
+/* ── Theme toggle (sun / moon) ───────────────────────────────────────────
+   A single icon button in the nav. The sun and moon are stacked in a fixed
+   box; only one is visible per theme and they cross-fade with a rotate+scale
+   so clicking smoothly morphs one into the other. */
+/* Selectors are scoped under `nav.main-navigation` to match the specificity of
+   the base `.nav-item` rule (the button also carries `.nav-item` for layout),
+   so these colour/border/hover styles win. */
+nav.main-navigation .theme-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
+    color: var(--nav-link);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+nav.main-navigation .theme-toggle:hover {
+    color: var(--nav-link-hover);
+    background: var(--box);
+    border-color: var(--box-border);
+}
+
+.theme-toggle-track {
+    position: relative;
+    width: 1.15rem;
+    height: 1.15rem;
+}
+
+.theme-icon {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: opacity 400ms ease, transform 500ms cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Default (dark): the moon is shown, the sun is tucked away. */
+.theme-icon-sun  { opacity: 0; transform: rotate(-90deg) scale(.4); }
+.theme-icon-moon { opacity: 1; transform: rotate(0)      scale(1); }
+
+/* Light: swap them. */
+[data-theme="light"] .theme-icon-sun  { opacity: 1; transform: rotate(0)     scale(1); }
+[data-theme="light"] .theme-icon-moon { opacity: 0; transform: rotate(90deg) scale(.4); }
+
+.nav-item.spacer { margin-right: auto !important; }
+
+nav.main-navigation .nav-item:not(:last-child) { margin-right: 1rem; }
+
+a.nav-item:not(.branding):hover {
+    border-bottom-color: var(--nav-link-hover);
+    color: var(--nav-link-hover);
+}
+
+a.nav-item.branding:hover { border-bottom-color: var(--branding); }
+
+a.nav-item.active { font-weight: bold; }
+
+/* ── Account menu (expandable, replaces the old name link) ──────────────── */
+
+.account-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.account-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0.2rem 0.5rem;
+    font: inherit;
+    color: var(--nav-link);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    height: auto;
+    cursor: pointer;
+    transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.account-trigger:hover,
+.account-menu.open .account-trigger {
+    color: var(--nav-link-hover);
+    background: var(--box);
+    border-color: var(--box-border);
+}
+
+.account-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--box-border);
+}
+
+.account-trigger-name {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-caret {
+    display: inline-block;
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    line-height: 1;
+    color: var(--text-muted);
+    transition: transform 150ms ease;
+}
+.account-caret::after { content: "\25BE"; }
+.account-menu.open .account-caret { transform: rotate(180deg); }
+
+.account-dropdown {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    min-width: 12rem;
+    display: none;
+    flex-direction: column;
+    padding: 0.4rem;
+    background: var(--header);
+    border: 1px solid var(--box-border);
+    border-radius: 0.6rem;
+    box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+    z-index: 1002;
+}
+.account-menu.open .account-dropdown { display: flex; }
+
+.account-dropdown-item {
+    display: block;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.4rem;
+    font-size: 0.9rem;
+    color: var(--nav-link);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 120ms ease, color 120ms ease;
+}
+.account-dropdown-item:hover {
+    background: var(--box);
+    color: var(--nav-link-hover);
+}
+.account-dropdown-logout { color: var(--error-text); }
+
+.account-dropdown-sep {
+    margin: 0.35rem 0.25rem;
+    border: none;
+    border-top: 1px solid var(--box-border);
+}
+
+/* ── Mobile nav (no hamburger) ───────────────────────────────────────────
+   On mobile the inline site links (`.not-mobile`) are hidden; the account
+   dropdown carries them instead via `.nav-extra` items, and logged-out users
+   get a small `#nav-menu` dropdown beside the Login button. The dropdown
+   itself keeps the same floating style as desktop. */
+
+/* Site links that only appear inside the dropdown on mobile. Higher
+   specificity than `.account-dropdown-item` so it wins regardless of order. */
+.account-dropdown-item.nav-extra,
+.account-dropdown-sep.nav-extra { display: none; }
+
+/* Logged-out menu dropdown: mobile-only (ID specificity beats `.account-menu`). */
+#nav-menu { display: none; }
+
+@media (max-width: 480px) {
+    .account-dropdown-item.nav-extra { display: block; }
+    .account-dropdown-sep.nav-extra { display: block; }
+    #nav-menu { display: inline-flex; }
+    nav.main-navigation .nav-item:not(:last-child) { margin-right: 0.5rem; }
+}
+
+/* Compact trigger: when the nav can't fit the account name (e.g. branding +
+   Percy badge crowd it out), JS adds `.nav-compact` and we collapse the
+   account button to just the avatar. The logged-out "Menu" label stays. */
+.nav-compact .account-trigger-name,
+.nav-compact #account-menu .account-caret { display: none; }
+.nav-compact #account-menu .account-trigger { gap: 0; padding: 0.2rem; }
+
+@media (min-width: 480px) {
+    .nav-item.branding { margin-left: 1rem; }
+    .nav-item:last-child { margin-right: 1rem; }
+}
+
+/* ── Modals / dialogs ────────────────────────────────────────── */
+
+::backdrop { background-color: rgba(0, 0, 0, 60%); }
+
+dialog {
+    background-color: var(--box);
+    color: var(--foreground);
+    border: 1px solid var(--box-border);
+    border-radius: 0.75rem;
+    padding: 0;
+    box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.65);
+}
+
+dialog > form {
+    margin: auto;
+    background-color: var(--box);
+    border-radius: 0.75rem;
+    max-width: 30rem;
+    display: flex;
+    flex-direction: column;
+}
+
+dialog .form-container {
+    padding: 0.5rem 1.5rem 1.25rem;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+dialog > form > h1 {
+    padding: 1.5rem 1.5rem 0.25rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0;
+    border-bottom: none;
+}
+
+dialog > form > p {
+    padding: 0 1.5rem;
+    margin: 0 0 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+dialog > form > footer {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem 1.25rem;
+    background: none;
+    border-top: 1px solid var(--box-border);
+    margin-top: 0.5rem;
+}
+
+dialog > form > p ~ footer { margin-top: 0.5rem; }
+
+dialog > form > .alert { margin: 0 1.5rem 0.5rem; }
+
+dialog > form > footer .button {
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+}
+
+/* ── Close button ────────────────────────────────────────────── */
+
+button.close {
+    user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: var(--close-button-bg);
+    border: none;
+    border-radius: 9999px;
+    cursor: pointer;
+    display: inline-block;
+    flex-shrink: 0;
+    font-size: 0;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    outline: 0;
+    position: relative;
+    vertical-align: top;
+}
+
+button.close::before,
+button.close::after {
+    background-color: var(--close-button-text);
+    content: "";
+    display: block;
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translateX(-50%) translateY(-50%) rotate(45deg);
+    transform-origin: center center;
+}
+
+button.close::before { height: 2px; width: 50%; }
+button.close::after  { height: 50%; width: 2px; }
+
+button.close:hover,
+button.close:focus { background-color: var(--close-button-bg-hover); }
+
+/* ── Alerts ──────────────────────────────────────────────────── */
+
+.alert-flash {
+    position: relative;
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--box-border);
+    border-radius: 0.625rem;
+    padding: 1rem 1.25rem;
+    margin: 1rem;
+}
+
+.alert-flash > button.close { margin-left: auto; }
+.alert-flash > p { margin-bottom: 0; }
+
+.alert-flash.info    { background-color: var(--info-bg);    color: var(--info-text);    border-color: var(--info-border); }
+.alert-flash.error   { background-color: var(--error-bg);   color: var(--error-text);   border-color: var(--error-border); }
+.alert-flash.warning { background-color: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
+.alert-flash.success { background-color: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
+
+/* ── Badges ──────────────────────────────────────────────────── */
+
+.badges {
+    display: flex;
+    margin-bottom: 0.5rem;
+    gap: 0.5rem;
+}
+
+.badge {
+    border: 1px solid var(--foreground);
+    letter-spacing: 0;
+    font-size: 12px;
+    border-radius: 5px;
+    padding: 2px 4px;
+}
+
+.badge.warning { background-color: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
+.badge.info    { background-color: var(--info-bg);    color: var(--info-text);    border-color: var(--info-border); }
+.badge.danger  { background-color: var(--error-bg);   color: var(--error-text);   border-color: var(--error-border); }
+.badge.success { background-color: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
+.badge.branding { border-color: var(--box-border); color: var(--branding); background: var(--box); }
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+
+.spinner {
+    animation: rotate 2s linear infinite;
+    z-index: 2;
+    width: 50px;
+    height: 50px;
+}
+
+.spinner .path {
+    stroke: var(--branding);
+    stroke-linecap: round;
+    animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes rotate {
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes dash {
+    0%   { stroke-dasharray: 1, 150;  stroke-dashoffset: 0; }
+    50%  { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+    100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
+/* ── Terminal window (.tui-box) ──────────────────────────────────
+   A reusable faux-terminal frame: dark panel, rounded border, a
+   title bar with traffic-light dots and a coral ✻ label. Drop any
+   content inside; pair with .tui-body for terminal-style padding. */
+
+.tui-box {
+    background: var(--tui-bg);
+    border: 1px solid var(--tui-border);
+    border-radius: 0.6rem;
+    overflow: hidden;
+    box-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.7);
+}
+
+.tui-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--header);
+    border-bottom: 1px solid var(--tui-border);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.tui-lights {
+    display: inline-flex;
+    gap: 0.4rem;
+    margin-right: 0.35rem;
+}
+
+.tui-lights > span {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: var(--box-border);
+}
+
+.tui-lights > span:nth-child(1) { background: #ef4444; }
+.tui-lights > span:nth-child(2) { background: #eab308; }
+.tui-lights > span:nth-child(3) { background: #22c55e; }
+
+.tui-title { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tui-title .glyph { color: var(--branding); }
+
+.tui-body {
+    padding: 1rem 1.1rem;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* A shell prompt line: green host glyph + command. */
+.tui-prompt::before {
+    content: attr(data-prompt) " ";
+    color: var(--prompt);
+    font-weight: 700;
+}
+
+.tui-prompt {
+    color: var(--foreground);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* Dim "output" line beneath a prompt. */
+.tui-out { color: var(--text-muted); }
+
+/* Blinking block cursor — reuse anywhere a caret should pulse. */
+.blink {
+    display: inline-block;
+    color: var(--cursor);
+    animation: cursor-blink 1.1s steps(1, end) infinite;
+}
+
+@keyframes cursor-blink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+/* ── ✻ thinking indicator ────────────────────────────────────────
+   Claude Code's spinner: a rotating sparkle next to a cycling
+   gerund (the word is swapped by JS; CSS just spins the glyph). */
+
+.thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--branding);
+    font-size: 0.9rem;
+}
+
+.thinking::before {
+    content: '✻';
+    display: inline-block;
+    animation: sparkle-spin 1.1s linear infinite;
+}
+
+.thinking[data-word]::after {
+    content: attr(data-word) '…';
+    color: var(--text-muted);
+}
+
+@keyframes sparkle-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── ✻ spark glyph: spins on hover wherever it appears ───────────── */
+
+.spark {
+    display: inline-block;
+    transform-origin: center;
+    transition: transform 0.2s ease;
+}
+
+/* Spin while hovering the glyph itself or its interactive container
+   (nav link, footer link, spotlight button, or a .tui-bar title). */
+a:hover .spark,
+button:hover .spark,
+.tui-bar:hover .spark,
+.spark:hover {
+    animation: sparkle-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .thinking::before, .blink, .spark { animation: none !important; }
+}
+
+/* ── Page header (reusable) ───────────────────────────────────────
+   A title + a dim shell-prompt subtitle over a hairline divider. Used on
+   the gallery, short-links, and other inner pages to give them the same
+   terminal-flavoured heading. Pair `.page-head-sub` with a leading
+   `.page-head-prompt` span ("$"). */
+
+.page-head {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.page-head > h1 { margin: 0; }
+
+.page-head-sub {
+    margin: 0.3rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    letter-spacing: 0.01em;
+}
+
+.page-head-prompt { color: var(--prompt); font-weight: 700; }
+
+/* A gentle rise-and-fade used for staggered entrances on inner pages. */
+@keyframes page-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page-rise { animation: none !important; }
+}
+
+/* ── CLI error page ──────────────────────────────────────────────── */
+
+.error-cli {
+    max-width: 640px;
+    margin: 2rem auto;
+}
+
+.error-trace {
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--box);
+    border: 1px solid var(--tui-border);
+    border-left: 2px solid var(--error-border);
+    border-radius: 0.4rem;
+    color: var(--error-text);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* -- Humanised timestamps (.js-ts -> .ts-formatted via timestamps.js) --
+   Loaded globally so admin, account, images and dashboard all share the exact
+   same hover-highlight + floating tooltip treatment. */
+
+.ts-formatted {
+    cursor: default;
+    white-space: nowrap;
+    border-bottom: 1px dashed transparent;
+    transition: border-color 0.12s, color 0.12s;
+}
+.ts-formatted:hover {
+    color: var(--branding);
+    border-bottom-color: color-mix(in srgb, var(--branding) 45%, transparent);
+}
+.ts-tooltip {
+    position: fixed;
+    z-index: 3000;
+    display: none;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--foreground);
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 0.4rem;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+.ts-tooltip.visible {
+    opacity: 1;
+}

@@ -1,0 +1,165 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_comics_active %} active{% endblock %}
+
+{% import "layout/progress_toggle.html" as progress %}
+
+{% block title %}Comics | Percy{% endblock %}
+
+{% block meta_description %}Browse comic releases from Marvel, DC and manga publishers — covers, issue numbers, release dates and prices, sourced from League of Comic Geeks and VIZ Media.{% endblock %}
+{% block og_title %}Comics — Percy{% endblock %}
+{% block og_description %}Browse comic releases from Marvel, DC and manga publishers, with covers, issue numbers and release dates.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/comics{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/catalogue/comics.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/news.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/progress.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/app.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx">
+    <div class="cx-page">
+        <header class="cx-head">
+            <span class="cx-head__eyebrow">Comics</span>
+            <h1 class="cx-head__title">Browse releases</h1>
+            <p class="cx-head__lede">
+                Every tracked release from Marvel, DC and manga publishers, with covers, issue numbers,
+                release dates and prices.
+            </p>
+        </header>
+
+        {% include "layout/news_ticker.html" %}
+
+        <nav class="cx-controls" aria-label="Comic filters">
+            <div class="cx-tabs" role="tablist" aria-label="Brand">
+                {% for tab in brand_tabs %}
+                <a class="cx-tab" href="{{ tab.href }}" role="tab" aria-selected="{% if tab.active %}true{% else %}false{% endif %}">{{ tab.label }}</a>
+                {% endfor %}
+            </div>
+            <form class="cx-search" method="get" action="/comics">
+                {% match brand %}
+                {% when Some with (value) %}
+                <input type="hidden" name="brand" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match creator %}
+                {% when Some with (value) %}
+                <input type="hidden" name="creator" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match character %}
+                {% when Some with (value) %}
+                <input type="hidden" name="character" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match series %}
+                {% when Some with (value) %}
+                <input type="hidden" name="series" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                <input type="search" name="search" value="{{ search }}" placeholder="Search titles…" aria-label="Search titles">
+                <button type="submit" class="cx-search__submit">Search</button>
+            </form>
+        </nav>
+
+        {% if !filter_chips.is_empty() %}
+        <div class="cx-filters" aria-label="Active filters">
+            {% for chip in filter_chips %}
+            <span class="cx-filter-chip">
+                {{ chip.label }}
+                <a class="cx-filter-chip__remove" href="{{ chip.remove_href }}" aria-label="Remove filter: {{ chip.label }}">×</a>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <p class="cx-total">{{ total }} release{% if total != 1 %}s{% endif %}</p>
+
+        {% if items.is_empty() %}
+        <div class="cx-empty">
+            {% if unavailable %}
+            <p>Releases can't be loaded right now. Try again in a moment.</p>
+            {% else %}
+            <p>No releases match these filters.</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="cx-grid">
+            {% for item in items %}
+            {# The toggle is a sibling of the anchor, not a child — a form may not nest
+               inside a link — so the *card* is the container and the anchor is a
+               stretched link inside it (see comics.css). `data-entry` + a
+               programmatic-only tabindex is what j/k moves between — see progress.js. #}
+            <div class="cx-card cx-card--stretch" data-entry tabindex="-1">
+            <a class="cx-card__link" href="/comics/{{ item.brand }}/{{ item.slug }}">
+                {% match item.cover_url %}
+                {% when Some with (cover) %}
+                <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
+                {% when None %}
+                <span class="cx-card__cover cx-card__cover--placeholder" aria-hidden="true"></span>
+                {% endmatch %}
+                <div class="cx-card__body">
+                    <h2 class="cx-card__title">
+                        {{ item.title }}
+                        {% match item.issue_label %}
+                        {% when Some with (issue) %}
+                        <span class="cx-card__issue">{{ issue }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                    </h2>
+                    {% match item.series_name %}
+                    {% when Some with (name) %}
+                    <p class="cx-card__series">{{ name }}</p>
+                    {% when None %}
+                    {% endmatch %}
+                    <p class="cx-card__meta">
+                        {% match item.release_date %}
+                        {% when Some with (date) %}
+                        <span>{{ date }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                        {% match item.price_label %}
+                        {% when Some with (price) %}
+                        <span>{{ price }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                    </p>
+                </div>
+            </a>
+            {% match item.toggle %}
+            {% when Some with (mark) %}
+            <div class="cx-card__aside">{% call progress::toggle(mark) %}</div>
+            {% when None %}
+            {% endmatch %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {# Revealed by progress.js: a JS-off visitor is never told about shortcuts they
+           do not have. #}
+        <p class="pg-keys" hidden><kbd>j</kbd> / <kbd>k</kbd> to move, <kbd>w</kbd> to mark.</p>
+
+        <nav class="cx-pagination" aria-label="Pagination">
+            {% match prev_href %}
+            {% when Some with (href) %}
+            <a class="cx-pagination__link" href="{{ href }}">← Previous</a>
+            {% when None %}
+            <span class="cx-pagination__link cx-pagination__link--disabled">← Previous</span>
+            {% endmatch %}
+            <span class="cx-pagination__page">Page {{ page }} of {{ total_pages }}</span>
+            {% match next_href %}
+            {% when Some with (href) %}
+            <a class="cx-pagination__link" href="{{ href }}">Next →</a>
+            {% when None %}
+            <span class="cx-pagination__link cx-pagination__link--disabled">Next →</span>
+            {% endmatch %}
+        </nav>
+        {% endif %}
+
+        {% include "catalogue/comics_attribution.html" %}
+    </div>
+</div>
+<script src="/static/js/catalogue/progress.js" defer></script>
+{% endblock %}

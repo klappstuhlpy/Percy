@@ -1,0 +1,53 @@
+[workspace]
+members = [".", "crates/percy-client"]
+
+[package]
+name = "dashboard"
+version = "0.21.0"
+edition = "2021"
+license = "AGPL-v3"
+description = "Percy dashboard — standalone web binary built on the shared klappstuhl.me kernel."
+
+# kls-web-core comes from the public kls-core repo as a tag-pinned git
+# dependency over HTTPS — the same pin the main klappstuhl_me site uses, so both
+# apps share one design/auth/API-client foundation. Bump the tag in lock-step
+# with klappstuhl_me.
+[dependencies]
+anyhow = "1.0.80"
+async-trait = "0.1.77"
+askama = { version = "0.12.1", features = ["with-axum", "serde-json"] }
+askama_axum = "0.4.0"
+axum = { version = "0.7.4", features = ["multipart"] }
+cookie = { version = "0.18.0", features = ["percent-encode"] }
+dirs = "5.0.1"
+# API tokens: CSPRNG bytes and the SHA-256 digest we store instead of the token.
+getrandom = "0.2"
+sha2 = "0.10"
+# The public API spec is hand-written YAML, served as JSON.
+serde_yaml = "0.9"
+# Renders the public legal docs (fetched as CommonMark from the canonical GitHub
+# repo) and the local command-syntax guide to HTML.
+pulldown-cmark = "0.10"
+
+kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.20.0" }
+percy-client = { path = "crates/percy-client" }
+# rusqlite is pulled transitively by kls-web-core; declared directly (matching
+# its version + bundled feature) so the migrate() signature and the DB init
+# tests can name rusqlite::Connection. Feature unification keeps it one build.
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+rusqlite = { version = "0.31.0", features = ["bundled"] }
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
+tokio = { version = "1.36.0", features = ["rt-multi-thread", "net", "macros", "signal"] }
+# ServeDir for the dashboard's own static assets (percy CSS/JS/img), served at
+# /static alongside the shared design system at /kls. Ships as a `static/` dir
+# next to the binary.
+tower-http = { version = "0.5.2", features = ["fs"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+
+[profile.dev]
+debug = 1
+
+[profile.dev.package."*"]
+debug = false

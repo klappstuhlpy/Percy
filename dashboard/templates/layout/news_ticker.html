@@ -1,0 +1,42 @@
+{# The news ticker (§6.3) — included by /releases, /comics and /watchlist.
+
+   An include rather than a macro because it reads only the root context's `ticker`
+   field, which every page carrying it declares; there is no loop variable to pass.
+
+   Rendered server-side with its content already in the HTML: never an empty bar,
+   never a layout shift. An empty `ticker` — no stories, or a news call that failed —
+   renders nothing at all, so a page without news is a page without a strip.
+
+   The motion is one CSS `transform` on a duplicated track (see news.css): no
+   <marquee>, no requestAnimationFrame loop, so it costs nothing off-screen. It pauses
+   on hover and on `:focus-within`, and every headline is a real focusable link —
+   WCAG 2.2.2 requires auto-moving content lasting over five seconds to be pausable. #}
+{% if !ticker.is_empty() %}
+<aside class="nx-ticker" aria-label="Latest news">
+    <span class="nx-ticker__chip">Latest</span>
+    <div class="nx-ticker__viewport">
+        <div class="nx-ticker__track">
+            <ul class="nx-ticker__run">
+                {% for item in ticker %}
+                <li class="nx-ticker__item">
+                    <a class="nx-ticker__link" href="{{ item.url }}" rel="noopener nofollow ugc">{{ item.headline }}</a>
+                    <span class="nx-ticker__source">{{ item.source_name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {# The second copy is what makes a translate loop seamless. It is hidden from
+               assistive technology and taken out of the tab order, so no headline is ever
+               announced or tabbed to twice. #}
+            <ul class="nx-ticker__run" aria-hidden="true">
+                {% for item in ticker %}
+                <li class="nx-ticker__item">
+                    <a class="nx-ticker__link" href="{{ item.url }}" rel="noopener nofollow ugc" tabindex="-1">{{ item.headline }}</a>
+                    <span class="nx-ticker__source">{{ item.source_name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <a class="nx-ticker__all" href="/news">All news →</a>
+</aside>
+{% endif %}

@@ -5,7 +5,9 @@ name: CI
 # not just on master/main.
 on:
   push:
+    paths-ignore: ['dashboard/**']
   pull_request:
+    paths-ignore: ['dashboard/**']
   workflow_dispatch:
 
 # Least-privilege: the job only needs to read the checked-out code.

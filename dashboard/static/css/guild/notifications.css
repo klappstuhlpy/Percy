@@ -1,0 +1,35 @@
+/* Notifications page + sidebar badge, on the app tokens. */
+.notif-list { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: .5rem; }
+.notif-item { display: flex; gap: .75rem; align-items: flex-start; padding: .7rem .85rem;
+  border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); }
+.notif-unread { background: color-mix(in srgb, var(--accent) 8%, var(--surface-2)); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.notif-sev { flex: none; width: 1.2rem; text-align: center; color: var(--info-text); }
+.notif-warning .notif-sev { color: var(--warning-text); }
+.notif-critical .notif-sev { color: var(--error-text); }
+.notif-main { flex: 1; min-width: 0; }
+.notif-title { font-weight: 700; overflow-wrap: anywhere; }
+.notif-body { font-size: .88rem; color: var(--text-muted); overflow-wrap: anywhere; margin-top: .15rem; }
+.notif-meta { font-size: .78rem; color: var(--text-muted); margin-top: .25rem; }
+.notif-time { flex: none; font-size: .78rem; color: var(--text-muted); white-space: nowrap; }
+.notif-link { font-size: 13px; font-weight: 700; color: var(--accent-hover); }
+.notif-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--accent); margin-right: .3rem; }
+.notif-sub { margin: 1.25rem 0 .5rem; font-size: .95rem; }
+.notif-requests { display: grid; gap: .75rem; margin-bottom: .5rem; }
+.notif-request { display: grid; gap: .45rem; padding: var(--space-4); border: 1px solid var(--line);
+  border-radius: var(--radius-md); background: var(--surface-2); }
+.notif-request-actions { display: flex; gap: .5rem; }
+.notif-notice { padding: .6rem .85rem; border-radius: var(--radius-md); border: 1px solid var(--line); margin: 0 0 1rem; }
+.notif-notice-ok { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
+.notif-notice-err { color: var(--error-text); background: var(--error-bg); border-color: var(--error-border); }
+.notif-status-approved { color: var(--success-text); }
+.notif-status-denied, .notif-status-failed { color: var(--error-text); }
+.notif-status-expired { color: var(--text-muted); }
+.notif-confirm { font-size: .85rem; display: flex; gap: .4rem; align-items: center; }
+.rq-roles { max-height: 16rem; overflow: auto; display: grid; grid-template-columns: 1fr; gap: .15rem .75rem; padding: .4rem .6rem;
+  border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); }
+@media (min-width: 700px) { .rq-roles { grid-template-columns: 1fr 1fr; } }
+.rq-role { display: flex; align-items: center; gap: .5rem; cursor: pointer; min-width: 0; }
+.rq-role[hidden] { display: none; }
+.rq-role span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-tabs { margin-bottom: var(--space-5); flex-wrap: wrap; }
+[data-pane][hidden] { display: none; }

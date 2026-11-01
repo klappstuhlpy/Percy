@@ -1,0 +1,245 @@
+/* App shell: top bar, left navigation, content area. Built on tokens.css (+ components.css).
+   Used by the server dashboard (templates/layout/dashboard_layout.html); the music player shares
+   the top bar's right-hand end (.shell-ibtn, .shell-me, .shell-pop). Class names that scripts rely
+   on are kept: .dash-sidebar #dash-sidebar, .dash-nav(-group|-heading|-link|-badge), #cmdk-trigger. */
+
+html:has(.shell-page), .dash-sidebar { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent; }
+.shell-page { margin: 0; min-height: 100dvh; }
+.shell-page *, .shell-page *::before, .shell-page *::after { box-sizing: border-box; }
+.shell-page [hidden] { display: none !important; }
+
+.shell {
+    --top-h: 64px;
+    --nav-w: 248px;
+    display: grid;
+    grid-template-columns: var(--nav-w) minmax(0, 1fr);
+    grid-template-rows: var(--top-h) minmax(0, 1fr);
+    grid-template-areas: "top top" "nav main";
+    gap: 0 var(--space-2);
+    min-height: 100dvh;
+    padding: 0 var(--space-2) var(--space-4);
+    transition: grid-template-columns var(--dur-base) cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.shell.is-collapsed { --nav-w: 76px; }
+
+.shell-skip {
+    position: fixed; left: var(--space-4); top: -60px; z-index: 60;
+    padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm);
+    background: var(--accent); color: var(--accent-contrast); font-weight: 700; text-decoration: none;
+}
+.shell-skip:focus { top: var(--space-3); }
+
+/* ── Shared bits (also used by the music player) ─────────────────────── */
+.shell-ibtn {
+    position: relative; display: inline-grid; place-items: center; flex: none;
+    width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: none;
+    color: var(--text-muted); cursor: pointer; text-decoration: none;
+    transition: background var(--dur-base), color var(--dur-base), transform var(--dur-base);
+}
+.shell-ibtn svg { width: 20px; height: 20px; }
+.shell-ibtn:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.shell-ibtn:active { transform: scale(0.92); }
+.shell-ibtn:focus-visible, .shell-me summary:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.shell-badge {
+    position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-contrast);
+    font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+    box-shadow: 0 0 0 2px var(--app-bg);
+}
+
+.shell-pop {
+    position: absolute; top: calc(100% + var(--space-2)); z-index: 40;
+    min-width: 220px; max-height: min(420px, 70dvh); overflow: auto;
+    padding: var(--space-2); border-radius: var(--radius-md);
+    background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--shadow-pop);
+    animation: shell-pop 160ms ease-out;
+}
+@keyframes shell-pop { from { opacity: 0; transform: translateY(-4px); } }
+.shell-pop-label { margin: 0; padding: 6px 10px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-pop a {
+    display: flex; align-items: center; gap: var(--space-3); padding: 9px 10px; border-radius: var(--radius-sm);
+    color: var(--text); font-weight: 600; text-decoration: none; transition: background var(--dur-base);
+}
+.shell-pop a:hover, .shell-pop a:focus-visible { background: color-mix(in srgb, var(--text) 7%, transparent); outline: none; }
+.shell-pop a.is-on { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.shell-pop hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+
+.shell-me { position: relative; }
+.shell-me summary { list-style: none; cursor: pointer; display: block; width: 36px; height: 36px; border-radius: 50%; }
+.shell-me summary::-webkit-details-marker { display: none; }
+.shell-me summary img, .shell-me-fallback {
+    display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+    background: linear-gradient(135deg, var(--accent-pink, #f472b6), var(--accent-violet, #8b5cf6)); color: #fff;
+    font-weight: 700; text-transform: uppercase;
+    box-shadow: 0 0 0 2px var(--app-bg), 0 0 0 3px var(--line); transition: box-shadow var(--dur-base);
+}
+.shell-me summary:hover img, .shell-me summary:hover .shell-me-fallback { box-shadow: 0 0 0 2px var(--app-bg), 0 0 0 3px var(--accent); }
+.shell-me-pop { right: 0; }
+
+/* ── Top bar ──────────────────────────────────────────────────────────── */
+.shell-top {
+    grid-area: top; position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: var(--space-4); min-width: 0;
+    padding: 0 var(--space-2);
+    background: color-mix(in srgb, var(--app-bg) 80%, transparent);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.shell-burger { display: none; }
+.shell-brand {
+    display: inline-flex; align-items: center; gap: 8px; flex: none;
+    color: var(--text); font-weight: 800; font-size: 17px; letter-spacing: -0.02em; text-decoration: none;
+}
+.shell-brand .spark { color: var(--brand); }
+
+.shell-picker { position: relative; flex: none; }
+.shell-picker-btn {
+    list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 10px;
+    height: 40px; max-width: 260px; padding: 0 14px 0 16px;
+    border-radius: var(--radius-pill); border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+    font-weight: 700; color: var(--text);
+    transition: background var(--dur-base), border-color var(--dur-base);
+}
+.shell-picker-btn::-webkit-details-marker { display: none; }
+.shell-picker-btn:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.shell-picker[open] .shell-picker-btn { border-color: var(--accent); }
+.shell-picker-btn:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.shell-picker-btn > svg { width: 16px; height: 16px; flex: none; color: var(--text-muted); transition: transform var(--dur-base); }
+.shell-picker[open] .shell-picker-btn > svg { transform: rotate(180deg); }
+.shell-picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--success-text, #3ddc84); }
+.shell-picker .shell-pop { left: 0; }
+
+.shell-search {
+    flex: 1; min-width: 0; max-width: 520px; margin: 0 auto;
+    display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 var(--space-3) 0 var(--space-4);
+    border-radius: var(--radius-pill); border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+    color: var(--text-faint); font: inherit; font-size: 15px; text-align: left; cursor: pointer;
+    transition: background var(--dur-base), border-color var(--dur-base);
+}
+.shell-search:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.shell-search:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.shell-search svg { width: 20px; height: 20px; flex: none; color: var(--text-muted); }
+.shell-search span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-kbd {
+    display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px;
+    border-radius: 6px; border: 1px solid var(--line); background: var(--surface-3);
+    font: 600 11px/1 var(--app-font); color: var(--text-muted);
+}
+.shell-top-end { display: flex; align-items: center; gap: var(--space-2); flex: none; margin-left: auto; }
+.shell-search + .shell-top-end { margin-left: 0; }
+
+/* ── Left navigation ──────────────────────────────────────────────────── */
+.dash-sidebar {
+    grid-area: nav; position: sticky; top: var(--top-h); align-self: start;
+    display: flex; flex-direction: column; gap: var(--space-2);
+    height: calc(100dvh - var(--top-h) - var(--space-2)); min-height: 0;
+    padding: var(--space-3); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    border-radius: var(--radius-lg); border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+    view-transition-name: dash-sidebar;
+}
+.dash-nav { display: flex; flex-direction: column; gap: var(--space-1); }
+.dash-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.dash-nav-group + .dash-nav-group { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.dash-nav-heading {
+    padding: 0 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint);
+}
+.dash-nav-link {
+    position: relative; display: flex; align-items: center; gap: var(--space-3);
+    min-height: 40px; padding: 0 10px; border-radius: var(--radius-sm);
+    color: var(--text-muted); font-size: 14px; font-weight: 700; text-decoration: none;
+    transition: background var(--dur-base), color var(--dur-base);
+}
+.dash-nav-link > svg { width: 20px; height: 20px; flex: none; }
+.dash-nav-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-nav-link:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.dash-nav-link:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.dash-nav-link.active { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.dash-nav-link.active > svg { color: var(--accent); }
+.dash-nav-link.active::before {
+    content: ""; position: absolute; left: -13px; top: 50%; width: 4px; height: 20px; margin-top: -10px;
+    border-radius: 0 4px 4px 0; background: var(--accent);
+}
+.dash-nav-badge {
+    min-width: 20px; padding: 0 6px; border-radius: var(--radius-pill);
+    background: var(--accent); color: var(--accent-contrast); font-size: 11px; font-weight: 800; line-height: 20px; text-align: center;
+}
+.dash-nav-badge[hidden] { display: none; }
+.shell-nav-foot { margin-top: auto; padding-top: var(--space-3); }
+.shell-collapse { width: 100%; justify-content: flex-start; border-radius: var(--radius-sm); gap: var(--space-3); padding: 0 10px; height: 40px; font: inherit; font-weight: 700; font-size: 14px; display: flex; align-items: center; }
+.shell-collapse svg { flex: none; }
+.shell.is-collapsed .shell-collapse svg { transform: scaleX(-1); }
+
+/* Collapsed to icons: labels drop out, rows centre. */
+@media (min-width: 901px) {
+    .shell.is-collapsed .dash-nav-text, .shell.is-collapsed .dash-nav-heading, .shell.is-collapsed .shell-collapse-label { display: none; }
+    .shell.is-collapsed .dash-nav-link, .shell.is-collapsed .shell-collapse { justify-content: center; padding: 0; }
+    .shell.is-collapsed .dash-nav-badge { position: absolute; top: 2px; right: 6px; min-width: 16px; line-height: 16px; font-size: 10px; padding: 0 4px; }
+}
+
+/* ── Content ──────────────────────────────────────────────────────────── */
+.dashboard-content {
+    grid-area: main; min-width: 0; overflow-x: hidden;
+    padding: var(--space-5) var(--space-5) var(--space-6);
+}
+.dashboard-content > * { max-width: 1280px; margin-left: auto; margin-right: auto; }
+/* Overlays are direct children too, but must keep covering the whole viewport (capped, they dim a centred box). */
+.dashboard-content > .modal-overlay { max-width: none; margin: 0; }
+.dashboard-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4);
+    margin-bottom: var(--space-5); padding-bottom: 0; border-bottom: 0;
+}
+.dashboard-header > div:first-child { min-width: 0; }
+.dashboard-header h1 { margin: 0; font-family: var(--app-font); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+.dashboard-header p { margin: 4px 0 0; color: var(--text-muted); font-size: 14px; }
+.dash-h1-glyph { display: none; }
+.dashboard-header p:empty { display: none; }
+
+.shell-scrim { display: none; }
+
+/* ── Narrow screens: the nav becomes a drawer ─────────────────────────── */
+@media (max-width: 900px) {
+    .shell, .shell.is-collapsed {
+        --top-h: auto;
+        grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+        grid-template-areas: "top" "main"; gap: 0; padding: 0 var(--space-2) var(--space-4);
+    }
+    .shell-top { flex-wrap: wrap; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-1) var(--space-1); }
+    .shell-burger { display: inline-grid; }
+    .shell-brand { display: none; }
+    .shell-picker { flex: 1; min-width: 0; }
+    .shell-picker-btn { max-width: 100%; }
+    .shell-picker .shell-pop { min-width: min(300px, calc(100vw - 24px)); }
+    .shell-search { order: 5; flex-basis: 100%; max-width: none; height: 42px; margin: 0; }
+    .shell-kbd { display: none; }
+    .dash-sidebar {
+        position: fixed; z-index: 50; top: var(--space-2); bottom: var(--space-2); left: var(--space-2);
+        width: min(300px, calc(100vw - 48px)); height: auto;
+        background: var(--surface-1); box-shadow: var(--shadow-pop);
+        transform: translateX(calc(-100% - 24px)); visibility: hidden;
+        transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s 220ms;
+    }
+    .shell.is-drawer .dash-sidebar { transform: none; visibility: visible; transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+    .shell.is-drawer .shell-scrim { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(0, 0, 0, 0.5); }
+    .dash-nav-link.active::before { left: -13px; }
+    .shell-collapse { display: none; }
+    @media (scripting: none) { .dash-sidebar { position: static; transform: none; visibility: visible; width: auto; } }
+    .dashboard-content { padding: var(--space-4) var(--space-1) var(--space-6); }
+    .dashboard-header h1 { font-size: 22px; }
+}
+
+/* base.css colours every `a:not(.button)` (and its :hover at higher specificity); shell links keep their own. */
+a.dash-nav-link, a.dash-nav-link:hover { color: var(--text-muted); }
+a.dash-nav-link:hover, a.dash-nav-link.active, a.dash-nav-link.active:hover { color: var(--text); }
+a.shell-brand, a.shell-brand:hover { color: var(--text); }
+a.shell-ibtn, a.shell-ibtn:hover { color: var(--text-muted); }
+a.shell-ibtn:hover { color: var(--text); }
+.shell-pop a, .shell-pop a:hover { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+    .shell, .dash-sidebar, .shell-pop { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+.shell-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

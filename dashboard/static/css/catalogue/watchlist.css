@@ -1,0 +1,1341 @@
+/* Watchlist — watch-order pages.
+
+   Native to the Percy site: every colour and the type face come from base.css
+   tokens, so the page inherits the light/dark theme and sits on the same
+   background as every other page instead of on a slab of its own. The only
+   page-specific colour is `--wl-accent`, the universe's own, injected inline.
+
+   The structure is a **timeline rail**: entries hang off one vertical line with
+   a marker each, because what is being shown is an *order*, not a catalogue.
+   The marker carries importance (filled / ringed / hollow), so the ranking is
+   legible as a shape while scrolling and does not need a coloured edge on every
+   row.
+
+   What is taken from the reference watch-order sites is the *behaviour* — dual
+   story/release ordering, curated paths, per-entry importance, runtime
+   budgeting, in-title instructions, streaming availability — not their colours,
+   faces or markup. */
+
+.wl {
+    /* The universe's own colour, set inline per page; falls back to the site brand. */
+    --wl-accent: var(--branding);
+    --wl-rail: var(--box-border);
+    --wl-marker: 0.72rem;
+
+    color: var(--foreground);
+}
+
+.wl-page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+
+.wl-head {
+    margin-bottom: 2rem;
+}
+
+/* The universe's own key art behind the header -- absent entirely without art, so a
+   universe with none renders exactly like `.wl-head` alone. `.wl-head__backdrop` is
+   the photo layer; the scrim is `::before` on the modifier so it composites above the
+   image but stays out of `.wl-head`'s own box (a pseudo-element, not an element, so it
+   is invisible to assistive tech without an `aria-hidden` of its own). Content moves to
+   `.wl-head__content` for the stacking context. */
+.wl-head--art {
+    position: relative;
+    padding: 2rem 1.75rem;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.wl-head__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.55;
+}
+
+/* The scrim is `var(--background)` itself -- the page's own background token, not a
+   new colour -- so wherever it reaches full strength the heading sits on exactly the
+   contrast it has everywhere else on the page, in both themes, regardless of what the
+   photo underneath looks like. It is closest to full strength on the text side and
+   fades toward the far edge, so the art still reads as art. */
+.wl-head--art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        100deg,
+        var(--background) 0%,
+        color-mix(in srgb, var(--background) 82%, transparent) 55%,
+        color-mix(in srgb, var(--background) 58%, transparent) 100%
+    );
+}
+
+.wl-head__content {
+    position: relative;
+    z-index: 2;
+}
+
+.wl-head__eyebrow {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--wl-accent);
+}
+
+.wl-head__title {
+    margin: 0;
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.wl-head__lede {
+    margin: 0.75rem 0 0;
+    max-width: 68ch;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+/* ── Figures ─────────────────────────────────────────────────────────
+   One inline run rather than a row of boxes: these are supporting numbers, and
+   five bordered tiles would outweigh the list they describe. */
+
+.wl-figures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.75rem;
+    margin: 1.5rem 0 0;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--box-border);
+}
+
+.wl-figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.wl-figure__value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
+.wl-figure__label {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* ── Controls ────────────────────────────────────────────────────────
+   Underlined tabs, not filled pills: the page spends its one strong colour on
+   the accent, and a filled control would compete with the markers. */
+
+.wl-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.75rem;
+    margin: 2rem 0 1.5rem;
+}
+
+.wl-switch {
+    display: flex;
+    gap: 1rem;
+    align-items: baseline;
+}
+
+.wl-switch__label {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.wl .wl-switch__option {
+    padding-bottom: 0.2rem;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.wl .wl-switch__option:hover {
+    color: var(--foreground);
+}
+
+.wl .wl-switch__option[aria-current='true'] {
+    border-bottom-color: var(--wl-accent);
+    color: var(--foreground);
+    font-weight: 600;
+}
+
+/* ── Era sections ────────────────────────────────────────────────── */
+
+.wl-era {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 2.5rem 0 1rem;
+}
+
+.wl-era__title {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.wl-era__count {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* The rule takes whatever space is left, so an era reads as a chapter break. */
+.wl-era__rule {
+    flex: 1;
+    height: 1px;
+    background: var(--box-border);
+}
+
+/* ── The rail ────────────────────────────────────────────────────────
+   One continuous line down the left, drawn on the list rather than per row so
+   it does not break between entries. */
+
+.wl-entries {
+    position: relative;
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 1.75rem;
+}
+
+.wl-entries::before {
+    content: '';
+    position: absolute;
+    top: 0.35rem;
+    bottom: 0.35rem;
+    left: calc(var(--wl-marker) / 2);
+    width: 1px;
+    background: var(--wl-rail);
+}
+
+.wl-entry {
+    position: relative;
+    display: grid;
+    /* poster (or its placeholder) | content | tags/toggle -- the rail marker below sits
+       in `.wl-entries`' own left padding, so adding this column does not move it. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.75rem 1rem;
+    padding: 0.85rem 0;
+}
+
+.wl-entry + .wl-entry {
+    border-top: 1px solid var(--box-border);
+}
+
+/* ── Markers ─────────────────────────────────────────────────────────
+   Importance as a shape, not a colour: filled = essential, ringed =
+   recommended, hollow = optional. That survives greyscale and colour blindness,
+   which a red/amber/grey badge set does not. */
+
+.wl-entry::before {
+    content: '';
+    position: absolute;
+    top: 1.15rem;
+    left: calc(-1.75rem + var(--wl-marker) / 2);
+    width: var(--wl-marker);
+    height: var(--wl-marker);
+    margin-left: calc(var(--wl-marker) / -2);
+    border: 2px solid var(--wl-rail);
+    border-radius: 50%;
+    background: var(--background);
+}
+
+.wl-entry--essential::before {
+    border-color: var(--wl-accent);
+    background: var(--wl-accent);
+}
+
+.wl-entry--recommended::before {
+    border-color: var(--wl-accent);
+}
+
+.wl-entry--milestone::before {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wl-accent) 22%, transparent);
+}
+
+/* ── Series headers ──────────────────────────────────────────────────
+   A show `V45` exploded into per-season entries keeps its row, but as a *header* for the
+   seasons under it: not watchable, not counted, no toggle and no number (see
+   `container_ids`). So it drops the importance marker -- a dot on a row Percy's "N
+   essential" figure never counted would claim a rank the header does not have -- and
+   loses the divider above the season it introduces, which is what visually binds the
+   group without indenting anything. */
+
+.wl-entry--series::before {
+    content: none;
+}
+
+.wl-entry--series {
+    padding-bottom: 0.35rem;
+}
+
+.wl-entry--series + .wl-entry {
+    border-top: 0;
+}
+
+/* Scoped through `.wl` to outrank the shared `.wl .wl-entry__title` weight below. */
+.wl .wl-entry--series .wl-entry__title {
+    font-weight: 700;
+}
+
+/* ── Entry content ───────────────────────────────────────────────── */
+
+.wl-entry__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.wl-entry__index {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}
+
+.wl .wl-entry__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--foreground);
+    text-decoration: none;
+}
+
+.wl .wl-entry__title:hover {
+    color: var(--wl-accent);
+}
+
+.wl-entry__year {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.wl-entry__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.3rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.wl-entry__meta > * + *::before {
+    content: '·';
+    margin-right: 0.6rem;
+}
+
+/* The instruction is the one meta item that changes what you do next, so it is
+   the only one allowed to take the foreground colour. */
+.wl-entry__instruction {
+    color: var(--foreground);
+}
+
+.wl-entry__side {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* ── Tags ────────────────────────────────────────────────────────────
+   Text-weight labels rather than filled chips: the marker already carries rank. */
+
+.wl-tag {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.wl-tag--rank {
+    color: var(--wl-accent);
+}
+
+.wl-tag--milestone {
+    padding: 0.05rem 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--wl-accent) 40%, transparent);
+    border-radius: 3px;
+    color: var(--wl-accent);
+}
+
+.wl-tag--kind {
+    padding: 0.05rem 0.35rem;
+    border: 1px solid var(--box-border);
+    border-radius: 3px;
+}
+
+/* Sits in the index column of a series header, where an entry's number would be. */
+.wl-tag--series {
+    color: var(--wl-accent);
+}
+
+/* ── Streaming ───────────────────────────────────────────────────── */
+
+.wl-providers {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.wl-providers img {
+    width: 1.35rem;
+    height: 1.35rem;
+    object-fit: cover;
+    border-radius: 4px;
+    opacity: 0.85;
+}
+
+.wl-entry:hover .wl-providers img {
+    opacity: 1;
+}
+
+/* ── Universe cards (index) ──────────────────────────────────────── */
+
+.wl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.wl .wl-card {
+    display: block;
+    padding: 1.25rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s ease;
+}
+
+.wl .wl-card:hover,
+.wl .wl-card:focus-visible {
+    border-color: var(--wl-accent);
+}
+
+/* The universe's key art behind its card, on exactly the terms `.wl-head--art` uses on the
+   order page: a modifier that is only present when there *is* art, so a universe with none
+   renders the plain card above -- no reserved band, no empty box. The scrim is the page's own
+   `--background` token, so the heading keeps the contrast it has everywhere else in either
+   theme, whatever the photo underneath looks like. */
+.wl .wl-card--art {
+    position: relative;
+    overflow: hidden;
+}
+
+.wl-card__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.5;
+}
+
+.wl-card--art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--background) 72%, transparent) 0%,
+        var(--background) 72%
+    );
+}
+
+.wl-card__content {
+    position: relative;
+    z-index: 2;
+}
+
+.wl-card__name {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* A wordmark arrives at whatever size TMDB holds and in whatever single colour the studio
+   chose -- often white, which would vanish against the light theme's scrim. The drop shadow
+   is `--foreground`, the one colour guaranteed to contrast with `--background` in both
+   themes, so the mark stays legible either way without a second palette. */
+.wl-card__logo {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(100%, 220px);
+    max-height: 2.75rem;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--foreground) 40%, transparent));
+}
+
+.wl-card__tagline {
+    margin: 0.5rem 0 1rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+
+.wl-card__figures {
+    display: flex;
+    gap: 1.5rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--box-border);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+
+.wl-empty {
+    margin-top: 2rem;
+    padding: 3rem 1.5rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+/* ── Attribution (required wherever TMDB data is shown) ──────────── */
+
+
+
+/* ── Responsive / motion ─────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .wl-entry {
+        /* Poster stays beside the title; the side row (tags/toggle) drops to a full-width
+           row beneath rather than fighting the title for a third narrow column. */
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .wl-entry__side {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+
+    .wl-controls {
+        gap: 1rem;
+    }
+
+    .wl-head--art {
+        padding: 1.5rem 1.25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wl .wl-card {
+        transition: none;
+    }
+}
+
+/* ── Person page ─────────────────────────────────────────────────────
+   A filmography row builds on the shared `.wl-entry` shape; only the
+   portrait header below and the poster column here are new. That poster
+   rule (`.wl-person-entry__poster`) is in turn reused as-is by the
+   watch-order row (see watch_order.html), so a filmography and a universe
+   order share one poster look rather than two. The importance marker is
+   switched off here — a credit has no importance, and an inherited dot
+   would read as one. */
+
+.wl-person {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.wl-person__photo {
+    width: 120px;
+    height: 180px;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--box-shade);
+}
+
+.wl-person__photo--placeholder {
+    display: block;
+}
+
+.wl-person-entry {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
+.wl-person-entry::before {
+    content: none;
+}
+
+.wl-person-entry__poster {
+    width: 60px;
+    height: 90px;
+    border: 1px solid var(--box-border);
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--box-shade);
+}
+
+.wl-person-entry__poster--placeholder {
+    display: block;
+}
+
+.wl-person-entry__role {
+    color: var(--foreground);
+}
+
+.wl-person-entry__universe {
+    color: var(--wl-accent);
+    text-decoration: none;
+}
+
+.wl-person-entry__universe:hover {
+    text-decoration: underline;
+}
+
+/* The character a cast row's title is credited under -- muted, since the film title and
+   the role noun above it already carry the visual weight of the row. */
+.wl-person-entry__character {
+    color: var(--text-muted);
+}
+
+/* The universes a person spans, listed in the header as links rather than left as the
+   bare figure count below -- same inline "· "-separated run as `.wl-entry__meta`. */
+.wl-person__universes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.6rem 0 0;
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+.wl-person__universes > * + *::before {
+    content: '·';
+    margin-right: 0.6rem;
+    color: var(--text-muted);
+}
+
+.wl-person__universe {
+    color: var(--wl-accent);
+    text-decoration: none;
+}
+
+.wl-person__universe:hover {
+    text-decoration: underline;
+}
+
+/* The TMDB attribution link §9 requires on any page showing TMDB data. */
+.wl-person__tmdb {
+    margin: 0.75rem 0 0;
+    font-size: 0.72rem;
+}
+
+.wl-person__tmdb a {
+    color: var(--text-muted);
+}
+
+.wl-person__tmdb a:hover {
+    color: var(--foreground);
+}
+
+@media (max-width: 640px) {
+    .wl-person {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+    }
+}
+
+/* ── Related news (§6.2's 6b, reusing the row markup comic_detail.html shares
+   through templates/news_strip.html) ──────────────────────────────────── */
+
+/* The section's own separator is `.nx-related.nx-related--trailing` in `news.css` —
+   the same rule `comic_detail.html` uses, mirrored to the other border side, so it is
+   not duplicated here. Only the heading style below is specific to this page. */
+
+.wl-person__news-title {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* ── Title detail page (/watchlist/:universe/:slug) ───────────────────
+   The same layered contrast steps the comic detail page uses — page
+   background, then `--box` panels, then `--box-shade` wells — reusing the
+   `wl-*` type scale, tags and rail vocabulary above rather than inventing a
+   second one. The only per-page colour is still `--wl-accent`; the highlight
+   colours are the shared semantic tokens (`--warning-*` for the curator's
+   instruction, `--info-*` for the spoiler well), never a new palette. */
+
+.wl-detail-hero {
+    position: relative;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+/* Decorative band: it sits behind the head, faded, and is never the meaning. */
+.wl-detail-hero__backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+    opacity: 0.14;
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 92%);
+}
+
+.wl-detail-hero__body {
+    position: relative;
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    padding: 1.25rem 0 0;
+}
+
+.wl-detail-hero__poster {
+    flex: none;
+    width: 200px;
+    height: 300px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-detail-hero__poster--placeholder {
+    display: block;
+}
+
+.wl-detail-hero__text {
+    flex: 1;
+    min-width: 0;
+}
+
+.wl .wl-detail-hero__universe {
+    color: inherit;
+    text-decoration: none;
+}
+
+.wl .wl-detail-hero__universe:hover {
+    text-decoration: underline;
+}
+
+.wl-detail-hero__year {
+    margin-left: 0.5rem;
+    font-size: 0.6em;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+/* ── Action row ──────────────────────────────────────────────────── */
+
+.wl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+}
+
+.wl .wl-action {
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--wl-accent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--wl-accent) 12%, transparent);
+    color: var(--foreground);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform 0.13s ease, background-color 0.13s ease;
+}
+
+.wl .wl-action:hover,
+.wl .wl-action:focus-visible {
+    background: color-mix(in srgb, var(--wl-accent) 22%, transparent);
+    transform: translateY(-1px);
+}
+
+.wl .wl-action--quiet {
+    border-color: var(--box-border);
+    background: var(--box);
+    font-weight: 500;
+}
+
+/* ── Fact panel ──────────────────────────────────────────────────── */
+
+.wl-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    margin: 0 0 1.75rem;
+    padding: 0.25rem 0;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-facts__row {
+    padding: 0.75rem 1.1rem;
+}
+
+.wl-facts__row dt {
+    margin: 0 0 0.2rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.wl-facts__row dd {
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.wl-facts__aside {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+
+.wl-section__title {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* The TMDB attribution link §9 requires, on the same terms `.wl-person__tmdb` states it:
+   quiet, under the facts it attributes, never competing with our own marks. */
+.wl-facts__tmdb {
+    margin: -0.5rem 0 1.5rem;
+    font-size: 0.72rem;
+}
+
+.wl-facts__tmdb a {
+    color: var(--text-muted);
+}
+
+.wl-facts__tmdb a:hover {
+    color: var(--foreground);
+}
+
+.wl-fits,
+.wl-seasons,
+.wl-watch,
+.wl-credits,
+.wl-related-news,
+.wl-trailer,
+.wl-synopsis {
+    padding-bottom: 1.75rem;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+/* ── Where it fits — the page's reason to exist, so it gets the weight ── */
+
+.wl-fits__rail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+}
+
+.wl-fits__position {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--wl-accent);
+}
+
+.wl-fits__of {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.wl .wl-fits__order {
+    margin-left: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.wl .wl-fits__order:hover {
+    color: var(--foreground);
+    border-bottom-color: var(--wl-accent);
+}
+
+.wl-fits__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0 0 0.75rem;
+}
+
+/* The one line that changes what you do while watching. */
+.wl-fits__instruction {
+    margin: 0 0 0.85rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: 6px;
+    color: var(--warning-text);
+    font-size: 0.85rem;
+}
+
+.wl-fits__credits-of {
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.wl .wl-fits__credits-of a {
+    color: var(--wl-accent);
+}
+
+.wl-neighbours {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.wl .wl-neighbour {
+    display: block;
+    padding: 0.85rem 1rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.13s ease, transform 0.13s ease;
+}
+
+.wl .wl-neighbour:hover,
+.wl .wl-neighbour:focus-visible {
+    border-color: var(--wl-accent);
+    transform: translateY(-1px);
+}
+
+.wl-neighbour--next {
+    text-align: right;
+}
+
+.wl-neighbour__dir {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--wl-accent);
+}
+
+.wl-neighbour__title {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.wl-neighbour__year {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* ── Seasons ─────────────────────────────────────────────────
+   Only a series container renders these: they are the entries it heads, so each carries the
+   watched control the heading itself does not. Deliberately a list rather than the cast's
+   card grid -- a season is read left to right (which one, how long, watched) and the toggle
+   has to sit at the end of that line, not under a poster. */
+
+.wl-seasonlist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-season {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-season__poster {
+    flex: none;
+    width: 46px;
+    height: 69px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border-radius: 4px;
+}
+
+/* Takes the free space so the toggle sits flush right on every row, whatever the label. */
+.wl-season__text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    gap: 0.15rem;
+}
+
+.wl .wl-season__name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--foreground);
+    text-decoration: none;
+}
+
+.wl .wl-season__name:hover {
+    color: var(--wl-accent);
+}
+
+.wl-season__meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+
+/* ── Streaming ───────────────────────────────────────────────────── */
+
+.wl-region {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.wl-region__label {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.wl-region__select,
+.wl-region__submit {
+    padding: 0.3rem 0.6rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 0.82rem;
+}
+
+.wl-region__submit {
+    cursor: pointer;
+}
+
+.wl-region__submit:hover {
+    border-color: var(--wl-accent);
+}
+
+.wl-offer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+}
+
+.wl-offer + .wl-offer {
+    border-top: 1px solid var(--box-border);
+}
+
+.wl-offer__label {
+    min-width: 5rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--wl-accent);
+}
+
+.wl-offer__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-offer__item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+
+.wl-offer__item img {
+    width: 1.15rem;
+    height: 1.15rem;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.wl-watch__none,
+.wl-watch__source {
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* ── Cast & crew ─────────────────────────────────────────────────── */
+
+.wl-people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-person-chip {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+
+.wl-person-chip__role {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.wl-cast {
+    margin-top: 1.5rem;
+}
+
+.wl-cast__summary {
+    margin: 0 0 0.75rem;
+    cursor: pointer;
+}
+
+.wl-cast__count {
+    margin-left: 0.4rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.wl-people--cards {
+    gap: 0.85rem;
+}
+
+.wl-castcard {
+    display: flex;
+    flex-direction: column;
+    width: 88px;
+}
+
+.wl-castcard__photo {
+    width: 88px;
+    height: 132px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+}
+
+.wl-castcard__photo--placeholder {
+    display: block;
+}
+
+.wl .wl-castcard__name {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--foreground);
+    text-decoration: none;
+}
+
+.wl .wl-castcard__name:hover {
+    color: var(--wl-accent);
+}
+
+.wl-castcard__role {
+    font-size: 0.72rem;
+    line-height: 1.3;
+    color: var(--text-muted);
+}
+
+/* ── Trailer ─────────────────────────────────────────────────────────
+   The play control is a real link; `trailer.js` swaps it for the iframe on
+   click. Both occupy the same 16:9 well, so the swap costs no layout shift. */
+
+.wl .wl-trailer__play {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    aspect-ratio: 16 / 9;
+    max-width: 720px;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 10px;
+    color: var(--foreground);
+    text-decoration: none;
+    transition: border-color 0.13s ease, transform 0.13s ease;
+}
+
+.wl .wl-trailer__play:hover,
+.wl .wl-trailer__play:focus-visible {
+    border-color: var(--wl-accent);
+    transform: scale(1.005);
+}
+
+.wl-trailer__icon {
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--wl-accent);
+}
+
+.wl-trailer__label {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.wl-trailer__site {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.wl-trailer__frame {
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    max-width: 720px;
+    border: 1px solid var(--box-border);
+    border-radius: 10px;
+}
+
+/* ── Spoilers ────────────────────────────────────────────────────── */
+
+.wl-spoiler {
+    margin-bottom: 1.75rem;
+    padding: 0.85rem 1rem;
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: 8px;
+}
+
+.wl-spoiler__summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--info-text);
+}
+
+.wl-spoiler__body {
+    margin: 0.75rem 0 0;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+/* ── Synopsis ────────────────────────────────────────────────────── */
+
+.wl-synopsis p {
+    margin: 0;
+    max-width: 72ch;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+}
+
+/* The attribution partial is shared with the comic pages, which name it `cx-`;
+   the watch-order pages load only this sheet, so it has to be styled here too
+   or TMDB's mandatory notice renders unstyled. */
+.cx-attribution {
+    margin-top: 3.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--box-border);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+    .wl-detail-hero__body {
+        flex-direction: column;
+    }
+
+    .wl-detail-hero__poster {
+        width: 140px;
+        height: 210px;
+    }
+
+    .wl-neighbour--next {
+        text-align: left;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wl .wl-action,
+    .wl .wl-neighbour,
+    .wl .wl-trailer__play {
+        transition: none;
+    }
+
+    .wl .wl-action:hover,
+    .wl .wl-neighbour:hover,
+    .wl .wl-trailer__play:hover,
+    .wl .wl-action:focus-visible,
+    .wl .wl-neighbour:focus-visible,
+    .wl .wl-trailer__play:focus-visible {
+        transform: none;
+    }
+}

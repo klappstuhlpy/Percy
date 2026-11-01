@@ -1,0 +1,175 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_css %}<link rel="stylesheet" href="/static/css/guild/notifications.css" type="text/css"/>{% endblock %}
+
+{% block page_subtitle %}<p>What needs attention on this server, and moderator requests waiting for a decision.</p>{% endblock %}
+
+{% block content %}
+
+{% if !notice.is_empty() %}
+<p class="notif-notice {% if notice_ok %}notif-notice-ok{% else %}notif-notice-err{% endif %}" role="status">{{ notice }}</p>
+{% endif %}
+
+<nav class="tabs notif-tabs" id="notif-tabs" aria-label="Notifications sections">
+    <a class="tab" href="#feed" data-tab="feed">Feed</a>
+    <a class="tab" href="#requests" data-tab="requests">Requests</a>
+    <a class="tab" href="#changes" data-tab="changes">Change log</a>
+    <a class="tab" href="#request-settings" data-tab="request-settings">Settings</a>
+</nav>
+
+<section class="config-section" id="feed" data-pane="feed" data-newest-id="{{ newest_id }}" data-unread="{{ unread }}">
+    <h2>Feed{% if unread > 0 %} <span class="badge badge-info">{{ unread }} new</span>{% endif %}</h2>
+    {% if feed.is_empty() %}
+    <p class="config-section-description">Nothing yet. Missing permissions, failed jobs and other things worth knowing show up here.</p>
+    {% else %}
+    <ul class="notif-list">
+        {% for row in feed %}
+        <li class="notif-item notif-{{ row.n.severity }}{% if row.n.unread %} notif-unread{% endif %}">
+            <span class="notif-sev" aria-hidden="true">{% if row.n.severity == "critical" %}&#10006;{% else if row.n.severity == "warning" %}&#9888;{% else %}&#9432;{% endif %}</span>
+            <div class="notif-main">
+                <div class="notif-title">
+                    {% if row.n.unread %}<span class="notif-dot" title="Unread"></span>{% endif %}
+                    {{ row.n.title }}
+                    {% if row.n.global %}<span class="badge badge-muted">global</span>{% endif %}
+                </div>
+                {% if !row.n.body.is_empty() %}<div class="notif-body">{{ row.n.body }}</div>{% endif %}
+                {% if let Some(link) = row.link %}<a class="notif-link" href="{{ link }}">Open</a>{% endif %}
+            </div>
+            <time class="notif-time" datetime="{{ row.n.created_at }}">{{ row.when }}</time>
+        </li>
+        {% endfor %}
+    </ul>
+    {% if unread > 0 %}
+    <form method="post" action="/dashboard/guild/{{ guild_id }}/notifications/read" id="notif-read-form">
+        <input type="hidden" name="up_to_id" value="{{ newest_id }}">
+        <button type="submit" class="button small">Mark all read</button>
+    </form>
+    {% endif %}
+    {% endif %}
+</section>
+
+<section class="config-section" id="recent-moderation" data-pane="feed">
+    <h2>Recent moderation</h2>
+    <p class="config-section-description">The last 7 days. <a href="/dashboard/guild/{{ guild_id }}/members">Open members</a> for the full case history.</p>
+    {% if cases.is_empty() %}
+    <p class="config-section-description">No moderation cases this week.</p>
+    {% else %}
+    <div class="data-table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Action</th><th>Member</th><th>Moderator</th><th>When</th></tr></thead>
+            <tbody>
+                {% for c in cases %}
+                <tr><td>{{ c.action }}</td><td>{{ c.target }}</td><td>{{ c.moderator }}</td><td>{{ c.when }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+
+<section class="config-section" id="requests" data-pane="requests">
+    <h2>Action requests{% if !pending.is_empty() %} <span class="badge badge-info">{{ pending.len() }} pending</span>{% endif %}</h2>
+    <p class="config-section-description">Moderators who cannot act themselves ask here. Approving carries the action out as you.</p>
+    {% if pending.is_empty() %}
+    <p class="config-section-description">No requests are waiting.</p>
+    {% else %}
+    <div class="notif-requests">
+        {% for row in pending %}
+        <form method="post" action="/dashboard/guild/{{ guild_id }}/requests/{{ row.r.id }}/decide" class="notif-request" data-action="{{ row.r.action }}" data-target="{{ row.target }}" data-destructive="{{ row.destructive }}">
+            <div class="notif-request-head">
+                <strong>{{ row.requester }}</strong> asks to <span class="badge badge-danger">{{ row.r.action }}</span> <strong>{{ row.target }}</strong>
+                {% if let Some(d) = row.duration %}for {{ d }}{% endif %}
+            </div>
+            <div class="notif-body">{% if row.r.reason.is_empty() %}No reason given.{% else %}{{ row.r.reason }}{% endif %}</div>
+            <div class="notif-meta">Requested <time datetime="{{ row.r.created_at }}">{{ row.created }}</time> &middot; expires <time datetime="{{ row.r.expires_at }}">{{ row.expires }}</time></div>
+            <input type="text" name="note" class="config-input" maxlength="300" placeholder="Note to the requester (optional)" aria-label="Note to the requester">
+            {% if row.destructive %}<label class="notif-confirm"><input type="checkbox" name="confirm" value="1" required> I confirm this {{ row.r.action }}</label>{% endif %}
+            <div class="notif-request-actions">
+                <button type="submit" name="decision" value="approve" class="button primary small">Approve</button>
+                <button type="submit" name="decision" value="deny" formnovalidate class="button small">Deny</button>
+            </div>
+        </form>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3 class="notif-sub">History</h3>
+    {% if history.is_empty() %}
+    <p class="config-section-description">Decided and expired requests will be listed here.</p>
+    {% else %}
+    <ul class="notif-list">
+        {% for row in history %}
+        <li class="notif-item">
+            <div class="notif-main">
+                <div class="notif-title">{{ row.requester }} &rarr; {{ row.r.action }} &rarr; {{ row.target }}
+                    <span class="badge notif-status notif-status-{{ row.r.status }}">{{ row.r.status }}</span></div>
+                {% if let Some(by) = row.r.decided_by_name %}<div class="notif-meta">Decided by {{ by }}{% if let Some(note) = row.r.decision_note %} &mdash; {{ note }}{% endif %}</div>{% endif %}
+                {% if let Some(result) = row.r.result %}<div class="notif-meta">{{ result }}</div>{% endif %}
+            </div>
+            <time class="notif-time" datetime="{{ row.r.created_at }}">{{ row.created }}</time>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
+<section class="config-section" id="changes" data-pane="changes">
+    <h2>Change log</h2>
+    <p class="config-section-description">Every change made to this server on the dashboard: who, what and when. Kept for {{ retention_days }} days.</p>
+    {% if changes.is_empty() %}
+    <p class="config-section-description">No changes in the last {{ retention_days }} days. Saved settings and actions taken here will show up in this list.</p>
+    {% else %}
+    <div class="data-table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr><th>When</th><th>Who</th><th>What</th><th>Fields</th></tr>
+            </thead>
+            <tbody>
+                {% for c in changes %}
+                <tr>
+                    <td><time class="js-ts" datetime="{{ c.created_at }}">{{ c.created_at }}</time></td>
+                    <td>{{ c.actor_name }}</td>
+                    <td>{{ c.verb }} {{ c.surface }}</td>
+                    <td class="text-muted">{% if c.fields.is_empty() %}&mdash;{% else %}{{ c.fields }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    <p class="config-description">Only the names of changed fields are kept, never their values. Changes made with commands in Discord are not listed here.</p>
+</section>
+
+<section class="config-section" id="request-settings" data-pane="request-settings">
+    <h2>Request settings</h2>
+    <p class="config-section-description">Requests are posted with Approve and Deny buttons in the channel below. Members with the Manage Messages permission can always file one; the roles you pick here can too.</p>
+    {% if !settings_ok %}<p class="notif-notice notif-notice-err" role="status">Couldn't load these settings, so they are disabled. Reload the page to try again.</p>{% endif %}
+    <form {% if settings_ok %}id="request-settings-form"{% endif %}>
+        <fieldset class="notif-settings-fields" {% if !settings_ok %}disabled{% endif %}>
+        <div class="config-grid">
+            <div class="config-field">
+                <label class="config-label" for="rq-channel">Request channel</label>
+                <span class="config-description">Where new requests are announced</span>
+                <select id="rq-channel" name="channel_id" class="config-select" data-needs="post">
+                    <option value="">None</option>
+                    {% for ch in channels %}<option value="{{ ch.id }}" {% if ch.id == selected_channel %}selected{% endif %}>#{{ ch.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="rq-roles-filter">Requester roles</label>
+                <span class="config-description">Members with any ticked role can file requests</span>
+                <input type="search" id="rq-roles-filter" class="config-input" placeholder="Filter roles" autocomplete="off" hidden>
+                <div class="rq-roles" id="rq-roles">
+                    {% for r in roles %}<label class="rq-role"><input type="checkbox" name="rq_role_{{ r.id }}" value="{{ r.id }}" data-role {% if selected_roles.contains(r.id) %}checked{% endif %}> <span>{{ r.name }}</span></label>{% endfor %}
+                </div>
+            </div>
+        </div>
+        </fieldset>
+    </form>
+</section>
+
+{% endblock %}
+
+{% block page_js %}
+<script src="/static/js/guild/notifications.js"></script>
+{% endblock %}

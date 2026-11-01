@@ -1,0 +1,144 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>View and manage server members, roles, and moderation.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/guild/members.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Browse the server's <strong>members</strong>, manage their roles, and take moderation actions. Every kick, ban and role change is proxied through Percy and recorded as a modlog case.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Click a member to open their full profile and history</li>
+                <li>Select rows to apply a bulk action to many members at once</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="members-toolbar">
+        <input type="text" id="member-search" class="config-input search-input" placeholder="Search members...">
+        <span class="members-count" id="member-count">{{ members.len() }} loaded</span>
+    </div>
+
+    {# ─── Bulk Action Toolbar ─────────────────────────────────────── #}
+    <div class="bulk-toolbar" id="bulk-toolbar" hidden>
+        <span class="bulk-count"><strong id="bulk-selected-count">0</strong> selected</span>
+        <button class="button small" data-bulk="warn">Warn</button>
+        <button class="button small" data-bulk="timeout">Timeout</button>
+        <button class="button small" data-bulk="kick">Kick</button>
+        <button class="button small danger" data-bulk="softban">Softban</button>
+        <button class="button small danger" data-bulk="ban">Ban</button>
+        <button class="button small" id="bulk-deselect">Deselect All</button>
+    </div>
+
+    <div class="members-table-wrap">
+        <table class="members-table sortable" id="members-table">
+            <thead>
+                <tr>
+                    <th class="col-check"><input type="checkbox" id="bulk-select-all" title="Select all"></th>
+                    <th data-sort="text">Member</th>
+                    <th data-sort="date">Joined</th>
+                    <th>Roles</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="members-tbody">
+                {% for member in members %}
+                <tr data-user-id="{{ member.id }}" data-name="{{ member.display_name|lower }}" data-bot="{{ member.bot }}">
+                    <td><input type="checkbox" class="bulk-check" data-user-id="{{ member.id }}" {% if member.bot %}disabled{% endif %}></td>
+                    <td>
+                        <a class="member-cell" href="/dashboard/guild/{{ guild_id }}/members/{{ member.id }}">
+                            <img class="member-avatar" src="{{ crate::templates::cdn_sized(member.avatar_url, 64) }}" alt="" width="36" height="36">
+                            <div class="member-info">
+                                <span class="member-name">{{ member.display_name }}</span>
+                                <span class="member-username">{{ member.name }}{% if member.bot %} <span class="badge">BOT</span>{% endif %}</span>
+                            </div>
+                        </a>
+                    </td>
+                    <td class="member-joined"><time class="js-ts">{{ member.joined_at.as_deref().unwrap_or("—") }}</time></td>
+                    <td>
+                        <div class="member-roles">
+                            {% for role_id in member.roles %}
+                            <span class="role-chip" data-role-id="{{ role_id }}">{{ role_id }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="member-actions">
+                            {% if !member.bot %}
+                            <button class="button small member-menu-btn" data-user-id="{{ member.id }}" data-name="{{ member.display_name }}" aria-haspopup="true" aria-expanded="false">Manage &#9662;</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="members-pagination">
+        <button id="load-more" class="button small">Load more</button>
+    </div>
+
+    {# -- Action confirmation modal (fields shown per action by members.js) -- #}
+    <div class="modal-overlay" id="action-modal" hidden>
+        <div class="modal-card">
+            <h3 id="modal-title">Confirm Action</h3>
+            <p id="modal-description"></p>
+
+            <div class="config-field mt-md" id="modal-duration-field" hidden>
+                <label class="config-label" for="modal-duration">Duration</label>
+                <select id="modal-duration" class="config-input">
+                    <option value="60">1 minute</option>
+                    <option value="300">5 minutes</option>
+                    <option value="600">10 minutes</option>
+                    <option value="3600" selected>1 hour</option>
+                    <option value="21600">6 hours</option>
+                    <option value="86400">1 day</option>
+                    <option value="604800">1 week</option>
+                    <option value="2419200">4 weeks (max)</option>
+                    <option value="" id="modal-duration-forever" hidden>Indefinite</option>
+                </select>
+            </div>
+
+            <div class="config-field mt-md" id="modal-purge-field" hidden>
+                <label class="config-label" for="modal-purge-days">Delete message history</label>
+                <select id="modal-purge-days" class="config-input">
+                    <option value="0" selected>Don't delete any</option>
+                    <option value="1">Last 24 hours</option>
+                    <option value="3">Last 3 days</option>
+                    <option value="7">Last 7 days</option>
+                </select>
+            </div>
+
+            <div class="config-field mt-md" id="modal-limit-field" hidden>
+                <label class="config-label" for="modal-limit">Messages to delete</label>
+                <input type="number" id="modal-limit" class="config-input" min="1" max="500" value="100">
+                <span class="config-description">Scans the most recently active channels for this member's messages. Discord cannot bulk-delete messages older than 14 days.</span>
+            </div>
+
+            <div class="config-field mt-md mb-md">
+                <label class="config-label" for="modal-reason">Reason (optional)</label>
+                <input type="text" id="modal-reason" class="config-input" placeholder="Moderation reason...">
+            </div>
+            <div class="modal-actions">
+                <button class="button small" id="modal-cancel">Cancel</button>
+                <button class="button small danger" id="modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+const GUILD_ID = '{{ guild_id }}';
+const ROLES = [{% for role in roles %}{ id: '{{ role.id }}', name: '{{ role.name }}', color: {{ role.color }} },{% endfor %}];
+const MUTE_ROLE_CONFIGURED = {{ mute_role_configured }};
+</script>
+<script src="/static/js/guild/members.js"></script>
+{% endblock %}

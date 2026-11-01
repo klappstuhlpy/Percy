@@ -1,0 +1,191 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_news_active %} active{% endblock %}
+
+{% block title %}News | Percy{% endblock %}
+
+{% block meta_description %}Comic and film/TV news from official publisher and studio feeds — headlines, sources and links to the original stories, filterable by what you follow.{% endblock %}
+{% block og_title %}News — Percy{% endblock %}
+{% block og_description %}Comic and film/TV news, headline and source, linking to the original story.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/news{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/catalogue/comics.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/news.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/app.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx nx">
+    <div class="cx-page">
+        <header class="cx-head">
+            <span class="cx-head__eyebrow">News</span>
+            <h1 class="cx-head__title">What's being said</h1>
+            <p class="cx-head__lede">
+                Comics and film &amp; TV, from the publishers' and studios' own feeds. Every story is a
+                headline and a link to the original — follow a series, a universe or a person and the
+                ones about them lead this list.
+            </p>
+        </header>
+
+        {# A plain GET form: one submit, no JS, and the browser keeps the chosen filters in
+           the URL so the page is linkable and back works. #}
+        <form class="nx-filters" method="get" action="/news">
+            {# The subject pair rides along as hidden fields, so searching inside a subject
+               keeps the subject. `subject_value` is Percy's opaque key and travels verbatim —
+               posting the human label would filter on something that was never stored. #}
+            {% match subject_type %}
+            {% when Some with (value) %}
+            <input type="hidden" name="subject_type" value="{{ value }}">
+            {% when None %}
+            {% endmatch %}
+            {% match subject_value %}
+            {% when Some with (value) %}
+            <input type="hidden" name="subject_value" value="{{ value }}">
+            {% when None %}
+            {% endmatch %}
+
+            <label class="nx-field">
+                <span class="nx-field__label">Catalogue</span>
+                <select name="media">
+                    <option value=""{% if media.is_empty() %} selected{% endif %}>All</option>
+                    <option value="comic"{% if media == "comic" %} selected{% endif %}>Comics</option>
+                    <option value="title"{% if media == "title" %} selected{% endif %}>Film &amp; TV</option>
+                </select>
+            </label>
+
+            {% if !sources.is_empty() %}
+            <label class="nx-field">
+                <span class="nx-field__label">Source</span>
+                <select name="source">
+                    <option value=""{% if source.is_empty() %} selected{% endif %}>All</option>
+                    {% for option in sources %}
+                    <option value="{{ option.slug }}"{% if option.selected %} selected{% endif %}>{{ option.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            {% endif %}
+
+            <label class="nx-field nx-field--grow">
+                <span class="nx-field__label">Search</span>
+                <input type="search" name="search" value="{{ search }}" placeholder="Search headlines…">
+            </label>
+
+            <button type="submit" class="nx-filters__submit">Filter</button>
+        </form>
+
+        {% match subject_value %}
+        {% when Some with (value) %}
+        <p class="nx-subject">
+            Tagged <strong>{{ value }}</strong>
+            <a class="nx-subject__clear" href="{{ clear_href }}">Clear</a>
+        </p>
+        {% when None %}
+        {% endmatch %}
+
+        {% if rows.is_empty() %}
+        <div class="cx-empty">
+            {% if unavailable %}
+            <p>News can't be loaded right now. Try again in a moment.</p>
+            {% else %}
+            <p>No stories match these filters.</p>
+            {% if filtered %}
+            <p class="nx-empty__hint"><a href="{{ clear_href }}">Clear the filters</a> to see everything.</p>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="cx-total">{{ total }} stor{% if total != 1 %}ies{% else %}y{% endif %}</p>
+
+        {# One list. The followed stories already lead it (Percy's `personalised` head), and
+           are marked in place — a second section would be a different feature. #}
+        <ol class="nx-list">
+            {% for row in rows %}
+            <li class="nx-row{% if row.followed %} nx-row--followed{% endif %}{% if row.image_url.is_some() %} nx-row--with-image{% endif %}">
+                {# The feed's own image, hotlinked from the URL it published (§9, narrowed
+                   2026-08-06) — never rehosted, never proxied, never cached by us. `alt=""`
+                   because it is decorative: the headline carries the meaning. Explicit
+                   width/height reserve the box before the image loads, and
+                   `referrerpolicy="no-referrer"` keeps our readers' page URLs off a third
+                   party's asset host. An item with no image renders no `<img>` at all — the
+                   `nx-row--with-image` modifier is what adds the side-by-side layout, so a
+                   text-only card simply keeps today's block shape instead of leaving a gap
+                   where a fixed image column would be. #}
+                {% match row.image_url %}
+                {% when Some with (src) %}
+                <img class="nx-row__image" src="{{ src }}" alt="" loading="lazy" decoding="async"
+                     width="112" height="112" referrerpolicy="no-referrer">
+                {% when None %}
+                {% endmatch %}
+                <div class="nx-row__body">
+                    <h2 class="nx-row__headline">
+                        {# Links out to the original, always: we are showing someone else's
+                           headline, not hosting their article. #}
+                        <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
+                    </h2>
+                    <p class="nx-row__meta">
+                        <span class="nx-row__source">{{ row.source_name }}</span>
+                        {% match row.published %}
+                        {% when Some with (date) %}
+                        <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
+                        {% when None %}
+                        {% endmatch %}
+                        {% if row.followed %}
+                        <span class="nx-row__followed">Following</span>
+                        {% endif %}
+                    </p>
+                    {% match row.excerpt %}
+                    {% when Some with (text) %}
+                    <p class="nx-row__excerpt">{{ text }}</p>
+                    {% when None %}
+                    {% endmatch %}
+                    {% if !row.chips.is_empty() %}
+                    <ul class="nx-chips" aria-label="Tagged">
+                        {% for chip in row.chips %}
+                        <li>
+                            {# A chip with nowhere to go is a label, not a dead link. #}
+                            {% match chip.href %}
+                            {% when Some with (href) %}
+                            <a class="nx-chip nx-chip--link" href="{{ href }}">{{ chip.label }}</a>
+                            {% when None %}
+                            <span class="nx-chip">{{ chip.label }}</span>
+                            {% endmatch %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ol>
+
+        <nav class="cx-pagination" aria-label="Pagination">
+            {% match prev_href %}
+            {% when Some with (href) %}
+            <a class="cx-pagination__link" href="{{ href }}">← Previous</a>
+            {% when None %}
+            <span class="cx-pagination__link cx-pagination__link--disabled">← Previous</span>
+            {% endmatch %}
+            <span class="cx-pagination__page">Page {{ page }} of {{ total_pages }}</span>
+            {% match next_href %}
+            {% when Some with (href) %}
+            <a class="cx-pagination__link" href="{{ href }}">Next →</a>
+            {% when None %}
+            <span class="cx-pagination__link cx-pagination__link--disabled">Next →</span>
+            {% endmatch %}
+        </nav>
+        {% endif %}
+
+        {% if !signed_in %}
+        <p class="nx-signin">
+            <a href="/login?next=/news">Sign in</a> to see stories about what you follow first.
+        </p>
+        {% endif %}
+
+        <p class="cx-attribution">
+            Headlines and excerpts belong to the publications named beside them; each story links to
+            the original. Percy stores no article text.
+        </p>
+    </div>
+</div>
+{% endblock %}
