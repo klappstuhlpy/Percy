@@ -1,0 +1,223 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_watchlist_active %} active{% endblock %}
+
+{% import "layout/progress_toggle.html" as progress %}
+
+{% block title %}{{ universe.name }} Watch Order | Percy{% endblock %}
+
+{% block meta_description %}{{ universe.name }} in {{ sort_label }} — {{ stats.total }} titles, {{ stats.hours }} hours, with runtimes, what's essential and where to stream each one.{% endblock %}
+{% block og_title %}{{ universe.name }} Watch Order{% endblock %}
+{% block og_description %}{{ stats.total }} titles in {{ sort_label }}, {{ stats.hours }} hours total — with runtimes, importance and streaming availability.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/watchlist/{{ universe.slug }}{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/catalogue/watchlist.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/progress.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/app.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="wl" style="--wl-accent: {{ universe.accent }}">
+    <div class="wl-page">
+        <header class="wl-head{% if universe.backdrop_url.is_some() %} wl-head--art{% endif %}">
+            {# Decorative only -- a CSS background-image on a `span`, never an `<img>` a
+               screen reader would announce, and never rendered at all without art (no
+               empty band). `wl-head--art` is what adds the padding/scrim; plain `wl-head`
+               is untouched, so a universe with no key art gets today's header exactly. #}
+            {% match universe.backdrop_url %}
+            {% when Some with (backdrop) %}
+            <span class="wl-head__backdrop" aria-hidden="true" style="background-image: url('{{ backdrop }}')"></span>
+            {% when None %}
+            {% endmatch %}
+            <div class="wl-head__content">
+                <span class="wl-head__eyebrow">Watch order</span>
+                <h1 class="wl-head__title">{{ universe.name }}</h1>
+                {% match universe.tagline %}
+                {% when Some with (tagline) %}
+                <p class="wl-head__lede">{{ tagline }}</p>
+                {% when None %}
+                {% endmatch %}
+
+                {# Every figure is Percy's own (`/watchlist/universes/{slug}/stats`), fetched
+                   alongside the page rather than after it, and counted over exactly the rows
+                   the list below renders as entries -- series containers excluded on both
+                   sides. `recommended`/`optional` come from the same call, so showing them
+                   costs nothing the header was not already paying for. #}
+                <div class="wl-figures">
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.total }}</span>
+                        <span class="wl-figure__label">Titles</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.hours }}h</span>
+                        <span class="wl-figure__label">Runtime</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.essential }}</span>
+                        <span class="wl-figure__label">Essential</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.recommended }}</span>
+                        <span class="wl-figure__label">Recommended</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.optional }}</span>
+                        <span class="wl-figure__label">Optional</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.movies }}</span>
+                        <span class="wl-figure__label">Films</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.shows }}</span>
+                        <span class="wl-figure__label">Series</span>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <nav class="wl-controls" aria-label="Watch order options">
+            <div class="wl-switch">
+                <span class="wl-switch__label" id="wl-order-label">Order</span>
+                <a class="wl-switch__option" href="?sort=story&amp;path={{ path }}&amp;region={{ region }}"
+                   aria-describedby="wl-order-label"
+                   aria-current="{% if sort == "story" %}true{% else %}false{% endif %}">Story</a>
+                <a class="wl-switch__option" href="?sort=release&amp;path={{ path }}&amp;region={{ region }}"
+                   aria-describedby="wl-order-label"
+                   aria-current="{% if sort == "release" %}true{% else %}false{% endif %}">Release</a>
+            </div>
+            {% if paths.len() > 1 %}
+            <div class="wl-switch">
+                <span class="wl-switch__label" id="wl-path-label">Path</span>
+                {% for option in paths %}
+                <a class="wl-switch__option" href="?sort={{ sort }}&amp;path={{ option.slug }}&amp;region={{ region }}"
+                   aria-describedby="wl-path-label"
+                   aria-current="{% if option.slug == path %}true{% else %}false{% endif %}">{{ option.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </nav>
+
+        {# How far through this order the viewer is — counted over exactly the rows below,
+           and absent entirely signed out rather than drawn as a "0 of N". #}
+        {% match progress %}
+        {% when Some with (bar) %}
+        <p class="pg-summary">
+            <span class="pg-summary__count">{{ bar.done }} of {{ bar.total }} {{ bar.verb }}</span>
+            <span class="pg-summary__bar" role="img"
+                  aria-label="{{ bar.percent }}% of this watch order {{ bar.verb }}">
+                <span class="pg-summary__fill" style="width: {{ bar.percent }}%"></span>
+            </span>
+        </p>
+        <p class="pg-keys" hidden><kbd>j</kbd> / <kbd>k</kbd> to move, <kbd>w</kbd> to mark.</p>
+        {% when None %}
+        {% endmatch %}
+
+        {% if eras.is_empty() %}
+        <div class="wl-empty">
+            <p>This watch order couldn't be loaded right now. Try again in a moment.</p>
+        </div>
+        {% else %}
+        {% for era in eras %}
+        <section>
+            {% if !era.label.is_empty() %}
+            <div class="wl-era">
+                <h2 class="wl-era__title">{{ era.label }}</h2>
+                <span class="wl-era__count">{{ era.entries }}</span>
+                <span class="wl-era__rule" aria-hidden="true"></span>
+            </div>
+            {% endif %}
+            <ol class="wl-entries">
+                {% for row in era.rows %}
+                {# `data-entry` + a programmatic-only tabindex is what j/k moves between;
+                   the focus ring is base.css's own :focus-visible. A series container
+                   deliberately carries *neither* -- it is a heading for the seasons below it
+                   with nothing to toggle, so j/k must not stop on it and `w` must not post a
+                   mark for it (progress.js reads both off `[data-entry]`). #}
+                <li class="wl-entry{% if row.container %} wl-entry--series{% endif %}{% match row.importance %}{% when Some with (importance) %} wl-entry--{{ importance }}{% when None %}{% endmatch %}{% if row.milestone %} wl-entry--milestone{% endif %}"
+                    {% if !row.container %}data-entry tabindex="-1"{% endif %}>
+                    {# Same poster convention as person.html's `credit_row` -- same classes,
+                       same placeholder, so the two surfaces read as one product. #}
+                    {% match row.poster_url %}
+                    {% when Some with (poster) %}
+                    <img class="wl-person-entry__poster" src="{{ poster }}" alt="" loading="lazy" width="60" height="90">
+                    {% when None %}
+                    <span class="wl-person-entry__poster wl-person-entry__poster--placeholder" aria-hidden="true"></span>
+                    {% endmatch %}
+                    <div>
+                        <div class="wl-entry__head">
+                            {% if row.container %}
+                            {# The series' own slot says what the row is, in place of the
+                               number it does not have: its seasons are numbered instead. #}
+                            <span class="wl-tag wl-tag--series">Series</span>
+                            {% else %}
+                            <span class="wl-entry__index">{{ row.number }}</span>
+                            {% endif %}
+                            <a class="wl-entry__title" href="/watchlist/{{ universe.slug }}/{{ row.slug }}">{{ row.title }}</a>
+                            {% match row.year %}
+                            {% when Some with (year) %}
+                            <span class="wl-entry__year">{{ year }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            {% if row.milestone %}
+                            <span class="wl-tag wl-tag--milestone">Milestone</span>
+                            {% endif %}
+                        </div>
+                        <p class="wl-entry__meta">
+                            {% match row.rating %}
+                            {% when Some with (rating) %}
+                            <span>★ {{ rating }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            <span>{{ row.runtime_label }}</span>
+                            {% match row.era %}
+                            {% when Some with (era_name) %}
+                            <span>{{ era_name }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            {% match row.studio %}
+                            {% when Some with (studio) %}
+                            <span>{{ studio }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            {% match row.instruction %}
+                            {% when Some with (instruction) %}
+                            <span class="wl-entry__instruction">{{ instruction }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                        </p>
+                    </div>
+                    <div class="wl-entry__side">
+                        {% match row.importance %}
+                        {% when Some with (importance) %}
+                        <span class="wl-tag wl-tag--rank">{{ importance }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                        {% if !row.container && row.kind_class != "movie" %}
+                        <span class="wl-tag wl-tag--kind">{{ row.kind_label }}</span>
+                        {% endif %}
+                        {% if !row.providers.is_empty() %}
+                        <span class="wl-providers">
+                            {% for provider in row.providers %}
+                            <img src="{{ provider.logo_url }}" alt="{{ provider.name }}" title="{{ provider.name }}"
+                                 loading="lazy" width="22" height="22">
+                            {% endfor %}
+                        </span>
+                        {% endif %}
+                        {% if !row.container %}
+                        {% call progress::toggle(row.toggle) %}
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+        {% endfor %}
+        {% endif %}
+
+        {% include "catalogue/watchlist_attribution.html" %}
+    </div>
+</div>
+<script src="/static/js/catalogue/progress.js" defer></script>
+{% endblock %}

@@ -1,0 +1,144 @@
+/* Music app: the Sound panel (equalizer + effects) and the active-effects chips. Tokens come from app.css. */
+
+/* ── Active effects under now playing ─────────────────────────────────── */
+.mapp-fx { display: flex; flex-wrap: wrap; gap: var(--m-s1); padding: 0 var(--m-s1); }
+.mapp-fx[hidden] { display: none; }
+.mapp-fx-chip {
+    display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px;
+    border: 1px solid color-mix(in srgb, var(--m-accent) 35%, transparent); border-radius: var(--m-r-pill, 999px);
+    background: var(--m-accent-soft); color: var(--m-text); font: 600 12px/1 var(--app-font); cursor: pointer;
+    transition: background var(--m-ease), border-color var(--m-ease);
+}
+.mapp-fx-chip:hover { border-color: var(--m-accent); }
+.mapp-fx-chip svg { width: 13px; height: 13px; color: var(--m-accent); flex: none; }
+
+/* ── Panel shell: a popover above the player bar, a full-height sheet on phones ── */
+.mapp-sound {
+    position: fixed; z-index: 40; right: var(--m-s3); bottom: calc(var(--m-bar-h) + var(--m-s3));
+    width: min(468px, calc(100vw - 2 * var(--m-s3))); max-height: min(640px, calc(100vh - var(--m-bar-h) - var(--m-top-h) - 2 * var(--m-s3)));
+    display: flex; flex-direction: column;
+    background: var(--surface-1); color: var(--m-text); border: 1px solid var(--m-line); border-radius: var(--m-r-lg);
+    box-shadow: var(--shadow-pop); font-family: var(--app-font);
+    animation: mapp-sound-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.mapp-sound[hidden] { display: none; }
+@keyframes mapp-sound-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+
+.mapp-sound-head { display: flex; align-items: center; gap: var(--m-s3); padding: var(--m-s4) var(--m-s4) var(--m-s2); }
+.mapp-sound-ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--m-r-sm); background: var(--m-accent-soft); color: var(--m-accent); flex: none; }
+.mapp-sound-ico svg { width: 20px; height: 20px; }
+.mapp-sound-titles { flex: 1; min-width: 0; }
+.mapp-sound-titles h2 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+.mapp-sound-titles p { margin: 2px 0 0; font-size: 12px; color: var(--m-faint); }
+
+.mapp-sound .mapp-sound-lock {
+    display: flex; align-items: center; gap: var(--m-s2); margin: 0 var(--m-s4) var(--m-s2); padding: 9px 12px;
+    border-radius: var(--m-r-sm); background: var(--m-raised); color: var(--m-muted); font-size: 13px; font-weight: 600;
+}
+.mapp-sound-lock[hidden] { display: none; }
+.mapp-sound-lock svg { width: 16px; height: 16px; flex: none; }
+
+.mapp-sound-tabs { display: flex; gap: 2px; margin: 0 var(--m-s4); padding: 3px; border-radius: var(--m-r-sm); background: var(--m-raised); }
+.mapp-sound-tabs button {
+    flex: 1; height: 34px; border: 0; border-radius: calc(var(--m-r-sm) - 2px); background: none; color: var(--m-muted);
+    font: 700 13px/1 var(--app-font); cursor: pointer; transition: background var(--m-ease), color var(--m-ease);
+}
+.mapp-sound-tabs button:hover { color: var(--m-text); }
+.mapp-sound-tabs button[aria-selected="true"] { background: var(--surface-1); color: var(--m-text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+
+.mapp-sound-body { padding: var(--m-s4); overflow-y: auto; overscroll-behavior: contain; min-height: 0; scrollbar-width: thin; }
+.mapp-sound [role="tabpanel"][hidden] { display: none; }
+
+.mapp-sound-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--m-s3); margin-top: var(--m-s4); }
+.mapp-sound-note { margin: 0; font-size: 12px; line-height: 1.4; color: var(--m-faint); }
+.mapp-sound .mapp-btn {
+    flex: none; height: 34px; padding: 0 14px; border: 1px solid var(--m-line); border-radius: var(--m-r-pill, 999px);
+    background: none; color: var(--m-text); font: 700 13px/1 var(--app-font); cursor: pointer;
+    transition: background var(--m-ease), border-color var(--m-ease);
+}
+.mapp-sound .mapp-btn:hover:not(:disabled) { background: var(--m-hover); border-color: var(--m-faint); }
+.mapp-sound :disabled { cursor: not-allowed; }
+.mapp-sound .mapp-btn:disabled, .mapp-sound .mapp-pchip:disabled, .mapp-sound .mapp-fxcard:disabled { opacity: 0.45; }
+
+/* ── Equalizer ─────────────────────────────────────────────────────────── */
+.mapp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mapp-pchip {
+    height: 30px; padding: 0 12px; border: 1px solid var(--m-line); border-radius: 999px; background: var(--m-raised);
+    color: var(--m-muted); font: 700 12.5px/1 var(--app-font); cursor: pointer;
+    transition: background var(--m-ease), color var(--m-ease), border-color var(--m-ease);
+}
+.mapp-pchip:hover:not(:disabled) { color: var(--m-text); border-color: var(--m-faint); }
+.mapp-pchip[aria-pressed="true"] { background: var(--m-accent); border-color: var(--m-accent); color: var(--m-accent-ink); }
+
+.mapp-eq { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--m-s2); margin-top: var(--m-s4); }
+.mapp-eq-scale { position: relative; height: 160px; font-size: 10px; font-weight: 700; color: var(--m-faint); text-align: right; }
+.mapp-eq-scale span { position: absolute; right: 0; line-height: 1; transform: translateY(-50%); }
+.mapp-eq-scale span:first-child { transform: none; }
+.mapp-eq-zero { position: absolute; left: 0; right: 0; top: 123px; border-top: 1px dashed var(--m-faint); opacity: 0.5; pointer-events: none; }
+.mapp-eq-stage { position: relative; min-width: 0; border-radius: var(--m-r-sm); background: var(--m-raised); }
+.mapp-eq-curve { position: absolute; left: 0; top: 0; width: 100%; height: 160px; pointer-events: none; overflow: visible; }
+.mapp-eq-curve .line { fill: none; stroke: var(--m-accent); stroke-width: 2.25; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.mapp-eq-curve .fill { fill: var(--m-accent-soft); stroke: none; opacity: 0.55; }
+.mapp-eq-bands { position: relative; display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); }
+.mapp-eq-band { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.mapp-eq-slider {
+    -webkit-appearance: none; appearance: none; background: none; margin: 0; padding: 0; cursor: pointer;
+    writing-mode: vertical-lr; direction: rtl; width: 22px; height: 160px;
+}
+.mapp-eq-slider::-webkit-slider-runnable-track { width: 3px; border-radius: 3px; background: color-mix(in srgb, var(--m-text) 16%, transparent); }
+.mapp-eq-slider::-moz-range-track { width: 3px; border-radius: 3px; background: color-mix(in srgb, var(--m-text) 16%, transparent); }
+.mapp-eq-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-left: -5.5px; border-radius: 50%; background: var(--m-text); border: 2px solid var(--surface-1); box-shadow: 0 0 0 1px var(--m-accent); transition: transform var(--m-ease); }
+.mapp-eq-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--m-text); border: 2px solid var(--surface-1); box-shadow: 0 0 0 1px var(--m-accent); }
+.mapp-eq-slider:hover:not(:disabled)::-webkit-slider-thumb, .mapp-eq-slider:focus-visible::-webkit-slider-thumb { transform: scale(1.25); background: var(--m-accent); }
+.mapp-eq-slider:focus-visible { outline: none; box-shadow: none; }
+.mapp-eq-slider:disabled { opacity: 0.4; }
+.mapp-eq-hz { margin: 2px 0 6px; font-size: 9.5px; font-weight: 700; color: var(--m-faint); letter-spacing: -0.02em; }
+
+/* ── Effects ───────────────────────────────────────────────────────────── */
+.mapp-fx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--m-s2); }
+.mapp-fxcard {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 10px; text-align: left;
+    border: 1px solid var(--m-line); border-radius: var(--m-r); background: var(--m-raised); color: var(--m-text); cursor: pointer;
+    font-family: var(--app-font); transition: border-color var(--m-ease), background var(--m-ease), transform var(--m-ease);
+}
+.mapp-fxcard:hover:not(:disabled) { border-color: var(--m-faint); }
+.mapp-fxcard:active:not(:disabled) { transform: scale(0.98); }
+.mapp-fxcard-ico { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 8px; background: var(--m-hover); color: var(--m-muted); }
+.mapp-fxcard-ico svg { width: 16px; height: 16px; }
+.mapp-fxcard-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mapp-fxcard-t { font-size: 13.5px; font-weight: 800; }
+.mapp-fxcard-s { font-size: 11.5px; line-height: 1.3; color: var(--m-faint); }
+.mapp-fxcard[aria-pressed="true"] { border-color: var(--m-accent); background: var(--m-accent-soft); }
+.mapp-fxcard[aria-pressed="true"] .mapp-fxcard-ico { background: var(--m-accent); color: var(--m-accent-ink); }
+
+.mapp-sliders { display: grid; gap: var(--m-s3); margin-top: var(--m-s4); padding-top: var(--m-s4); border-top: 1px solid var(--m-line); }
+.mapp-slider { display: grid; grid-template-columns: 68px minmax(0, 1fr) 56px; align-items: center; gap: var(--m-s3); }
+.mapp-slider label { font-size: 13px; font-weight: 700; color: var(--m-muted); }
+.mapp-slider output { font-size: 12.5px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.mapp-slider input {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; background: none; cursor: pointer;
+}
+.mapp-slider input::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--m-text) 18%, transparent); }
+.mapp-slider input::-moz-range-track { height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--m-text) 18%, transparent); }
+.mapp-slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--m-text); border: 2px solid var(--surface-1); box-shadow: 0 0 0 1px var(--m-accent); }
+.mapp-slider input::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--m-text); border: 2px solid var(--surface-1); box-shadow: 0 0 0 1px var(--m-accent); }
+.mapp-slider input:focus-visible { outline: 2px solid var(--m-accent); outline-offset: 3px; border-radius: 4px; }
+.mapp-slider input:disabled { opacity: 0.4; }
+
+.mapp-sound-tabs button:focus-visible, .mapp-pchip:focus-visible, .mapp-fxcard:focus-visible, .mapp-sound .mapp-btn:focus-visible, .mapp-fx-chip:focus-visible { outline: 2px solid var(--m-accent); outline-offset: 2px; }
+
+/* ── Phones: a full-height sheet ───────────────────────────────────────── */
+@media (max-width: 767px) {
+    .mapp-sound {
+        inset: 0; width: auto; max-height: none; border-radius: 0; border: 0;
+        animation-name: mapp-sound-sheet;
+    }
+    .mapp-sound-head { padding-top: calc(var(--m-s4) + env(safe-area-inset-top, 0px)); }
+    .mapp-sound-body { padding-bottom: calc(var(--m-s5) + env(safe-area-inset-bottom, 0px)); }
+    .mapp-eq-hz:nth-child(even) { visibility: visible; }
+    .mapp-eq-band:nth-child(even) .mapp-eq-hz { visibility: hidden; }
+    .mapp-sound-foot { flex-direction: column; align-items: stretch; }
+    .mapp-sound-note { text-align: center; }
+}
+@keyframes mapp-sound-sheet { from { transform: translateY(24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .mapp-sound { animation: none; } }

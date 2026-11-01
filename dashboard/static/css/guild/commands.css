@@ -1,0 +1,246 @@
+/* Commands page — state pills, section heads, command cards, edit form. */
+
+.cmd-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.cmd-state.enabled { color: var(--success-text); }
+.cmd-state.partial { color: var(--warning-text); }
+.cmd-state.disabled { color: var(--error-text); }
+.cmd-state::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.config-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+.config-section-head h2 { margin-bottom: 0.25rem; }
+.config-section-head .button { flex-shrink: 0; white-space: nowrap; }
+.command-card {
+    cursor: pointer;
+}
+.cmd-card-body { flex: 1; min-width: 0; }
+.command-card:hover {
+    border-color: var(--branding);
+    background: var(--box-shade);
+}
+.cmd-edit-form {
+    margin-top: 1rem;
+}
+.cmd-channels-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: var(--form-input-background);
+    border: 1px solid var(--form-input-border);
+    border-radius: 0.375rem;
+}
+.cmd-channel-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+}
+.cmd-channel-row input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--branding);
+}
+.cmd-mode-select {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.cmd-mode-btn {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-align: center;
+    border-radius: 0.375rem;
+    border: 1px solid var(--box-border);
+    background: var(--box-shade);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.cmd-mode-btn:hover {
+    border-color: var(--foreground);
+    color: var(--foreground);
+}
+.cmd-mode-btn.active-enabled {
+    border-color: var(--success-border);
+    background: var(--success-bg);
+    color: var(--success-text);
+}
+.cmd-mode-btn.active-partial {
+    border-color: var(--warning-border);
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+.cmd-mode-btn.active-disabled {
+    border-color: var(--error-border);
+    background: var(--error-bg);
+    color: var(--error-text);
+}
+
+/* ── Command list: status column + custom-access badge ───────────────── */
+.text-branding { color: var(--branding); }
+.command-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.cmd-card-status { flex-shrink: 0; }
+.cmd-gate-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--branding);
+    background: var(--branding-dim);
+    border: 1px solid color-mix(in srgb, var(--branding) 35%, transparent);
+    border-radius: 999px;
+    padding: 0.12rem 0.5rem;
+}
+.cmd-lock { font-size: 0.7rem; line-height: 1; }
+
+/* ── List filters ────────────────────────────────────────────────────── */
+.cmd-filters { display: flex; gap: 0.4rem; }
+.cmd-filter {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 999px;
+    border: 1px solid var(--box-border);
+    background: var(--box-shade);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.cmd-filter:hover { color: var(--foreground); border-color: var(--foreground); }
+.cmd-filter.active {
+    color: var(--branding);
+    border-color: color-mix(in srgb, var(--branding) 45%, transparent);
+    background: var(--branding-dim);
+}
+
+/* ── Access / permission override editor ─────────────────────────────── */
+.cmd-access-form {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--box-border);
+}
+.cmd-access-btn {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-align: center;
+    border-radius: 0.375rem;
+    border: 1px solid var(--box-border);
+    background: var(--box-shade);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.cmd-access-btn:hover { border-color: var(--foreground); color: var(--foreground); }
+.cmd-access-btn.active-custom {
+    border-color: color-mix(in srgb, var(--branding) 45%, transparent);
+    background: var(--branding-dim);
+    color: var(--branding);
+}
+.cmd-perm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.35rem 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.6rem;
+    background: var(--form-input-background);
+    border: 1px solid var(--form-input-border);
+    border-radius: 0.375rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+.cmd-perm-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.cmd-perm-row input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--branding);
+    flex-shrink: 0;
+}
+
+/* Role allow-list picker */
+.cmd-role-picker { margin-top: 0.5rem; }
+.cmd-role-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+    min-height: 1.2rem;
+}
+.cmd-role-empty { font-size: 0.78rem; color: var(--text-muted); }
+.cmd-role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    border-radius: 999px;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+}
+.cmd-role-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--role-color, #99aab5);
+    flex-shrink: 0;
+}
+.cmd-role-x {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+}
+.cmd-role-x:hover { color: var(--error-text); }
+.cmd-access-summary {
+    margin-top: 0.75rem;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.8rem;
+    color: var(--foreground);
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 0.375rem;
+    min-height: 1rem;
+}
+.cmd-access-summary:empty { display: none; }

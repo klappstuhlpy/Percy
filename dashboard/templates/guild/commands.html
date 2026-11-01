@@ -1,0 +1,226 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Enable, disable, restrict, and re-gate commands for this server.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/guild/commands.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Control every <strong>command</strong> for this server: turn it on or off (globally or per-channel), change <strong>who is allowed to run it</strong>, and manage the <strong>plonk list</strong> — users or channels Percy ignores entirely.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Server administrators always bypass disables, permission gates and plonks</li>
+                <li>A <strong>custom access</strong> override replaces a command's built-in permission requirement — loosen it, tighten it, or hand it to specific roles</li>
+                <li>Plonk a channel to silence the bot there without disabling commands elsewhere</li>
+            </ul>
+        </div>
+    </div>
+
+    {# ─── Summary ─────────────────────────────────────────── #}
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Total Commands</span>
+            <span class="tile-value">{{ commands.commands.len() }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Enabled</span>
+            <span class="tile-value text-success">{{ commands.commands.len() - disabled_count - partial_count }}</span>
+            <span class="tile-sub">Fully enabled</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Partial</span>
+            <span class="tile-value text-warning">{{ partial_count }}</span>
+            <span class="tile-sub">Disabled in some channels</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Disabled</span>
+            <span class="tile-value text-error">{{ disabled_count }}</span>
+            <span class="tile-sub">Globally disabled</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Custom Access</span>
+            <span class="tile-value text-branding">{{ override_count }}</span>
+            <span class="tile-sub">Re-gated commands</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Plonked</span>
+            <span class="tile-value">{{ commands.plonks.len() }}</span>
+            <span class="tile-sub">Ignored entities</span>
+        </div>
+    </div>
+
+    {# ─── Plonks (Ignored) ────────────────────────────────────────────── #}
+    <section class="config-section">
+        <div class="config-section-head">
+            <div>
+                <h2>Plonked Entities</h2>
+                <p class="config-section-description">Members and channels completely ignored by the bot — a plonked user cannot run any command. Users with <strong>Manage Server</strong> always bypass this.</p>
+            </div>
+            <button class="button small" id="add-plonk-btn">Plonk a user</button>
+        </div>
+        <div class="data-table-wrap" id="plonks-table-wrap" {% if commands.plonks.is_empty() %}hidden{% endif %}>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody id="plonks-tbody">
+                    {% for plonk in commands.plonks %}
+                    <tr data-entity-id="{{ plonk.entity_id }}">
+                        <td data-label="Name"><strong>{{ plonk.name }}</strong></td>
+                        <td data-label="Type"><span class="pill pending">{{ plonk.entity_type }}</span></td>
+                        <td class="col-actions">
+                            <button class="button small danger" onclick="removePlonk('{{ plonk.entity_id }}')">Unplonk</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted" id="plonks-empty" {% if !commands.plonks.is_empty() %}hidden{% endif %}>No plonked entities. Click "Plonk a user" to block someone.</p>
+    </section>
+
+    {# ─── Command List ────────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>All Commands</h2>
+        <p class="config-section-description">Click a command to configure its availability and who can run it. Availability has three states — Enabled (works everywhere), Partial (disabled in specific channels), Disabled (blocked server-wide). Access defaults to the command's built-in permission gate unless you set a custom one.</p>
+
+        <div class="members-toolbar mb-md">
+            <input type="text" id="cmd-search" class="config-input search-input" placeholder="Search commands...">
+            <div class="cmd-filters" id="cmd-filters">
+                <button type="button" class="cmd-filter active" data-filter="all">All</button>
+                <button type="button" class="cmd-filter" data-filter="custom">Custom access</button>
+                <button type="button" class="cmd-filter" data-filter="restricted">Restricted</button>
+            </div>
+        </div>
+
+        <div class="command-grid" id="command-grid">
+            {% for cmd in commands.commands %}
+            <div class="command-card" data-idx="{{ loop.index0 }}" data-name="{{ cmd.name|lower }}" data-category="{{ cmd.category|lower }}"
+                 data-custom="{% if cmd.permission_override.is_some() %}1{% else %}0{% endif %}"
+                 data-restricted="{% if cmd.globally_disabled || !cmd.disabled_in.is_empty() %}1{% else %}0{% endif %}">
+                <div class="cmd-card-body">
+                    <span class="command-name">{{ cmd.name }}</span>
+                    <br>
+                    <span class="command-category">{{ cmd.category }}</span>
+                    {% if !cmd.description.is_empty() %}
+                    <br><span class="config-description">{{ cmd.description }}</span>
+                    {% endif %}
+                    {% if cmd.permission_override.is_some() %}
+                    <div class="cmd-gate-badge"><span class="cmd-lock">&#128274;</span> Custom access</div>
+                    {% endif %}
+                </div>
+                <div class="cmd-card-status">
+                    {% if cmd.globally_disabled %}
+                    <span class="cmd-state disabled">Disabled</span>
+                    {% else if !cmd.disabled_in.is_empty() %}
+                    <span class="cmd-state partial">Partial</span>
+                    {% else %}
+                    <span class="cmd-state enabled">Enabled</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# ─── Command Edit Modal ───────────────────────────────────────────── #}
+    <div class="modal-overlay" id="cmd-edit-modal" hidden>
+        <div class="modal-card w-lg">
+            <h3 id="cmd-edit-title">Configure Command</h3>
+            <p class="text-muted mb-md" id="cmd-edit-desc"></p>
+
+            {# ── Availability ── #}
+            <div class="cmd-edit-form">
+                <label class="config-label mb-xs d-block">Availability</label>
+                <span class="config-description mb-sm">Where this command can be used.</span>
+
+                <div class="cmd-mode-select">
+                    <button type="button" class="cmd-mode-btn" data-mode="enabled">Enabled</button>
+                    <button type="button" class="cmd-mode-btn" data-mode="partial">Per-Channel</button>
+                    <button type="button" class="cmd-mode-btn" data-mode="disabled">Disabled</button>
+                </div>
+
+                <div id="channel-select-wrap" hidden>
+                    <label class="config-label">Disable in these channels:</label>
+                    <span class="config-description">The command will be blocked in checked channels but work in all others.</span>
+                    <div class="cmd-channels-list" id="cmd-channels-list">
+                        {% for ch in channels %}
+                        <label class="cmd-channel-row">
+                            <input type="checkbox" value="{{ ch.id }}">
+                            <span>#{{ ch.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            {# ── Access / Permissions ── #}
+            <div class="cmd-edit-form cmd-access-form">
+                <label class="config-label mb-xs d-block">Who can use it</label>
+                <span class="config-description mb-sm" id="cmd-access-default-hint"></span>
+
+                <div class="cmd-mode-select">
+                    <button type="button" class="cmd-access-btn" data-access="default">Default gate</button>
+                    <button type="button" class="cmd-access-btn" data-access="custom">Custom access</button>
+                </div>
+
+                <div id="cmd-access-custom" hidden>
+                    <label class="config-label">Required permissions</label>
+                    <span class="config-description">A member needs <em>all</em> of the checked permissions. Leave everything unchecked to allow anyone (subject to the roles below).</span>
+                    <div class="cmd-perm-grid" id="cmd-perm-grid"><!-- built by JS --></div>
+
+                    <label class="config-label mt-md">Always-allowed roles</label>
+                    <span class="config-description">Members with any of these roles can run the command even without the permissions above.</span>
+                    <div class="cmd-role-picker">
+                        <div class="cmd-role-chips" id="cmd-role-chips"></div>
+                        <select class="config-input" id="cmd-role-select">
+                            <option value="">Add a role…</option>
+                            {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="cmd-access-summary" id="cmd-access-summary"></div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="button small" id="cmd-cancel-btn">Cancel</button>
+                <button class="button primary small" id="cmd-save-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    {# ─── Add Plonk Modal ─────────────────────────────────────────── #}
+    <div class="modal-overlay" id="plonk-modal" hidden>
+        <div class="modal-card w-md">
+            <h3>Plonk a user or channel</h3>
+            <p class="text-muted mb-md">Enter a Discord <strong>user ID</strong> (or channel ID) to block it from using the bot entirely. Right-click a user in Discord with Developer Mode on to copy their ID.</p>
+            <label class="config-label" for="plonk-id-input">User / Channel ID</label>
+            <input type="text" id="plonk-id-input" class="config-input" placeholder="e.g. 123456789012345678" inputmode="numeric" autocomplete="off">
+            <div class="modal-actions">
+                <button type="button" class="button small" id="plonk-cancel-btn">Cancel</button>
+                <button type="button" class="button primary small" id="plonk-add-btn">Plonk</button>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+var GUILD_ID = '{{ guild_id }}';
+var COMMANDS_DATA = {{ commands.commands|json|safe }};
+var ROLES_DATA = {{ roles|json|safe }};
+</script>
+<script src="/static/js/guild/commands.js"></script>
+{% endblock %}

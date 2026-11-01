@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>{% block title %}Percy{% endblock %}</title>
+
+    <link rel="icon" href="/static/img/favicon.ico" sizes="any">
+    <link rel="manifest" href="/static/site.webmanifest">
+    <meta name="theme-color" content="#09090b">
+    <meta name="color-scheme" content="dark">
+
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem("theme");
+                var theme = stored
+                    || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+                document.documentElement.dataset.theme = theme;
+                var tc = document.querySelector('meta[name="theme-color"]');
+                if (tc) tc.setAttribute("content", theme === "light" ? "#f7f6f3" : "#09090b");
+                var cs = document.querySelector('meta[name="color-scheme"]');
+                if (cs) cs.setAttribute("content", theme === "light" ? "light" : "dark");
+            } catch (e) {
+                document.documentElement.dataset.theme = "dark";
+            }
+        })();
+    </script>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Percy">
+    <link rel="apple-touch-icon" href="/static/img/logo.png">
+
+    {# --- Link-preview metadata (Open Graph + Twitter cards) --- #}
+    {# Discord, Slack, iMessage, etc. read these to build the rich embed shown
+       when a page URL is pasted. Child templates override the blocks; the
+       defaults describe Percy as a whole. The `theme-color` above tints the
+       coloured bar Discord draws down the left of the embed. The logo is a
+       240x240 square, so we use a `summary` (small-thumbnail) card rather than a
+       stretched large banner. #}
+    <meta name="description" content="{% block meta_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}">
+    <meta property="og:site_name" content="Percy">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}"/>
+    <meta property="og:title" content="{% block og_title %}Percy — Discord Bot &amp; Dashboard{% endblock %}"/>
+    <meta property="og:description" content="{% block og_description %}Percy is a multipurpose Discord bot — leveling, economy, moderation, music, temporary voice channels and more, all configurable from one web dashboard.{% endblock %}"/>
+    <meta property="og:url" content="{% block og_url %}{{ crate::config::public_base_url() }}{% endblock %}"/>
+    {% block og_image %}
+    <meta property="og:image" content="{{ crate::config::public_base_url() }}/static/img/logo.png"/>
+    <meta property="og:image:type" content="image/jpeg"/>
+    <meta property="og:image:width" content="240"/>
+    <meta property="og:image:height" content="240"/>
+    <meta property="og:image:alt" content="Percy"/>
+    {% endblock %}
+    <meta name="twitter:card" content="{% block twitter_card %}summary{% endblock %}"/>
+    <link rel="stylesheet" href="/kls/base.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/layout.css" type="text/css"/>
+    {% block css %}{% endblock %}
+    {# The app skin (tokens, component library, page vocabulary, site chrome) for every page that
+       keeps this layout; the dashboard shell and the music app load their own and blank this. #}
+    {% block skin_css %}
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"/>
+    <link rel="stylesheet" href="/static/css/common/tokens.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/components.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/pages.css" type="text/css"/>
+    <link rel="stylesheet" href="/static/css/common/site.css" type="text/css"/>
+    {% endblock %}
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap"/>
+    <link rel="stylesheet" href="/static/css/common/theme.css" type="text/css"/>
+
+    <script>
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("/sw.js").catch(() => {});
+            });
+        }
+    </script>
+</head>
+<body{% block body_attrs %} class="app-canvas site-page"{% endblock %}>
+{# Full-viewport apps (the music player) replace the whole site chrome by overriding `shell`;
+   theme, fonts and the shared scripts below stay. #}
+{% block shell %}
+<div class="percy-shell">
+    <header class="percy-topbar">
+        <nav class="percy-nav">
+            <a class="percy-nav-brand" href="/">
+                <span class="percy-nav-name">Percy</span>
+                <span class="percy-nav-version" id="percy-version"></span>
+            </a>
+            <div class="percy-nav-links">
+                <a href="/" class="percy-nav-link{% block nav_home_active %}{% endblock %}">Home</a>
+                <a href="/commands" class="percy-nav-link{% block nav_commands_active %}{% endblock %}">Commands</a>
+                {# The four catalogue surfaces sit under one entry. It is a <details>, not a
+                   scripted menu: it opens with the keyboard and without JS, and the summary
+                   lights up on any child page via :has(.active) rather than ten templates
+                   each declaring a second active block. #}
+                <details class="percy-nav-menu" id="nav-discover">
+                    <summary class="percy-nav-link">Discover<span class="percy-nav-caret" aria-hidden="true"></span></summary>
+                    <div class="percy-nav-dropdown">
+                        <a href="/releases" class="percy-dropdown-item{% block nav_releases_active %}{% endblock %}">Releases</a>
+                        <a href="/news" class="percy-dropdown-item{% block nav_news_active %}{% endblock %}">News</a>
+                        <a href="/watchlist" class="percy-dropdown-item{% block nav_watchlist_active %}{% endblock %}">Watch Orders</a>
+                        <a href="/comics" class="percy-dropdown-item{% block nav_comics_active %}{% endblock %}">Comics</a>
+                    </div>
+                </details>
+                <a href="/changelog" class="percy-nav-link{% block nav_changelog_active %}{% endblock %}">Changelog</a>
+                <a href="/dashboard" class="percy-nav-link{% block nav_dashboard_active %}{% endblock %}">Dashboard</a>
+                <a href="/docs/" class="percy-nav-link">Docs</a>
+            </div>
+            <div class="percy-nav-right">
+                <button type="button" class="theme-toggle percy-nav-action" id="theme-toggle" aria-label="Toggle colour theme" title="Toggle light / dark theme">
+                    <span class="theme-toggle-track" aria-hidden="true">
+                        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" focusable="false">
+                            <circle cx="12" cy="12" r="4.5"></circle>
+                            <line x1="12" y1="1.5" x2="12" y2="4"></line>
+                            <line x1="12" y1="20" x2="12" y2="22.5"></line>
+                            <line x1="1.5" y1="12" x2="4" y2="12"></line>
+                            <line x1="20" y1="12" x2="22.5" y2="12"></line>
+                            <line x1="4.2" y1="4.2" x2="6" y2="6"></line>
+                            <line x1="18" y1="18" x2="19.8" y2="19.8"></line>
+                            <line x1="4.2" y1="19.8" x2="6" y2="18"></line>
+                            <line x1="18" y1="6" x2="19.8" y2="4.2"></line>
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" focusable="false">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </span>
+                </button>
+                {% match account %}
+                {% when Some with (account) %}
+                <div class="percy-account-menu" id="account-menu">
+                    <button type="button" class="percy-account-trigger" aria-haspopup="true" aria-expanded="false">
+                        {% if account.has_discord() %}
+                        <img class="percy-account-avatar" src="/account/discord/avatar" alt="" width="28" height="28" loading="lazy">
+                        {% else %}
+                        <img class="percy-account-avatar" src="/static/img/avatar_placeholder.svg" alt="" width="28" height="28">
+                        {% endif %}
+                        <span class="percy-account-name">{{ account.name }}</span>
+                        <span class="percy-account-caret" aria-hidden="true"></span>
+                    </button>
+                    <div class="percy-account-dropdown" role="menu">
+                        <a class="percy-dropdown-item" role="menuitem" href="/dashboard">My Servers</a>
+                        <a class="percy-dropdown-item" role="menuitem" href="/dashboard/music">Music</a>
+                        <a class="percy-dropdown-item" role="menuitem" href="/account">Account</a>
+                        <hr class="percy-dropdown-sep">
+                        <a class="percy-dropdown-item percy-dropdown-logout" role="menuitem" href="/logout">Log out</a>
+                    </div>
+                </div>
+                {% when None %}
+                <a class="percy-nav-link percy-login-link" href="/login?next=/dashboard">Log in</a>
+                {% endmatch %}
+            </div>
+            <button type="button" class="percy-mobile-toggle" id="percy-mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+        </nav>
+    </header>
+
+    <main class="percy-main">
+        {% block body %}{% endblock %}
+    </main>
+
+    <footer class="percy-footer">
+        <nav class="percy-footer-links">
+            <a href="/privacy-policy">Privacy Policy</a>
+            <a href="/terms-of-service">Terms of Service</a>
+            <a href="/commands">Commands</a>
+            <a href="/api">API</a>
+            <a href="https://percy.klappstuhl.me/docs/" rel="noopener">Docs</a>
+            <a href="/changelog">Changelog</a>
+            <a href="/main-site" class="percy-main-site-link">Klappstuhl.me</a>
+        </nav>
+        <span class="percy-footer-copy">&copy; 2026 Klappstuhl65</span>
+    </footer>
+</div>
+{% endblock %}
+<script src="/kls/timestamps.js"></script>
+<script src="/kls/base.js"></script>
+<script src="/static/js/common/nav.js"></script>
+{% block body_end %}{% endblock %}
+</body>
+</html>

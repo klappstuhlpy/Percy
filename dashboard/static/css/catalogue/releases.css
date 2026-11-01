@@ -1,0 +1,224 @@
+/* Releases — the public overview at /releases.
+
+   A thin layer *on top of* `comics.css`, not a third card style: the page's root
+   carries both `.cx` and `.rx`, so the grid, the cards, the empty state and the
+   attribution footer are the ones the comic catalogue already ships. Only what the
+   overview adds lives here — the window control, the media tile, the subject chips
+   and the section headers.
+
+   Native Percy (D6, §6.3): every colour is a base.css token, the type face is the
+   site's JetBrains Mono, and state is carried by the existing semantic tokens
+   (--info-* for the subject chips, --success-* for the followed section) rather than a
+   new palette. Both themes come free. Motion is 120–150 ms on transform/opacity only,
+   and stops entirely under prefers-reduced-motion.
+
+   Prefixed `.rx-` and scoped under `.rx` for the reason `comics.css` documents:
+   base.css styles `a:not(.button)` at (0,1,1), which beats a bare class selector. */
+
+.rx {
+    --rx-accent: var(--branding);
+}
+
+/* ── Window + sort controls: two forms, six submits, so both work with JS off ──── */
+
+/* The only rule this task adds: puts the window and sort forms on one row on wide
+   viewports and lets them wrap to their own lines on narrow ones, rather than
+   overflowing. Each form's own layout is unchanged `.rx-window`. */
+.rx-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.75rem;
+}
+
+.rx-window {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.75rem 0 0.5rem;
+}
+
+.rx-window__label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.rx-seg {
+    display: flex;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.rx-seg__opt {
+    padding: 0.35rem 0.75rem;
+    background: var(--box);
+    border: none;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: color 0.13s ease, background-color 0.13s ease;
+}
+
+.rx-seg__opt + .rx-seg__opt {
+    border-left: 1px solid var(--box-border);
+}
+
+.rx-seg__opt:hover {
+    color: var(--foreground);
+}
+
+.rx-seg__opt[aria-pressed='true'] {
+    background: var(--box-shade);
+    color: var(--foreground);
+    font-weight: 600;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+
+.rx-section {
+    margin-top: 2.5rem;
+}
+
+.rx-section__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.rx-section__head .cx-section__title {
+    margin: 0;
+}
+
+/* Each section states its own span: comics only ever occupy the backward half of
+   the window, so one shared "this week" heading would be a promise the data
+   cannot keep. */
+.rx-section__note {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.rx-section__none {
+    margin: 1rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+#following .rx-section__head {
+    border-bottom-color: var(--success-border);
+}
+
+#following .cx-section__title {
+    color: var(--success-text);
+}
+
+.rx-signin {
+    margin: 2rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.rx .rx-signin a {
+    color: var(--rx-accent);
+}
+
+/* ── Month timeline ──────────────────────────────────────────────── */
+
+/* Grouping, ordering and the terminal "Date to be announced" bucket are all decided in
+   releases.rs::group_by_month — this only lays out whatever it hands back. A month with
+   nothing in it is never constructed there, so there's no empty-state rule to write
+   here either. */
+.rx-month + .rx-month {
+    margin-top: 2rem;
+}
+
+.rx-month__label {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* A timeline reads on one vertical axis, not a wrapping multi-column grid — within a
+   month the entries stack, full width, one after another, so the month heading is a
+   spine the page hangs off rather than a label over what would otherwise still look
+   like the old three flat grids. `.cx-grid` (comics.css) still supplies everything else
+   (the card's own look, the row gap); this only collapses it to one column. Capped so a
+   full-width row on a wide viewport doesn't stretch a poster-sized card edge to edge. */
+.rx-grid {
+    grid-template-columns: 1fr;
+    max-width: 640px;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────── */
+
+/* One grid child per item. The card is `.cx-card--stretch` (comics.css): the cover and
+   title live in a stretched-link <a> whose ::after covers the panel, and the toggle form
+   and the chip list are siblings of that anchor — a form may not nest in a link — lifted
+   above the overlay by `.cx-card__aside`. So all of it is one bordered, hoverable card
+   and the three targets stay separately clickable and tabbable. */
+.rx-card__media {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* ── Subject chips ───────────────────────────────────────────────── */
+
+.rx-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.rx-chip {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: 999px;
+    color: var(--info-text);
+    font-size: 0.64rem;
+    letter-spacing: 0.04em;
+}
+
+.rx .rx-chip--link {
+    text-decoration: none;
+    transition: opacity 0.13s ease;
+}
+
+.rx .rx-chip--link:hover,
+.rx .rx-chip--link:focus-visible {
+    opacity: 0.75;
+    text-decoration: underline;
+}
+
+.rx-empty__hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.82rem;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .rx-seg__opt,
+    .rx .rx-chip--link {
+        transition: none;
+    }
+}

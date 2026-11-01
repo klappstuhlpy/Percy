@@ -1,0 +1,132 @@
+{% extends "layout/layout.html" %}
+
+{% macro cmd_summary(cmd) %}
+<summary>
+    <span class="cmd-name">{{ cmd.name }}</span>
+    {% if cmd.slash %}<span class="cmd-badge slash">Slash</span>{% else %}<span class="cmd-badge">Prefix</span>{% endif %}
+    <span class="cmd-desc">{{ cmd.description }}</span>
+</summary>
+{% endmacro %}
+
+{% macro cmd_body(cmd) %}
+<div class="cmd-body">
+    {% match cmd.help %}{% when Some with (h) %}<p class="cmd-help">{{ h }}</p>{% when None %}{% endmatch %}
+    {% match cmd.usage %}{% when Some with (u) %}
+    <div class="cmd-field"><span class="cmd-label">Usage</span>
+        <div class="cmd-code"><code>{{ cmd.name }} {{ u }}</code><button type="button" class="cmd-copy" hidden>Copy</button></div></div>
+    {% when None %}{% endmatch %}
+    {% match cmd.example %}{% when Some with (e) %}
+    <div class="cmd-field"><span class="cmd-label">Example</span>
+        <div class="cmd-code"><code>{{ e }}</code><button type="button" class="cmd-copy" hidden>Copy</button></div></div>
+    {% when None %}{% endmatch %}
+    {% if !cmd.aliases.is_empty() %}
+    <div class="cmd-field"><span class="cmd-label">Aliases</span>
+        <span class="cmd-chips">{% for a in cmd.aliases %}<code>{{ a }}</code>{% endfor %}</span></div>
+    {% endif %}
+    {% if !cmd.user_permissions.is_empty() %}
+    <div class="cmd-field"><span class="cmd-label">You need</span>
+        <span class="cmd-chips">{% for p in cmd.user_permissions %}<span class="cmd-perm">{{ p }}</span>{% endfor %}</span></div>
+    {% endif %}
+    {% if !cmd.bot_permissions.is_empty() %}
+    <div class="cmd-field"><span class="cmd-label">Percy needs</span>
+        <span class="cmd-chips">{% for p in cmd.bot_permissions %}<span class="cmd-perm">{{ p }}</span>{% endfor %}</span></div>
+    {% endif %}
+    {% match cmd.cooldown %}{% when Some with (c) %}
+    <div class="cmd-field"><span class="cmd-label">Cooldown</span><span>{{ c }}</span></div>
+    {% when None %}{% endmatch %}
+    <a class="cmd-anchor" href="#{{ cmd.slug }}">Link to this command</a>
+</div>
+{% endmacro %}
+
+{% block nav_commands_active %} active{% endblock %}
+
+{% block title %}Commands — Percy{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/md.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/site/commands.css" type="text/css"/>
+<style>
+/* MD TABLE */
+.md-doc { max-width: 1640px; margin: 2.5rem auto 4rem; padding: 0 1.25rem; }
+</style>
+{% if !categories.is_empty() %}
+<script type="application/ld+json">{{ json_ld|safe }}</script>
+{% endif %}
+{% endblock %}
+
+{% block body %}
+<div class="cmd-page">
+    <h1><span class="spark" aria-hidden="true">✻</span> Commands</h1>
+    <p class="cmd-lead">All available Percy commands, grouped by category.{% if total > 0 %} {{ total }} commands.{% endif %}</p>
+
+    {% if categories.is_empty() %}
+    <div class="cmd-empty">
+        <p>Command list is currently unavailable. The bot may be offline.</p>
+    </div>
+    {% else %}
+    <div class="cmd-toolbar">
+        <input type="search" class="cmd-search" id="cmd-search" placeholder="Search name, alias or description..." aria-label="Search commands" autocomplete="off">
+        <select id="cmd-category-select" class="cmd-select" aria-label="Category">
+            <option value="">All categories ({{ total }})</option>
+            {% for cat in categories %}<option value="{{ cat.slug }}">{{ cat.name }} ({{ cat.count }})</option>{% endfor %}
+        </select>
+        <div class="cmd-types" role="group" aria-label="Command type">
+            <button type="button" class="cmd-type active" data-type="all">All</button>
+            <button type="button" class="cmd-type" data-type="slash">Slash</button>
+            <button type="button" class="cmd-type" data-type="prefix">Prefix-only</button>
+        </div>
+        <span class="cmd-bulk" hidden>
+            <button type="button" id="cmd-expand">Expand all</button>
+            <button type="button" id="cmd-collapse">Collapse all</button>
+        </span>
+    </div>
+
+    <div class="cmd-layout">
+        <nav class="cmd-sidebar" aria-label="Categories">
+            <a href="#" data-cat="" class="active">All commands <span>{{ total }}</span></a>
+            {% for cat in categories %}
+            <a href="#{{ cat.slug }}" data-cat="{{ cat.slug }}">{{ cat.name }} <span>{{ cat.count }}</span></a>
+            {% endfor %}
+        </nav>
+
+        <div class="cmd-main">
+            {% for cat in categories %}
+            <section class="cmd-category" id="{{ cat.slug }}" data-category="{{ cat.slug }}">
+                <h2>{{ cat.name }} <span class="cmd-count">{{ cat.count }}</span></h2>
+                {% for cmd in cat.commands %}
+                <details class="cmd" id="{{ cmd.slug }}" data-slash="{{ cmd.slash }}" data-search="{{ cmd.search }}">
+                    {% call cmd_summary(cmd) %}
+                    {% call cmd_body(cmd) %}
+                    {% if !cmd.subs.is_empty() %}
+                    <div class="cmd-subs">
+                        <span class="cmd-label">Subcommands ({{ cmd.subs.len() }})</span>
+                        {% for sub in cmd.subs %}
+                        <details class="cmd sub" id="{{ sub.slug }}" data-slash="{{ sub.slash }}" data-search="{{ sub.search }}">
+                            {% call cmd_summary(sub) %}
+                            {% call cmd_body(sub) %}
+                        </details>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </details>
+                {% endfor %}
+            </section>
+            {% endfor %}
+            <p class="cmd-empty" id="cmd-none" hidden>No commands match your search.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<hr class="md-border" style="height: 3px; background-color: var(--text-muted); border: none; border-radius: 2px; margin: 3rem 3rem;">
+
+<article class="md-doc">
+    <div class="md-body">
+        {{ flags_md|safe }}
+    </div>
+</article>
+{% endblock %}
+
+{% block body_end %}
+<script src="/static/js/site/commands.js" defer></script>
+{% endblock %}

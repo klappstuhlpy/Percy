@@ -1,0 +1,211 @@
+/* Percy Dashboard — Tag browser: preview (rendered Discord markdown), delete,
+   CSV export (selected/all) and CSV import. Expects GUILD_ID + window.showToast. */
+
+(function() {
+    const guildId = GUILD_ID;
+    const baseUrl = `/dashboard/guild/${guildId}/tags`;
+
+    // ── Discord markdown renderer ──────────────────────────────────────────
+    function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        }[c]));
+    }
+
+    // ── Preview modal ──────────────────────────────────────────────────────
+    const tagModal = document.getElementById('tag-modal');
+    const tagModalTitle = document.getElementById('tag-modal-title');
+    const tagModalMeta = document.getElementById('tag-modal-meta');
+    const tagModalContent = document.getElementById('tag-modal-content');
+    const tagModalClose = document.getElementById('tag-modal-close');
+    tagModalContent.addEventListener('click', (e) => { const sp = e.target.closest('.dc-spoiler'); if (sp) sp.classList.toggle('dc-spoiler--open'); });
+
+    function closeTagModal() { tagModal.hidden = true; }
+    if (tagModalClose) tagModalClose.addEventListener('click', closeTagModal);
+    if (tagModal) tagModal.addEventListener('click', (e) => { if (e.target === tagModal) closeTagModal(); });
+
+    document.querySelectorAll('.tag-view-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            tagModalTitle.textContent = btn.dataset.name;
+            tagModalMeta.textContent = '';
+            document.getElementById('tag-modal-time').textContent = 'Today at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            tagModalContent.innerHTML = '<span class="text-muted">Loading…</span>';
+            tagModal.hidden = false;
+            try {
+                const resp = await fetch(`${baseUrl}/${encodeURIComponent(id)}`, { headers: { 'Accept': 'application/json' } });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    tagModalContent.innerHTML = `<span class="text-muted">${escapeHtml(data.error || 'Failed to load tag.')}</span>`;
+                    return;
+                }
+                const owner = data.owner_name ? `by ${escapeHtml(data.owner_name)}` : '';
+                tagModalMeta.innerHTML = `<span>${data.uses} uses</span>${owner ? ' · <span>' + owner + '</span>' : ''}`;
+                tagModalContent.innerHTML = PercyDiscordMarkdown.render(data.content || "");
+            } catch {
+                tagModalContent.innerHTML = '<span class="text-muted">Network error.</span>';
+            }
+        });
+    });
+
+    // ── Delete ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('.tag-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!(await PercyConfirm.ask({ title: `Delete tag "${btn.dataset.name}"?`, consequence: "The tag and all its aliases are removed for everyone.", undo: null, confirmLabel: "Delete tag", danger: true }))) return;
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`${baseUrl}/${encodeURIComponent(btn.dataset.id)}`, {
+                    method: 'DELETE', headers: { 'Accept': 'application/json' },
+                });
+                const data = await resp.json();
+                if (data.ok) { showToast('success', 'Tag deleted.'); btn.closest('tr').remove(); }
+                else { showToast('error', data.error || 'Failed to delete.'); btn.disabled = false; }
+            } catch { showToast('error', 'Network error.'); btn.disabled = false; }
+        });
+    });
+
+    // ── Search filter ──────────────────────────────────────────────────────
+    const search = document.getElementById('tags-search');
+    if (search) {
+        search.addEventListener('input', function() {
+            const q = this.value.toLowerCase();
+            document.querySelectorAll('#tags-table tbody tr').forEach(tr => {
+                tr.style.display = (tr.dataset.name || '').toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
+    }
+
+    // ── Selection ──────────────────────────────────────────────────────────
+    const selectAll = document.getElementById('tags-select-all');
+    const exportSelectedBtn = document.getElementById('tags-export-selected-btn');
+
+    function checkedNames() {
+        return [...document.querySelectorAll('.tag-check:checked')].map(c => c.value);
+    }
+    function refreshSelection() {
+        if (exportSelectedBtn) exportSelectedBtn.disabled = checkedNames().length === 0;
+    }
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            document.querySelectorAll('#tags-table tbody tr').forEach(tr => {
+                if (tr.style.display === 'none') return;
+                const c = tr.querySelector('.tag-check');
+                if (c) c.checked = selectAll.checked;
+            });
+            refreshSelection();
+        });
+    }
+    document.querySelectorAll('.tag-check').forEach(c => c.addEventListener('change', refreshSelection));
+
+    // ── Export ─────────────────────────────────────────────────────────────
+    const exportAllBtn = document.getElementById('tags-export-all-btn');
+    if (exportAllBtn) exportAllBtn.addEventListener('click', () => {
+        window.location = `${baseUrl}/export.csv`;
+    });
+    if (exportSelectedBtn) exportSelectedBtn.addEventListener('click', () => {
+        const names = checkedNames();
+        if (!names.length) { showToast('error', 'Select at least one tag.'); return; }
+        const q = encodeURIComponent(names.join(','));
+        window.location = `${baseUrl}/export.csv?names=${q}`;
+    });
+
+    // ── Import ─────────────────────────────────────────────────────────────
+    const importBtn = document.getElementById('tags-import-btn');
+    const importInput = document.getElementById('tags-import-input');
+    const importModal = document.getElementById('import-modal');
+    const importResultBody = document.getElementById('import-result-body');
+    const importModalClose = document.getElementById('import-modal-close');
+
+    if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
+    if (importModalClose) importModalClose.addEventListener('click', () => {
+        importModal.hidden = true;
+        location.reload();
+    });
+
+    if (importInput) importInput.addEventListener('change', async () => {
+        const file = importInput.files[0];
+        if (!file) return;
+        importBtn.disabled = true;
+        const prev = importBtn.textContent;
+        importBtn.textContent = 'Importing…';
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const resp = await fetch(`${baseUrl}/import`, {
+                method: 'POST', headers: { 'Accept': 'application/json' }, body: fd,
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                showToast('error', data.error || 'Import failed.');
+            } else {
+                let body = `<p><strong>${data.created}</strong> created, <strong>${data.skipped}</strong> skipped (duplicates/reserved).</p>`;
+                if (data.failed && data.failed.length) {
+                    body += `<p class="text-muted">${data.failed.length} could not be imported:</p><ul class="import-fail-list">`;
+                    body += data.failed.slice(0, 50).map(f =>
+                        `<li><code>${escapeHtml(f.name)}</code> — ${escapeHtml(f.error)}</li>`).join('');
+                    body += '</ul>';
+                }
+                importResultBody.innerHTML = body;
+                importModal.hidden = false;
+            }
+        } catch { showToast('error', 'Network error during import.'); }
+        finally {
+            importBtn.disabled = false;
+            importBtn.textContent = prev;
+            importInput.value = '';
+        }
+    });
+})();
+
+/* Create and edit tags (the dashboard user owns a tag they create, like `tag create`). */
+(function () {
+    'use strict';
+    const modal = document.getElementById('tag-edit-modal');
+    if (!modal) return;
+    const base = `/dashboard/guild/${GUILD_ID}/tags`;
+    const name = document.getElementById('tag-edit-name');
+    const content = document.getElementById('tag-edit-content');
+    const count = document.getElementById('tag-edit-count');
+    const save = document.getElementById('tag-edit-save');
+    let editing = null;
+
+    const open = (tag) => {
+        editing = tag;
+        document.getElementById('tag-edit-title').textContent = tag ? `Edit "${tag.name}"` : 'New tag';
+        document.getElementById('tag-edit-name-hint').hidden = !!tag;
+        save.textContent = tag ? 'Save content' : 'Create tag';
+        name.value = tag ? tag.name : '';
+        name.readOnly = !!tag;
+        content.value = tag ? tag.content : '';
+        count.textContent = content.value.length;
+        modal.hidden = false;
+        (tag ? content : name).focus();
+    };
+    content.addEventListener('input', () => { count.textContent = content.value.length; });
+    document.getElementById('tag-new-btn').addEventListener('click', () => open(null));
+    document.getElementById('tag-edit-cancel').addEventListener('click', () => { modal.hidden = true; });
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+
+    document.querySelectorAll('.tag-edit-btn').forEach((btn) => btn.addEventListener('click', async () => {
+        const data = await fetch(`${base}/${encodeURIComponent(btn.dataset.id)}`, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json()).catch(() => null);
+        if (!data || data.error) { showToast('error', (data && data.error) || 'Could not load the tag.'); return; }
+        open({ id: btn.dataset.id, name: data.name, content: data.content });
+    }));
+
+    save.addEventListener('click', async () => {
+        if (!name.value.trim() || !content.value.trim()) { showToast('error', 'A tag needs a name and content.'); return; }
+        save.disabled = true;
+        const [url, body] = editing
+            ? [`${base}/${encodeURIComponent(editing.id)}/edit`, { content: content.value }]
+            : [`${base}/create`, { name: name.value, content: content.value }];
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body),
+        }).then((r) => r.json()).catch(() => ({ ok: false, error: 'Network error.' }));
+        save.disabled = false;
+        if (res.ok) { showToast('success', res.message || 'Saved.'); setTimeout(() => location.reload(), 500); }
+        else showToast('error', res.error || 'Could not save the tag.');
+    });
+})();

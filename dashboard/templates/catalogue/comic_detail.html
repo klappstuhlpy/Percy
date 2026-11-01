@@ -1,0 +1,224 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_comics_active %} active{% endblock %}
+
+{% import "layout/progress_toggle.html" as progress %}
+{% import "layout/news_strip.html" as news_strip %}
+
+{% block title %}{% if title.is_empty() %}Comic unavailable{% else %}{{ title }}{% match issue_label %}{% when Some with (issue) %} {{ issue }}{% when None %}{% endmatch %}{% endif %} | Percy{% endblock %}
+
+{% block meta_description %}{% if title.is_empty() %}This release couldn't be loaded right now.{% else %}{{ title }}{% match issue_label %}{% when Some with (issue) %} {{ issue }}{% when None %}{% endmatch %} — release date, creators and where it fits in the series.{% endif %}{% endblock %}
+{% block og_title %}{{ title }}{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/comics/{{ brand }}/{{ slug }}{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/catalogue/comics.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/news.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/progress.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/app.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx" style="--comic-accent: {{ accent }}">
+    <div class="cx-page">
+        {% if title.is_empty() %}
+        <div class="cx-empty">
+            <p>This release couldn't be loaded right now. Try again in a moment.</p>
+        </div>
+        {% else %}
+        <section class="cx-hero">
+            {% match cover_url %}
+            {% when Some with (cover) %}
+            <img class="cx-hero__cover" src="{{ cover }}" alt="" loading="lazy" width="240" height="360">
+            {% when None %}
+            <span class="cx-hero__cover cx-hero__cover--placeholder" aria-hidden="true"></span>
+            {% endmatch %}
+            <div class="cx-hero__body">
+                <span class="cx-head__eyebrow">{{ brand_label }}</span>
+                <h1 class="cx-head__title">
+                    {{ title }}
+                    {% match issue_label %}
+                    {% when Some with (issue) %}
+                    <span class="cx-hero__issue">{{ issue }}</span>
+                    {% when None %}
+                    {% endmatch %}
+                </h1>
+                {% match release_date %}
+                {% when Some with (date) %}
+                <p class="cx-hero__date">{{ date }}</p>
+                {% when None %}
+                {% endmatch %}
+                <div class="cx-hero__actions">{% call progress::toggle(toggle) %}</div>
+            </div>
+        </section>
+
+        <dl class="cx-facts">
+            {% match release_date %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>Release date</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match format %}
+            {% when Some with (value) %}
+            <div class="cx-facts__row"><dt>Format</dt><dd>{{ value }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match page_count %}
+            {% when Some with (value) %}
+            <div class="cx-facts__row"><dt>Pages</dt><dd>{{ value }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match price_label %}
+            {% when Some with (value) %}
+            <div class="cx-facts__row"><dt>Price</dt><dd>{{ value }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match publisher %}
+            {% when Some with (value) %}
+            <div class="cx-facts__row"><dt>Publisher</dt><dd>{{ value }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match series_name %}
+            {% when Some with (name) %}
+            <div class="cx-facts__row">
+                <dt>Series</dt>
+                <dd>
+                    {% match series_slug %}
+                    {% when Some with (series_slug_value) %}
+                    <a href="/comics/series/{{ series_slug_value }}?brand={{ brand }}">{{ name }}</a>
+                    {% when None %}
+                    {{ name }}
+                    {% endmatch %}
+                </dd>
+            </div>
+            {% when None %}
+            {% endmatch %}
+            {% match source_url %}
+            {% when Some with (url) %}
+            <div class="cx-facts__row">
+                <dt>Source</dt>
+                <dd><a href="{{ url }}" target="_blank" rel="noopener">View original listing</a></dd>
+            </div>
+            {% when None %}
+            {% endmatch %}
+            {% match first_seen %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>First tracked</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match updated_at %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>Updated</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+        </dl>
+
+        {% if previous.is_some() || next.is_some() || !more_from_series.is_empty() %}
+        <section class="cx-neighbours">
+            <h2 class="cx-section__title">Where it fits</h2>
+            <div class="cx-neighbours__row">
+                {% match previous %}
+                {% when Some with (item) %}
+                <a class="cx-neighbour" href="/comics/{{ item.brand }}/{{ item.slug }}">
+                    <span class="cx-neighbour__dir">← Previous</span>
+                    <span class="cx-neighbour__title">{{ item.title }}</span>
+                </a>
+                {% when None %}
+                {% endmatch %}
+                {% match next %}
+                {% when Some with (item) %}
+                <a class="cx-neighbour" href="/comics/{{ item.brand }}/{{ item.slug }}">
+                    <span class="cx-neighbour__dir">Next →</span>
+                    <span class="cx-neighbour__title">{{ item.title }}</span>
+                </a>
+                {% when None %}
+                {% endmatch %}
+            </div>
+
+            {% if !more_from_series.is_empty() %}
+            <h3 class="cx-section__subtitle">More from this series</h3>
+            <div class="cx-grid cx-grid--compact">
+                {% for item in more_from_series %}
+                <a class="cx-card" href="/comics/{{ item.brand }}/{{ item.slug }}">
+                    {% match item.cover_url %}
+                    {% when Some with (cover) %}
+                    <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
+                    {% when None %}
+                    <span class="cx-card__cover cx-card__cover--placeholder" aria-hidden="true"></span>
+                    {% endmatch %}
+                    <div class="cx-card__body">
+                        <h3 class="cx-card__title">
+                            {{ item.title }}
+                            {% match item.issue_label %}
+                            {% when Some with (label) %}
+                            <span class="cx-card__issue">{{ label }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                        </h3>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        {% if !credit_groups.is_empty() %}
+        <section class="cx-creators">
+            <h2 class="cx-section__title">Creators</h2>
+            {% for group in credit_groups %}
+            <div class="cx-creators__group">
+                <span class="cx-creators__role">{{ group.role }}</span>
+                <span class="cx-creators__names">
+                    {% for credit in group.credits %}
+                    <a href="{{ credit.href }}">{{ credit.name }}</a>{% if !loop.last %}, {% endif %}
+                    {% endfor %}
+                </span>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if !characters.is_empty() %}
+        <section class="cx-characters">
+            <h2 class="cx-section__title">Characters</h2>
+            <ul class="cx-characters__list">
+                {% for character in characters %}
+                <li class="cx-character">
+                    <a href="{{ character.href }}">{{ character.name }}</a>
+                    {% match character.kind %}
+                    {% when Some with (kind) %}
+                    <span class="cx-character__kind">{{ kind }}</span>
+                    {% when None %}
+                    {% endmatch %}
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        {# §6.2's 6b: absent rather than empty when nothing has been written about the
+           series. Headline + source + date, linking out — §9 permits nothing more. #}
+        {% if !related_news.is_empty() %}
+        <section class="nx-related nx">
+            <h2 class="cx-section__title">Related news</h2>
+            {% call news_strip::list(related_news) %}
+            <a class="nx-more" href="{{ related_news_href }}">All news for this series →</a>
+        </section>
+        {% endif %}
+
+        {% match description %}
+        {% when Some with (text) %}
+        <section class="cx-description">
+            <h2 class="cx-section__title">Description</h2>
+            <p>{{ text }}</p>
+        </section>
+        {% when None %}
+        {% endmatch %}
+        {% endif %}
+
+        {% include "catalogue/comics_attribution.html" %}
+    </div>
+</div>
+<script src="/static/js/catalogue/progress.js" defer></script>
+{% endblock %}

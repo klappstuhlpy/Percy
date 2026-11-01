@@ -1,0 +1,140 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_dashboard_active %} active{% endblock %}
+
+{% block title %}Dashboard | Percy{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/site/picker.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="pick-page">
+    <header class="site-head">
+        <div class="site-head-text">
+            <h1>Your servers</h1>
+            <p>Manage Percy's configuration, peek at a server you're in, or add Percy somewhere new.</p>
+        </div>
+        <div class="site-head-acts">
+            <a href="/dashboard/music" class="btn" aria-label="Open the music app"><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-music"/></svg>Music</a>
+            <a href="{{ invite_url }}" target="_blank" rel="noopener" class="btn btn--primary" aria-label="Add Percy to a server">
+                <img src="/static/img/discord.svg" alt="" width="16" height="16">
+                Add Percy
+            </a>
+        </div>
+    </header>
+
+    {% if managed.is_empty() && public.is_empty() && add_percy.is_empty() %}
+    <div class="empty empty--lg">
+        <span class="empty-ico" aria-hidden="true"><svg><use href="/static/icons/sprite.svg#i-users"/></svg></span>
+        <h2>No servers found</h2>
+        <p>Add Percy to a server you manage, or join a server that already has Percy.</p>
+        <div class="empty-acts">
+            <a href="{{ invite_url }}" target="_blank" rel="noopener" class="btn btn--primary">
+                <img src="/static/img/discord.svg" alt="" width="16" height="16">
+                Invite Percy
+            </a>
+        </div>
+    </div>
+    {% else %}
+
+    {% if !managed.is_empty() %}
+    <section class="pick-section">
+        <div class="pick-head">
+            <h2>Managed Servers</h2>
+            <span class="chip">{{ managed.len() }}</span>
+        </div>
+        <p class="pick-sub">You have Manage Server or Administrator here — full dashboard access.</p>
+        <div class="pick-grid">
+            {% for guild in managed %}
+            <a href="/dashboard/guild/{{ guild.id }}" class="pick-card" style="--i:{{ loop.index0 }}">
+                <span class="pick-art">
+                    {% match guild.icon_url %}
+                    {% when Some with (url) %}
+                    <img src="{{ crate::templates::cdn_sized(url, 256) }}" alt="" loading="lazy">
+                    {% when None %}
+                    <span class="pick-initial" aria-hidden="true">{{ guild.name.chars().next().unwrap_or('?') }}</span>
+                    {% endmatch %}
+                    {% if guild.owner %}<span class="chip chip--accent pick-badge">Owner</span>{% endif %}
+                    <span class="pick-cta" aria-hidden="true"><svg><use href="/static/icons/sprite.svg#i-chevron-right"/></svg></span>
+                </span>
+                <span class="pick-name" title="{{ guild.name }}">{{ guild.name }}</span>
+                {% match guild.member_count %}
+                    {% when Some with (count) %}
+                    <span class="pick-meta">{{ count }} members</span>
+                    {% when None %}
+                    <span class="pick-meta">Tap to manage</span>
+                    {% endmatch %}
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if !public.is_empty() %}
+    <section class="pick-section">
+        <div class="pick-head">
+            <h2>Servers You're In</h2>
+            <span class="chip">{{ public.len() }}</span>
+        </div>
+        <p class="pick-sub">Percy is here, but you don't manage it — view your profile or the public overview.</p>
+        <div class="pick-grid">
+            {% for guild in public %}
+            <a href="/dashboard/guild/{{ guild.id }}/me" class="pick-card" style="--i:{{ loop.index0 }}">
+                <span class="pick-art">
+                    {% match guild.icon_url %}
+                    {% when Some with (url) %}
+                    <img src="{{ crate::templates::cdn_sized(url, 256) }}" alt="" loading="lazy">
+                    {% when None %}
+                    <span class="pick-initial" aria-hidden="true">{{ guild.name.chars().next().unwrap_or('?') }}</span>
+                    {% endmatch %}
+                    <span class="chip pick-badge">My profile</span>
+                    <span class="pick-cta" aria-hidden="true"><svg><use href="/static/icons/sprite.svg#i-chevron-right"/></svg></span>
+                </span>
+                <span class="pick-name" title="{{ guild.name }}">{{ guild.name }}</span>
+                {% match guild.member_count %}
+                    {% when Some with (count) %}
+                    <span class="pick-meta">{{ count }} members</span>
+                    {% when None %}
+                    <span class="pick-meta">Your profile</span>
+                    {% endmatch %}
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="pick-section">
+        <div class="pick-head">
+            <h2>Add Percy</h2>
+            {% if !add_percy.is_empty() %}<span class="chip">{{ add_percy.len() }}</span>{% endif %}
+        </div>
+        <p class="pick-sub">Servers you manage where Percy isn't a member yet. Click to invite{% if add_percy.is_empty() %}, or use <strong>Add Percy</strong> above to pick any server{% endif %}.</p>
+        {% if add_percy.is_empty() %}
+        <p class="pick-sub">Don't see a server you manage here? This list is built from Discord when you sign in — <a href="/auth/discord">re-link Discord</a> to refresh it.</p>
+        {% else %}
+        <div class="pick-grid">
+            {% for guild in add_percy %}
+            <a href="{{ guild.invite_url }}" target="_blank" rel="noopener" class="pick-card pick-card--add" style="--i:{{ loop.index0 }}">
+                <span class="pick-art">
+                    {% match guild.icon_url %}
+                    {% when Some with (url) %}
+                    <img src="{{ crate::templates::cdn_sized(url, 256) }}" alt="" loading="lazy">
+                    {% when None %}
+                    <span class="pick-initial" aria-hidden="true">{{ guild.name.chars().next().unwrap_or('?') }}</span>
+                    {% endmatch %}
+                    {% if guild.owner %}<span class="chip chip--accent pick-badge">Owner</span>{% endif %}
+                    <span class="pick-cta" aria-hidden="true">+</span>
+                </span>
+                <span class="pick-name" title="{{ guild.name }}">{{ guild.name }}</span>
+                <span class="pick-meta">Percy not added</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,428 @@
+/* Personal user dashboard — member's own profile view. */
+
+.user-dash-container {
+    max-width: 860px;
+}
+
+/* "← All servers" back link (overview.css isn't loaded on this page). */
+.user-dash-container .overview-back {
+    display: inline-block;
+    margin-bottom: 2rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+.user-dash-container .overview-back:hover {
+    color: var(--text);
+}
+
+/* ── Profile header ──────────────────────────────────────────────────── */
+.user-dash-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+}
+
+.user-dash-avatar {
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.user-dash-info h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.user-dash-username {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.user-dash-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.user-dash-boost {
+    color: #f47fff;
+}
+
+/* ── Settings form ───────────────────────────────────────────────────── */
+.user-dash-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+}
+
+.setting-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.setting-info label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.setting-hint {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+.setting-input {
+    width: 220px;
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    font: inherit;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--foreground);
+    transition: border-color 0.15s;
+}
+
+.setting-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.setting-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* Actions row */
+
+
+
+
+
+
+
+
+/* ── Roles ───────────────────────────────────────────────────────────── */
+.user-dash-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* ── Stats grid ──────────────────────────────────────────────────────── */
+.user-dash-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+/* ── Top commands list ───────────────────────────────────────────────── */
+.user-dash-top-commands {
+    margin-top: 1rem;
+}
+
+.user-dash-top-commands h3 {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.top-commands-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.35rem 1rem;
+}
+
+.top-commands-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0.6rem;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+}
+
+.cmd-name {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--accent-hover);
+}
+
+.cmd-uses {
+    color: var(--text-muted);
+}
+
+/* ── Presence timeline ───────────────────────────────────────────────── */
+.presence-chart {
+    width: 100%;
+}
+
+.presence-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Legend: colored status swatches with their share of tracked time. */
+.pt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+}
+.pt-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.pt-legend-item strong {
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+}
+.pt-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* Rows: one day each. Date label column + 24h track column. */
+.pt-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+.pt-day,
+.pt-axis {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.pt-date {
+    flex: 0 0 88px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+}
+.pt-track {
+    position: relative;
+    flex: 1;
+    height: 18px;
+    border-radius: 6px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    /* Faint 6-hour gridlines behind the segments. */
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(25% - 1px),
+        rgba(127, 127, 127, 0.16) calc(25% - 1px),
+        rgba(127, 127, 127, 0.16) 25%
+    );
+}
+.pt-seg {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 1px;
+    opacity: 0.9;
+    transition: opacity 0.12s;
+}
+.pt-seg:hover { opacity: 1; }
+
+/* Hour axis under the rows, aligned to the track column. */
+.pt-axis {
+    padding-top: 0.15rem;
+}
+.pt-hours {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+    .pt-date { flex-basis: 64px; font-size: 0.68rem; }
+    .pt-day, .pt-axis { gap: 0.5rem; }
+}
+
+.chart-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 1rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ── Name / nickname history ─────────────────────────────────────────── */
+.history-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.history-column h3 {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.history-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.history-list li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+}
+
+.history-value {
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.history-when {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.history-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ── Avatar history gallery ──────────────────────────────────────────── */
+.avatar-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 0.75rem;
+}
+
+.avatar-snap {
+    margin: 0;
+    text-align: center;
+}
+
+.avatar-snap img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+}
+
+.avatar-snap figcaption {
+    margin-top: 0.3rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* ── Data download / delete ──────────────────────────────────────────── */
+.data-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .user-dash-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    .user-dash-meta {
+        justify-content: center;
+    }
+    .user-dash-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .setting-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .setting-input {
+        width: 100%;
+    }
+}
+
+/* Rank card: saved card first; the editor is a modal with pickers beside a live preview. */
+.rank-card-editor { display: grid; grid-template-columns: minmax(16rem, 22rem) 1fr; gap: 1.5rem; align-items: start; }
+.rank-card-dialog { width: min(64rem, calc(100vw - 2rem)); max-width: 64rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-2); color: var(--text); box-shadow: var(--shadow-pop); }
+.rank-card-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.rank-card-dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.rank-card-preview { margin: 0 0 1rem; }
+.rank-card-editor .rank-card-preview { margin: 0; }
+.rank-card-preview img { display: block; width: 100%; height: auto; aspect-ratio: 1154 / 360; border-radius: var(--radius-md); border: 1px solid var(--line); }
+.rank-card-preview figcaption { margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted); }
+.badge-soon { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15em 0.6em; border-radius: 999px; border: 1px solid var(--box-border); color: var(--text-muted); }
+@media (max-width: 720px) {
+    .rank-card-editor { grid-template-columns: minmax(0, 1fr); }
+    .rank-card-editor .rank-card-preview { order: -1; }
+}
+
+/* Reminders */
+.reminder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.reminder-item { display: flex; align-items: center; gap: 0.75rem; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); }
+.reminder-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
+.reminder-message { overflow-wrap: anywhere; }
+.reminder-meta { font-size: 0.78rem; color: var(--text-muted); }

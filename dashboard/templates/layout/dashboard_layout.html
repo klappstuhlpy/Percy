@@ -1,0 +1,156 @@
+{% extends "layout/layout.html" %}
+
+{# The server dashboard's app shell: top bar (brand, server pill, command-palette search, bell,
+   theme + account menu), a collapsible icon nav, and a page-header slot. Pages keep filling the
+   same blocks (`content`, `page_header`, `page_subtitle`, `header_actions`, `page_css`, `page_js`). #}
+
+{% macro icon(name) %}<svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-{{ name }}"/></svg>{% endmacro %}
+
+{# `badge` is non-empty for the Notifications row, which notification_badge.js fills. #}
+{% macro link(path, key, ico, label, badge) %}<a href="/dashboard/guild/{{ guild_id }}{{ path }}" class="dash-nav-link{% if nav_active == key %} active{% endif %}" title="{{ label }}"{% if nav_active == key %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="/static/icons/sprite.svg#i-{{ ico }}"/></svg><span class="dash-nav-text">{{ label }}</span>{% if !badge.is_empty() %}<span class="dash-nav-badge" hidden></span>{% endif %}</a>{% endmacro %}
+
+{% block nav_dashboard_active %} active{% endblock %}
+
+{% block title %}{{ page_title }} — {{ guild_name }} | Dashboard{% endblock %}
+
+{% block body_attrs %} class="app-canvas shell-page"{% endblock %}
+
+{% block css %}
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"/>
+<link rel="stylesheet" href="/static/css/common/tokens.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/components.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/shell.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/pages.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/common/command_palette.css" type="text/css"/>
+{% block page_css %}{% endblock %}
+{% endblock %}
+
+{% block skin_css %}{% endblock %}
+
+{% block shell %}
+<div class="shell" id="shell">
+    <a class="shell-skip" href="#dash-main">Skip to content</a>
+
+    <header class="shell-top">
+        <button type="button" class="shell-ibtn shell-burger" id="shell-burger" aria-controls="dash-sidebar" aria-expanded="false" aria-label="Open navigation">{% call icon("menu") %}</button>
+        <a class="shell-brand" href="/dashboard" aria-label="Percy, all servers"><span class="spark" aria-hidden="true">✻</span>Percy</a>
+
+        <details class="shell-picker">
+            <summary class="shell-picker-btn" aria-label="Server: {{ guild_name }}. Switch server">
+                <span class="shell-dot" aria-hidden="true"></span>
+                <span class="shell-picker-name">{{ guild_name }}</span>
+                {% call icon("chevron-down") %}
+            </summary>
+            <div class="shell-pop" role="menu">
+                <p class="shell-pop-label">Current server</p>
+                <a role="menuitem" class="is-on" href="/dashboard/guild/{{ guild_id }}"><span class="shell-picker-name">{{ guild_name }}</span></a>
+                <hr>
+                <a role="menuitem" href="/dashboard">All servers</a>
+                <a role="menuitem" href="/dashboard/guild/{{ guild_id }}/music">Music player</a>
+            </div>
+        </details>
+
+        {# Rendered here, not injected, so the bar keeps its layout between page loads. It stays
+           invisible (space reserved) until command_palette.js wires it up, so a JS-off page never
+           shows a launcher that does nothing. #}
+        <button type="button" id="cmdk-trigger" class="shell-search cmdk-trigger--pending" tabindex="-1" aria-hidden="true">
+            {% call icon("search") %}<span>Search settings, commands, pages</span><kbd class="shell-kbd">Ctrl K</kbd>
+        </button>
+
+        <div class="shell-top-end">
+            <a class="shell-ibtn" href="/dashboard/guild/{{ guild_id }}/notifications" title="Notifications">{% call icon("bell") %}<span class="shell-sr">Notifications</span><span class="dash-nav-badge shell-badge" hidden></span></a>
+            {% include "layout/app_top_end.html" %}
+        </div>
+    </header>
+
+    <aside class="dash-sidebar" id="dash-sidebar">
+        <nav class="dash-nav" aria-label="Dashboard sections">
+            <div class="dash-nav-group">
+                <span class="dash-nav-heading">Overview</span>
+                {% call link("/notifications", "notifications", "bell", "Notifications", "1") %}
+                {% call link("", "config", "sliders", "Configuration", "") %}
+                {% call link("/members", "members", "users", "Members", "") %}
+                {% call link("/stats", "stats", "chart", "Statistics", "") %}
+                {% call link("/analytics", "analytics", "trend", "Analytics", "") %}
+                {% call link("/commands", "commands", "terminal", "Commands", "") %}
+            </div>
+            <div class="dash-nav-group">
+                <span class="dash-nav-heading">Features</span>
+                {% call link("/leveling", "leveling", "trophy", "Leveling", "") %}
+                {% call link("/economy", "economy", "coins", "Economy", "") %}
+                {% call link("/music", "music", "music", "Music", "") %}
+                {% call link("/comics", "comics", "book", "Comics", "") %}
+                {% call link("/temp-channels", "temp-channels", "voice", "Temp Channels", "") %}
+            </div>
+            <div class="dash-nav-group">
+                <span class="dash-nav-heading">Community</span>
+                {% call link("/polls", "polls", "poll", "Polls", "") %}
+                {% call link("/gallery", "gallery", "image", "Image Gallery", "") %}
+                {% call link("/giveaways", "giveaways", "gift", "Giveaways", "") %}
+                {% call link("/tags", "tags", "tag", "Tags", "") %}
+                {% call link("/role-menus", "role-menus", "list", "Role Menus", "") %}
+                {% call link("/starboard", "starboard", "star", "Starboard", "") %}
+                {% call link("/emoji-stats", "emoji-stats", "smile", "Emoji Stats", "") %}
+            </div>
+            <div class="dash-nav-group">
+                <span class="dash-nav-heading">Integrations</span>
+                {% call link("/webhooks", "webhooks", "webhook", "Webhooks", "") %}
+                {% call link("/backup", "backup", "archive", "Backup & Templates", "") %}
+                {% call link("/developers", "developers", "code", "Developers", "") %}
+            </div>
+            <div class="dash-nav-group">
+                {% call link("/me", "me", "user", "My Profile", "") %}
+            </div>
+        </nav>
+        <div class="shell-nav-foot">
+            <button type="button" class="shell-ibtn shell-collapse" id="shell-collapse" aria-pressed="false" title="Collapse navigation">{% call icon("panel") %}<span class="shell-collapse-label">Collapse</span></button>
+        </div>
+        {# Inline so it runs before first paint: .dash-sidebar is what scrolls, and a full page load would reset it to the top. #}
+        <script>
+        (function () {
+            var side = document.currentScript.parentElement, KEY = 'percy:sidebar-scroll';
+            function save() { try { sessionStorage.setItem(KEY, side.scrollTop); } catch (e) {} }
+            var saved = null;
+            try { saved = sessionStorage.getItem(KEY); } catch (e) {}
+            if (saved !== null) side.scrollTop = +saved;
+            else { var a = side.querySelector('.dash-nav-link.active'); if (a) a.scrollIntoView({ block: 'nearest' }); }
+            addEventListener('pagehide', save);
+            side.addEventListener('click', function (e) { if (e.target.closest('.dash-nav-link')) save(); });
+        })();
+        </script>
+    </aside>
+    <div class="shell-scrim" id="shell-scrim"></div>
+
+    <main class="dashboard-content" id="dash-main" tabindex="-1">
+        {% block page_header %}
+        <div class="dashboard-header dash-rise">
+            <div>
+                <h1>{{ page_title }}</h1>
+                {% block page_subtitle %}<p></p>{% endblock %}
+            </div>
+            {% block header_actions %}{% endblock %}
+        </div>
+        {% endblock %}
+
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}
+
+{% block body_end %}
+<script src="/static/js/common/common.js"></script>
+<script src="/static/js/common/toast.js"></script>
+<script src="/static/js/common/shell.js"></script>
+<script src="/static/js/common/confirm.js"></script>
+<script src="/static/js/common/pickers.js" defer></script>
+<script src="/static/js/common/table-sort.js"></script>
+<script src="/static/js/common/unsaved.js"></script>
+<script src="/static/js/common/test_send.js"></script>
+{% block page_js %}{% endblock %}
+<script>window.PERCY_DASH = { guildId: '{{ guild_id }}', guildName: {{ guild_name|json|safe }} };</script>
+<script src="/static/js/common/notification_badge.js"></script>
+<script src="/static/js/common/command_palette.js"></script>
+{% endblock %}

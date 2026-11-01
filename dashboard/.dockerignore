@@ -1,0 +1,30 @@
+# Build artefacts – largest directory, never needed in the image
+target/
+
+# Git history
+.git/
+.gitignore
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
+
+# Claude Code session data
+.claude/
+
+# Local-only reference copies (gitignored)
+reference/
+
+# Persistent runtime data (mounted as a volume at /data)
+data/
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Docs / misc
+*.md
+docs/
+LICENSE

@@ -1,0 +1,42 @@
+services:
+  percy-dashboard:
+    container_name: percy-dashboard
+    build:
+      context: .
+    image: percy-dashboard:latest
+    restart: unless-stopped
+
+    # environment:
+      # Percy's internal API (the dashboard's one hard runtime dependency).
+      # These override blank config.json fields; set them here or in config.json.
+      # - PERCY_API_URL=http://host.docker.internal:8090
+      # - PERCY_API_TOKEN=<same as Percy's INTERNAL_API_TOKEN>
+      # Optional: klappstuhl.me API token (images:read) for upload virus scanning.
+      # - PERCY_SCAN_TOKEN=<token>
+
+    volumes:
+      # Persistent data: the auto-created config.json + dashboard.db (SQLite).
+      # On first run the app writes a default config with a generated signing key
+      # to ./data/config/percy-dashboard/config.json — fill in the Discord OAuth
+      # credentials (and, for SSO, the shared sso_secret) there, then restart.
+      - ./data:/data
+
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8091"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+    networks:
+      - homelab
+
+networks:
+  homelab:
+    external: true

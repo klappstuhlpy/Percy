@@ -1,0 +1,588 @@
+openapi: 3.1.0
+info:
+  title: Percy API
+  version: 1.0.0
+  summary: Read and change a server's economy, items, inventories and levels.
+  description: |
+    The public API of [Percy](https://percy.klappstuhl.me). A server admin (Manage Server) creates a
+    token on the **Developers** tab of the dashboard. A token belongs to **one server** and carries
+    the scopes it was given; everything is denied by default.
+
+    ## Authentication
+    Send `Authorization: Bearer pct_…` on every `/guilds/{guild_id}/…` request. The token is shown
+    once at creation; Percy keeps only a hash. A request for a different server than the token's is
+    a `403 guild_mismatch`.
+
+    ## Rate limits
+    60 requests per minute per token, with a burst of 20. Every response carries
+    `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the bucket
+    is full); a `429` adds `Retry-After`. Requests without a valid token are limited per IP.
+
+    ## Errors
+    Always `{"error": {"code": "item_not_found", "message": "…"}}` with the matching HTTP status.
+    The `code` is the contract; the `message` is for humans and may change.
+
+    ## Idempotency
+    `PATCH /users/{user_id}`, `POST …/inventory` and `DELETE …/inventory/{item_id}` accept an
+    `Idempotency-Key` header (1-64 characters of `A-Za-z0-9-_.:`). Retrying the same request with the
+    same key within 24 hours returns the first answer (with `Idempotent-Replayed: true`) instead of
+    applying it twice. Reusing a key for a different request is a `422 idempotency_key_reuse`.
+  license:
+    name: Terms of Service
+    url: https://percy.klappstuhl.me/terms-of-service
+servers:
+  - url: https://percy.klappstuhl.me/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Server
+  - name: Balances
+  - name: Items
+  - name: Inventory
+  - name: Leveling
+  - name: Bot
+paths:
+  /guilds/{guild_id}:
+    get:
+      tags: [Server]
+      summary: Get the server
+      description: The server's name and its economy settings. Any valid token for the server works.
+      operationId: getGuild
+      x-required-scope: any
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+      responses:
+        '200':
+          description: The server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guild'
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/users:
+    get:
+      tags: [Balances]
+      summary: List the richest members
+      description: Members ordered by cash + bank, highest first. Members with an empty wallet are not listed.
+      operationId: listBalances
+      x-required-scope: economy:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of balances.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RankedBalance'
+                  limit: { type: integer }
+                  offset: { type: integer }
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/users/{user_id}:
+    get:
+      tags: [Balances]
+      summary: Get a member's balance
+      description: A member with no wallet yet has a balance of 0.
+      operationId: getBalance
+      x-required-scope: economy:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      tags: [Balances]
+      summary: Add to or subtract from a balance
+      description: |
+        Applies signed deltas to cash and/or bank in one atomic step. If either would end below zero
+        nothing changes and the answer is `400 insufficient_funds`.
+      operationId: adjustBalance
+      x-required-scope: economy:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceDelta'
+            example: { cash: 500 }
+      responses:
+        '200':
+          description: The new balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Balances]
+      summary: Set a balance
+      description: Sets cash and/or bank to absolute, non-negative values. Fields you leave out are untouched.
+      operationId: setBalance
+      x-required-scope: economy:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceDelta'
+            example: { cash: 1000, bank: 0 }
+      responses:
+        '200':
+          description: The new balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/users/{user_id}/inventory:
+    get:
+      tags: [Inventory]
+      summary: List a member's inventory
+      operationId: getInventory
+      x-required-scope: items:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The items the member owns.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: { type: string }
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryItem'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Inventory]
+      summary: Give items to a member
+      description: Grants items for free (stock is not reduced). Refused with `409 item_limit_reached` past the item's `max_per_user`.
+      operationId: giveItem
+      x-required-scope: items:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id]
+              properties:
+                item_id: { type: integer }
+                quantity: { type: integer, minimum: 1, maximum: 10000, default: 1 }
+      responses:
+        '200':
+          description: The member's new quantity of that item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryChange'
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/users/{user_id}/inventory/{item_id}:
+    delete:
+      tags: [Inventory]
+      summary: Take items from a member
+      description: Removes `quantity` (default 1). Refused with `409 insufficient_items` if the member owns fewer.
+      operationId: takeItem
+      x-required-scope: items:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/ItemId'
+        - name: quantity
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10000, default: 1 }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: What the member has left.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryChange'
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/items:
+    get:
+      tags: [Items]
+      summary: List shop items
+      operationId: listItems
+      x-required-scope: items:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+      responses:
+        '200':
+          description: Every item in the shop.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Item'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Items]
+      summary: Create an item
+      description: |
+        `effect` and its value are validated like the in-Discord item editor; the category follows from
+        the effect. A name already in use is `409 item_exists`.
+      operationId: createItem
+      x-required-scope: items:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemInput'
+            example: { name: Lucky Charm, price: 2500, rarity: rare, description: A little luck. }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/items/{item_id}:
+    get:
+      tags: [Items]
+      summary: Get an item
+      operationId: getItem
+      x-required-scope: items:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/ItemId'
+      responses:
+        '200':
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      tags: [Items]
+      summary: Edit an item
+      description: Only the fields you send change; send `null` to clear an optional one. An item's effect cannot be changed.
+      operationId: updateItem
+      x-required-scope: items:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPatch'
+      responses:
+        '200':
+          description: The item after the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Items]
+      summary: Delete an item
+      description: Also removes it from every member's inventory. This cannot be undone.
+      operationId: deleteItem
+      x-required-scope: items:write
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/ItemId'
+      responses:
+        '204':
+          description: Deleted.
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/leveling/leaderboard:
+    get:
+      tags: [Leveling]
+      summary: Leveling leaderboard
+      operationId: levelingLeaderboard
+      x-required-scope: leveling:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of the leaderboard.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id: { type: string }
+                        rank: { type: integer }
+                        level: { type: integer }
+                        xp: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        default:
+          $ref: '#/components/responses/Error'
+  /guilds/{guild_id}/leveling/users/{user_id}:
+    get:
+      tags: [Leveling]
+      summary: Get a member's level
+      description: A member with no XP is level 0, rank 0.
+      operationId: getLevel
+      x-required-scope: leveling:read
+      parameters:
+        - $ref: '#/components/parameters/GuildId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The member's level.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: { type: string }
+                  level: { type: integer }
+                  xp: { type: integer }
+                  messages: { type: integer }
+                  rank: { type: integer }
+        default:
+          $ref: '#/components/responses/Error'
+  /bot/stats:
+    get:
+      tags: [Bot]
+      summary: Public bot statistics
+      description: No token needed. Limited per IP.
+      operationId: getBotStats
+      x-required-scope: none
+      security: []
+      responses:
+        '200':
+          description: Current numbers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: [string, 'null'] }
+                  guild_count: { type: integer }
+                  user_count: { type: integer }
+                  command_count: { type: integer }
+                  total_commands_used: { type: integer }
+                  latency_ms: { type: number }
+                  uptime_seconds: { type: number }
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A `pct_…` token from the Developers tab of the dashboard.
+  parameters:
+    GuildId:
+      name: guild_id
+      in: path
+      required: true
+      description: Must be the server the token belongs to.
+      schema: { type: string, pattern: '^[0-9]+$' }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      description: A Discord user id.
+      schema: { type: string, pattern: '^[0-9]+$' }
+    ItemId:
+      name: item_id
+      in: path
+      required: true
+      schema: { type: integer }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Makes a retry safe. See *Idempotency* above.
+      schema: { type: string, minLength: 1, maxLength: 64 }
+  responses:
+    Error:
+      description: |
+        An error. Codes include `missing_token`, `invalid_token`, `guild_mismatch`, `missing_scope`,
+        `forbidden`, `rate_limited`, `invalid_request`, `invalid_body`, `invalid_id`, `unknown_field`,
+        `insufficient_funds`, `item_not_found`, `item_exists`, `item_limit_reached`, `insufficient_items`,
+        `idempotency_key_reuse`, `request_in_progress`, `upstream_unavailable`, `unavailable`.
+      headers:
+        X-RateLimit-Limit: { schema: { type: integer } }
+        X-RateLimit-Remaining: { schema: { type: integer } }
+        X-RateLimit-Reset: { schema: { type: integer } }
+        Retry-After: { schema: { type: integer }, description: Only on 429. }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [item_not_found] }
+            message: { type: string }
+    Guild:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        icon_url: { type: [string, 'null'] }
+        member_count: { type: [integer, 'null'] }
+        economy:
+          type: object
+          properties:
+            payout_multiplier: { type: number }
+            rob_enabled: { type: boolean }
+            daily_base: { type: integer }
+            max_bet: { type: [integer, 'null'], description: null means uncapped. }
+    Balance:
+      type: object
+      properties:
+        user_id: { type: string }
+        cash: { type: integer }
+        bank: { type: integer }
+        total: { type: integer }
+    RankedBalance:
+      allOf:
+        - $ref: '#/components/schemas/Balance'
+        - type: object
+          properties:
+            rank: { type: integer }
+    BalanceDelta:
+      type: object
+      description: Send `cash`, `bank` or both. Amounts are limited to ±1,000,000,000,000.
+      properties:
+        cash: { type: integer }
+        bank: { type: integer }
+    Item:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        price: { type: integer }
+        effect: { type: string }
+        effect_value: { type: [integer, 'null'] }
+        duration_minutes: { type: [integer, 'null'] }
+        emoji: { type: [string, 'null'] }
+        rarity: { type: string, enum: [common, uncommon, rare, epic, legendary] }
+        category: { type: string, description: Derived from the effect. }
+        stock: { type: [integer, 'null'], description: null means unlimited. }
+        max_per_user: { type: [integer, 'null'] }
+        required_role_id: { type: [string, 'null'] }
+        available_until: { type: [string, 'null'], format: date-time }
+        remove_role_id: { type: [string, 'null'] }
+        reply_message: { type: [string, 'null'] }
+    ItemInput:
+      type: object
+      required: [name, price]
+      properties:
+        name: { type: string }
+        price: { type: integer, minimum: 0 }
+        description: { type: string }
+        effect: { type: string }
+        effect_value: { type: integer }
+        duration_minutes: { type: integer }
+        emoji: { type: string }
+        rarity: { type: string }
+        stock: { type: integer }
+        max_per_user: { type: integer }
+        required_role_id: { type: string }
+        available_until: { type: string, format: date-time }
+        remove_role_id: { type: string }
+        reply_message: { type: string }
+    ItemPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string }
+        price: { type: integer, minimum: 0 }
+        description: { type: [string, 'null'] }
+        emoji: { type: [string, 'null'] }
+        rarity: { type: string }
+        stock: { type: [integer, 'null'] }
+        max_per_user: { type: [integer, 'null'] }
+        required_role_id: { type: [string, 'null'] }
+        available_until: { type: [string, 'null'], format: date-time }
+        remove_role_id: { type: [string, 'null'] }
+        reply_message: { type: [string, 'null'] }
+    InventoryItem:
+      type: object
+      properties:
+        item_id: { type: integer }
+        name: { type: string }
+        quantity: { type: integer }
+        emoji: { type: [string, 'null'] }
+        rarity: { type: [string, 'null'] }
+        effect: { type: [string, 'null'] }
+    InventoryChange:
+      type: object
+      properties:
+        item_id: { type: integer }
+        quantity: { type: integer }

@@ -1,0 +1,83 @@
+/* Site chrome for every page on layout.html (account, catalogue, landing, legal): the top bar,
+   menus and footer drawn from the same tokens as the server dashboard's shell. Scoped to
+   .site-page, so the dashboard shell (.shell-page) and the music app are untouched. */
+
+.site-page { min-height: 100vh; }
+.site-page .percy-main { max-width: 1240px; padding: 0 var(--space-5); }
+
+/* ── Top bar ──────────────────────────────────────────────────────────── */
+.site-page .percy-topbar {
+    background: color-mix(in srgb, var(--app-bg) 80%, transparent);
+    border-bottom: 1px solid var(--line);
+}
+.site-page .percy-nav { max-width: 1240px; gap: var(--space-4); padding: var(--space-2) var(--space-5); min-height: 60px; }
+.site-page .percy-nav-brand { font-weight: 800; font-size: 17px; letter-spacing: -0.02em; gap: var(--space-2); }
+.site-page .percy-nav-brand::before { content: "✻"; color: var(--brand); font-weight: 700; }
+.site-page .percy-nav-version { font-size: 11px; font-weight: 600; color: var(--text-faint); opacity: 1; font-variant-numeric: tabular-nums; }
+.site-page .percy-nav-links { gap: 2px; }
+.site-page .percy-nav-link {
+    padding: 0 var(--space-3); min-height: 36px; display: inline-flex; align-items: center;
+    font-size: 14px; font-weight: 700; color: var(--text-muted); border-radius: var(--radius-pill);
+    transition: color var(--dur-base), background var(--dur-base);
+}
+.site-page .percy-nav-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.site-page .percy-nav-link.active,
+.site-page .percy-nav-menu:has(.active) > summary { color: var(--text); background: var(--surface-3); }
+.site-page .percy-nav-link:focus-visible,
+.site-page .percy-nav-action:focus-visible,
+.site-page .percy-account-trigger:focus-visible,
+.site-page .percy-dropdown-item:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+
+.site-page .percy-nav-dropdown,
+.site-page .percy-account-dropdown {
+    min-width: 180px; padding: var(--space-1); border-radius: var(--radius-md);
+    background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--shadow-pop);
+}
+.site-page .percy-dropdown-item { padding: 8px var(--space-3); border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; color: var(--text); }
+.site-page .percy-dropdown-item:hover { background: var(--surface-3); }
+.site-page .percy-nav-dropdown .percy-dropdown-item.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.site-page .percy-dropdown-sep { border-top-color: var(--line); }
+.site-page .percy-dropdown-logout { color: var(--error-text); }
+
+.site-page .percy-nav-action { width: 36px; height: 36px; border-radius: var(--radius-pill); color: var(--text-muted); }
+.site-page .percy-nav-action:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.site-page .percy-login-link { background: var(--accent); color: var(--accent-contrast); }
+.site-page .percy-login-link:hover { background: var(--accent-hover); color: var(--accent-contrast); }
+
+.site-page .percy-account-trigger {
+    min-height: 40px; padding: 3px var(--space-3) 3px 3px; border-radius: var(--radius-pill);
+    background: var(--surface-1); border-color: var(--line); color: var(--text);
+    transition: border-color var(--dur-base), background var(--dur-base);
+}
+.site-page .percy-account-trigger:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--text) 22%, var(--line)); }
+.site-page .percy-account-avatar { width: 32px; height: 32px; }
+.site-page .percy-account-name { font-size: 14px; font-weight: 700; }
+.site-page .percy-mobile-toggle span { background: var(--text); }
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+.site-page .percy-footer { max-width: 1240px; border-top-color: var(--line); padding: var(--space-5); margin-top: var(--space-7); }
+.site-page .percy-footer-links { flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
+.site-page .percy-footer-links a, .site-page .percy-footer-copy { font-size: 13px; font-weight: 600; color: var(--text-faint); }
+.site-page .percy-footer-links a:hover { color: var(--text); }
+
+@media (max-width: 768px) {
+    .site-page .percy-main { padding: 0 var(--space-4); }
+    .site-page .percy-nav { padding: var(--space-2) var(--space-4); }
+    .site-page .percy-nav-links { background: var(--surface-1); border-bottom-color: var(--line); padding: var(--space-3) var(--space-4); }
+    .site-page .percy-nav-link { min-height: 44px; }
+    .site-page .percy-footer { padding: var(--space-4); }
+}
+
+.site-page ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* ── Page head: title, one line of description, actions ───────────────── */
+.site-head {
+    display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap;
+    gap: var(--space-4); padding: var(--space-7) 0 var(--space-5);
+}
+.site-head-text { min-width: 0; }
+.site-head h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.site-head p { margin: var(--space-2) 0 0; max-width: 62ch; color: var(--text-muted); font-size: 15px; }
+.site-head-acts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.site-head-acts .btn img { width: 16px; height: 16px; }
+.site-eyebrow { margin: 0 0 var(--space-2); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }

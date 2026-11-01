@@ -1,0 +1,366 @@
+/* Release subscriptions — /account/subscriptions.
+
+   Native Percy (D6): every colour comes from a base.css token, the type face is
+   the site's JetBrains Mono, and state is carried by the existing semantic
+   tokens (--success-* for "will DM you", --info-* for the type chips) rather
+   than a new palette. Both themes come free that way.
+
+   Everything is prefixed `.sb-` and scoped under `.sb`, for the reason
+   `comics.css` documents: base.css styles `a:not(.button)` at (0,1,1), which
+   beats a bare class selector. */
+
+.sb {
+    color: var(--foreground);
+}
+
+.sb-page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+
+.sb-back {
+    display: inline-block;
+    margin-bottom: 1.25rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.sb-head {
+    margin-bottom: 1.75rem;
+}
+
+.sb-head__eyebrow {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--branding);
+}
+
+.sb-head__title {
+    margin: 0;
+    font-size: clamp(1.6rem, 4vw, 2.25rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.sb-head__lede {
+    margin: 0.75rem 0 0;
+    max-width: 62ch;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+/* ── Notices & empty states ──────────────────────────────────────── */
+
+.sb-notice {
+    margin: 0 0 1.25rem;
+    padding: 0.65rem 0.9rem;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.sb-notice--error {
+    border-color: var(--error-border);
+    background: var(--error-bg);
+    color: var(--error-text);
+}
+
+.sb-empty {
+    padding: 2rem 1.5rem;
+    border: 1px dashed var(--box-border);
+    border-radius: 8px;
+    background: var(--box);
+    text-align: center;
+}
+
+.sb-empty p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.sb-empty__hint {
+    margin-top: 0.5rem !important;
+    color: var(--text-muted);
+}
+
+/* ── Group headings ──────────────────────────────────────────────── */
+
+.sb-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 2rem 0 0.75rem;
+}
+
+.sb-group__title {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.sb-group__count {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+}
+
+/* ── One subscription ────────────────────────────────────────────── */
+
+.sb-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.sb-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    background: var(--box);
+    transition: border-color 130ms ease, transform 130ms ease;
+}
+
+.sb-row:hover {
+    border-color: var(--branding-dim);
+    transform: translateY(-1px);
+}
+
+.sb-row__id {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 14rem;
+    min-width: 0;
+}
+
+.sb-row__label {
+    font-size: 0.92rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-chip {
+    flex: none;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--info-border);
+    border-radius: 999px;
+    background: var(--info-bg);
+    color: var(--info-text);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* ── Stream control: three submit buttons, so it works with JS off ── */
+
+.sb-seg {
+    display: flex;
+    flex: none;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.sb-seg__opt {
+    padding: 0.28rem 0.6rem;
+    border: 0;
+    border-right: 1px solid var(--box-border);
+    background: var(--box-shade);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 130ms ease, color 130ms ease;
+}
+
+.sb-seg__opt:last-child {
+    border-right: 0;
+}
+
+.sb-seg__opt:hover {
+    color: var(--foreground);
+}
+
+.sb-seg__opt[aria-pressed="true"] {
+    background: var(--branding);
+    color: var(--background);
+    font-weight: 600;
+}
+
+/* ── Delivery toggle & remove ────────────────────────────────────── */
+
+.sb-delivery,
+.sb-remove {
+    flex: none;
+    padding: 0.28rem 0.6rem;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    background: var(--box-shade);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: border-color 130ms ease, color 130ms ease;
+}
+
+.sb-delivery--on {
+    border-color: var(--success-border);
+    background: var(--success-bg);
+    color: var(--success-text);
+}
+
+.sb-remove:hover {
+    border-color: var(--error-border);
+    color: var(--error-text);
+}
+
+/* ── Add box ─────────────────────────────────────────────────────── */
+
+.sb-add {
+    margin-top: 2.5rem;
+    padding: 1.25rem;
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    background: var(--box);
+}
+
+.sb-add__title {
+    margin: 0 0 0.9rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.sb-search {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.sb-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--form-input-border);
+    border-radius: 6px;
+    background: var(--form-input-background);
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.sb-search input:focus {
+    outline: none;
+    border-color: var(--form-input-focus-border);
+}
+
+.sb-suggestions {
+    list-style: none;
+    margin: 1rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.sb-suggestion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    background: var(--box-shade);
+}
+
+.sb-suggestion__id {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    min-width: 0;
+}
+
+.sb-suggestion__hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.sb-suggestion__followed {
+    flex: none;
+    font-size: 0.72rem;
+    color: var(--success-text);
+}
+
+.sb-add__none {
+    margin: 1rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sb-row,
+    .sb-seg__opt,
+    .sb-delivery,
+    .sb-remove {
+        transition: none;
+    }
+
+    .sb-row:hover {
+        transform: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .sb-row__id {
+        flex: 1 1 100%;
+    }
+}
+
+/* ── App skin: rows are .row-like cards, the segment is the .tabs pill, delivery/remove are small pills ── */
+.sb-row {
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); border-color: var(--line);
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent); transition: background var(--dur-base);
+}
+.sb-row:hover { border-color: var(--line); background: var(--surface-2); transform: none; }
+.sb-row__label { font-size: 15px; font-weight: 700; }
+.sb-seg { gap: 2px; padding: 3px; overflow: visible; border-color: var(--line); border-radius: var(--radius-pill); background: var(--surface-1); }
+.sb-seg__opt {
+    min-height: 28px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-pill);
+    background: none; font-size: 13px; font-weight: 700;
+}
+.sb-seg__opt[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); }
+.sb-seg__opt:focus-visible, .sb-delivery:focus-visible, .sb-remove:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+.sb-delivery, .sb-remove {
+    min-height: 34px; padding: 0 var(--space-3); border-radius: var(--radius-pill);
+    border-color: var(--line); background: var(--surface-2); font-size: 13px; font-weight: 700;
+}
+.sb-delivery--on { border-color: color-mix(in srgb, var(--success-text) 35%, transparent); background: color-mix(in srgb, var(--success-text) 14%, transparent); }
+.sb-remove:hover { border-color: color-mix(in srgb, var(--error-text) 35%, transparent); background: color-mix(in srgb, var(--error-text) 12%, transparent); }
+.sb-add { padding: var(--space-5); border-radius: var(--radius-lg); border-color: var(--line); background: color-mix(in srgb, var(--surface-1) 78%, transparent); }
+.sb-add__title, .sb-group__title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-faint); }
+.sb-group__count { border-color: var(--line); background: var(--surface-2); }
+.sb-suggestion { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border-color: var(--line); background: var(--surface-2); }
+.sb-notice { border-radius: var(--radius-md); }

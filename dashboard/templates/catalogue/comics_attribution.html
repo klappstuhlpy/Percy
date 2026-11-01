@@ -1,0 +1,14 @@
+{# League of Comic Geeks (Marvel/DC) and VIZ Media (manga) are the sources
+   behind every page that shows comic-release data — this notice, and the
+   per-brand copyright line when one page is about a single brand, are
+   required wherever that data is shown. Non-negotiable. #}
+<footer class="cx-attribution">
+    <p>
+        Release data is sourced from
+        <a href="https://leagueofcomicgeeks.com/" target="_blank" rel="noopener">League of Comic Geeks</a>
+        (Marvel, DC) and <a href="https://www.viz.com/" target="_blank" rel="noopener">VIZ Media</a> (manga).
+        {% if !comic_copyright.is_empty() %}
+        {{ comic_copyright }}. All trademarks and copyrights are property of their respective owners.
+        {% endif %}
+    </p>
+</footer>

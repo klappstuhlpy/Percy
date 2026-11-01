@@ -1,0 +1,29 @@
+{# The related-news row list (§6.2's 6b), shared by comic_detail.html and person.html so
+   the two pages render one row markup instead of two copies that could drift. §9 caps
+   what a row may show: headline, source name, publish date and a rel="noopener nofollow
+   ugc" link out to the original — never the excerpt, image or author the payload also
+   carries.
+
+   A macro, not an included partial: Askama renders an include against the root context,
+   so a partial could not see the caller's `rows` argument — same reason as
+   progress_toggle.html and person.html's own `credit_row`. The caller supplies the
+   surrounding `<section>`, heading and "more" link, since those differ by page. #}
+{% macro list(rows) %}
+<ul class="nx-list nx-list--compact">
+    {% for row in rows %}
+    <li class="nx-row">
+        <h3 class="nx-row__headline">
+            <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
+        </h3>
+        <p class="nx-row__meta">
+            <span class="nx-row__source">{{ row.source_name }}</span>
+            {% match row.published %}
+            {% when Some with (date) %}
+            <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
+            {% when None %}
+            {% endmatch %}
+        </p>
+    </li>
+    {% endfor %}
+</ul>
+{% endmacro %}

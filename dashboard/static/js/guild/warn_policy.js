@@ -1,0 +1,49 @@
+/* Percy Dashboard — warn policy card (audit log page).
+   Expiry is an edit (PercyUnsaved); adding/removing a rule is an immediate action. */
+(function () {
+    const input = document.getElementById('warn-expiry');
+    if (!input) return;
+    const base = '/dashboard/guild/' + GUILD_ID + '/warn-policy';
+    const json = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+
+    PercyUnsaved.register({
+        label: 'Warn expiry',
+        element: input,
+        read: () => ({ v: input.value.trim() }),
+        write: (s) => { input.value = s.v; },
+        save: async (s) => {
+            const n = s.v === '' ? null : parseInt(s.v, 10);
+            if (n !== null && !(n >= 1)) return { ok: false, error: 'Enter a number of days, or leave empty.' };
+            const resp = await fetch(base, { method: 'PATCH', headers: json, body: JSON.stringify({ expiry_days: n }) });
+            return resp.json();
+        },
+    });
+
+    document.getElementById('warn-rule-add').addEventListener('click', async () => {
+        const count = parseInt(document.getElementById('warn-rule-count').value, 10);
+        const action = document.getElementById('warn-rule-action').value;
+        const mins = parseInt(document.getElementById('warn-rule-minutes').value, 10);
+        if (!(count >= 1)) { showToast('error', 'Enter a warn count.'); return; }
+        if (!action) { showToast('error', 'Pick an action.'); return; }
+        const body = { action, duration_seconds: mins >= 1 ? mins * 60 : null };
+        try {
+            const resp = await fetch(base + '/thresholds/' + count, { method: 'PUT', headers: json, body: JSON.stringify(body) });
+            const data = await resp.json();
+            if (!data.ok) { showToast('error', data.error || 'Failed to save rule.'); return; }
+            location.reload();
+        } catch { showToast('error', 'Network error.'); }
+    });
+
+    document.querySelectorAll('.warn-rule-remove').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const count = btn.dataset.count;
+            if (!(await PercyConfirm.ask({ title: `Remove the rule at ${count} warns?`, consequence: 'Members reaching that count no longer get an automatic action.', undo: 'You can add the rule again.', confirmLabel: 'Remove rule', danger: true }))) return;
+            try {
+                const resp = await fetch(base + '/thresholds/' + count, { method: 'DELETE', headers: json });
+                const data = await resp.json();
+                if (!data.ok) { showToast('error', data.error || 'Failed to remove rule.'); return; }
+                location.reload();
+            } catch { showToast('error', 'Network error.'); }
+        });
+    });
+})();

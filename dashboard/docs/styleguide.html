@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Percy style guide</title>
+<!-- Static reference page for static/css/common/{tokens,components}.css. Serve the repo's static/
+     folder at /static (as the dashboard does) and open this file; the toggle flips light/dark. -->
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark"}catch(e){document.documentElement.dataset.theme="dark"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/static/css/common/tokens.css">
+<link rel="stylesheet" href="/static/css/common/components.css">
+<style>
+    body { margin: 0; padding: 32px 24px 64px; }
+    main { max-width: 960px; margin: 0 auto; display: grid; gap: 32px; }
+    h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; }
+    h2 { margin: 0 0 12px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+    .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+    .sw { padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: 12px; }
+    .sw b { display: block; margin-bottom: 18px; font-size: 13px; }
+    .stack { display: grid; gap: 12px; max-width: 420px; }
+    .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .ico { width: 20px; height: 20px; }
+</style>
+</head>
+<body class="app-canvas">
+<main>
+    <div class="bar"><h1>Percy style guide</h1><button class="btn btn--sm" id="flip" type="button">Toggle theme</button></div>
+
+    <section><h2>Tokens</h2>
+        <div class="swatches">
+            <div class="sw" style="background:var(--app-bg)"><b>--app-bg</b>canvas</div>
+            <div class="sw" style="background:var(--surface-1)"><b>--surface-1</b>nav, panels</div>
+            <div class="sw" style="background:var(--surface-2)"><b>--surface-2</b>cards, hover</div>
+            <div class="sw" style="background:var(--surface-3)"><b>--surface-3</b>pressed</div>
+            <div class="sw" style="background:var(--accent);color:var(--accent-contrast)"><b>--accent</b>the one accent</div>
+            <div class="sw"><b style="color:var(--text)">--text</b><span style="color:var(--text-muted)">--text-muted</span><br><span style="color:var(--text-faint)">--text-faint</span></div>
+        </div>
+    </section>
+
+    <section><h2>Buttons</h2>
+        <div class="bar">
+            <button class="btn btn--primary" type="button">Primary</button>
+            <button class="btn" type="button">Default</button>
+            <button class="btn btn--ghost" type="button">Ghost</button>
+            <button class="btn btn--danger" type="button">Danger</button>
+            <button class="btn btn--sm" type="button">Small</button>
+            <button class="btn" type="button" disabled>Disabled</button>
+            <button class="btn btn--icon" type="button" aria-label="More"><svg class="ico"><use href="/static/icons/sprite.svg#i-more"/></svg></button>
+        </div>
+    </section>
+
+    <section><h2>Fields and toggles</h2>
+        <div class="two">
+            <div class="stack">
+                <div class="field"><label for="a">Channel name</label><input id="a" placeholder="general"><span class="field-hint">Shown in the member list.</span></div>
+                <div class="field"><label for="b">Role</label><select id="b"><option>Moderator</option><option>Member</option></select></div>
+                <div class="field"><label for="c">Message</label><textarea id="c" placeholder="Welcome, {user}!"></textarea></div>
+            </div>
+            <div class="stack">
+                <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span>Level-up messages</label>
+                <label class="toggle"><input type="checkbox"><span class="toggle-track"></span>Allow robbing</label>
+                <label class="toggle"><input type="checkbox" disabled><span class="toggle-track"></span>Disabled</label>
+                <div class="tabs" role="tablist"><button class="tab is-on" role="tab" aria-selected="true">General</button><button class="tab" role="tab">Rewards</button><button class="tab" role="tab">Blacklist</button></div>
+                <div class="bar"><span class="chip">Default</span><span class="chip chip--accent">Active</span><span class="chip">Beta</span></div>
+            </div>
+        </div>
+    </section>
+
+    <section><h2>Cards and rows</h2>
+        <div class="two">
+            <div class="card"><h3 class="card-title">Leveling</h3><p class="card-sub">XP, reward roles and the leaderboard.</p></div>
+            <div class="card card--interactive" tabindex="0"><h3 class="card-title">Interactive card</h3><p class="card-sub">Hover and focus lift the surface.</p></div>
+        </div>
+        <div class="card" style="margin-top:16px;padding:8px">
+            <div class="row"><span class="chip">1</span><span class="row-text"><span class="row-title">A very long track title that has to truncate instead of breaking the row layout at any width</span><span class="row-sub">Artist name</span></span><span class="row-meta">3:42</span><span class="row-acts"><button class="btn btn--icon" aria-label="Play"><svg class="ico"><use href="/static/icons/sprite.svg#i-play"/></svg></button></span></div>
+            <div class="row is-current"><span class="chip">2</span><span class="row-text"><span class="row-title">Current item</span><span class="row-sub">Accent title</span></span><span class="row-meta">4:10</span><span class="row-acts"></span></div>
+            <div class="row"><span class="chip">3</span><span class="row-text"><span class="row-title">Third item</span><span class="row-sub">Artist</span></span><span class="row-meta">2:05</span><span class="row-acts"></span></div>
+        </div>
+    </section>
+
+    <section><h2>Table</h2>
+        <div class="card" style="padding:8px">
+            <table class="table"><thead><tr><th>Member</th><th>Level</th><th>XP</th></tr></thead>
+            <tbody><tr><td>ferris</td><td>12</td><td>14,820</td></tr><tr><td>percy</td><td>9</td><td>8,114</td></tr><tr><td>klappstuhl</td><td>7</td><td>5,002</td></tr></tbody></table>
+        </div>
+    </section>
+
+    <section><h2>Feedback</h2>
+        <div class="bar">
+            <button class="btn" type="button" data-toast="success">Success toast</button>
+            <button class="btn" type="button" data-toast="info">Info toast</button>
+            <button class="btn" type="button" data-toast="error">Error toast</button>
+        </div>
+        <div class="two" style="margin-top:16px">
+            <div class="card"><div class="stack"><span class="skeleton" style="width:60%;height:18px"></span><span class="skeleton"></span><span class="skeleton" style="width:80%"></span></div></div>
+            <div class="card"><div class="empty"><span class="empty-ico"><svg class="ico"><use href="/static/icons/sprite.svg#i-search"/></svg></span><h3>Nothing here yet</h3><p>Results show up once members start using this feature.</p><div class="empty-acts"><button class="btn btn--primary btn--sm" type="button">Add one</button></div></div></div>
+        </div>
+    </section>
+</main>
+<script src="/static/js/common/toast.js"></script>
+<script>
+    document.querySelectorAll('[data-toast]').forEach(function (b) {
+        b.addEventListener('click', function () { PercyToast.show(b.dataset.toast, 'This is a ' + b.dataset.toast + ' toast, with enough text to wrap onto a second line if it must.'); });
+    });
+    document.getElementById('flip').addEventListener('click', function () {
+        var r = document.documentElement; r.dataset.theme = r.dataset.theme === 'light' ? 'dark' : 'light';
+        try { localStorage.setItem('theme', r.dataset.theme); } catch (e) {}
+    });
+</script>
+</body>
+</html>

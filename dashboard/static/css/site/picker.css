@@ -1,0 +1,59 @@
+/* Server picker (/dashboard): an artwork-card grid, the same card anatomy as the music player's
+   card rows (square art, title, one muted line). Tokens only. */
+.pick-page { padding-bottom: var(--space-6); }
+.pick-section { margin-top: var(--space-6); }
+.pick-head { display: flex; align-items: center; gap: var(--space-2); }
+.pick-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.pick-sub { margin: var(--space-1) 0 var(--space-4); font-size: 13px; color: var(--text-muted); }
+.pick-sub a { color: var(--accent-hover); }
+
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--space-4); }
+
+a.pick-card, a.pick-card:hover {
+    color: var(--text);
+}
+.pick-card {
+    display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-3);
+    border-radius: var(--radius-lg); background: transparent; text-decoration: none;
+    transition: background var(--dur-base);
+    animation: pick-rise 360ms both; animation-delay: calc(var(--i, 0) * 40ms);
+}
+.pick-card:hover { background: var(--surface-2); }
+.pick-card:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+
+.pick-art {
+    position: relative; display: grid; place-items: center; overflow: hidden; aspect-ratio: 1;
+    margin-bottom: var(--space-3); border-radius: var(--radius-md);
+    background:
+        radial-gradient(120% 120% at 0% 0%, hsl(calc(var(--i, 0) * 47 + 250) 55% 46%), transparent 70%),
+        linear-gradient(135deg, hsl(calc(var(--i, 0) * 47 + 220) 35% 24%), hsl(calc(var(--i, 0) * 47 + 280) 40% 14%));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.pick-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pick-initial { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; color: rgba(255, 255, 255, 0.88); }
+.pick-badge { position: absolute; top: var(--space-2); left: var(--space-2); color: var(--text); background: var(--surface-1); border-color: var(--line); }
+.pick-cta {
+    position: absolute; right: var(--space-2); bottom: var(--space-2); display: grid; place-items: center;
+    width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-contrast);
+    font-size: 22px; font-weight: 700; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    opacity: 0; transform: translateY(8px); transition: opacity var(--dur-base), transform var(--dur-base);
+}
+.pick-cta svg { width: 20px; height: 20px; }
+.pick-card:hover .pick-cta, .pick-card:focus-visible .pick-cta { opacity: 1; transform: none; }
+@media (hover: none) { .pick-cta { opacity: 1; transform: none; } }
+
+.pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.pick-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Servers Percy is not in yet: quieter art until hovered. */
+.pick-card--add .pick-art { filter: grayscale(0.75); opacity: 0.7; transition: filter var(--dur-base), opacity var(--dur-base); }
+.pick-card--add:hover .pick-art, .pick-card--add:focus-visible .pick-art { filter: none; opacity: 1; }
+.pick-card--add .pick-cta { opacity: 1; transform: none; background: var(--surface-3); color: var(--text); }
+
+@keyframes pick-rise { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .pick-card { animation: none; } }
+@media (max-width: 520px) {
+    .pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+    .pick-initial { font-size: 48px; }
+    .site-head { padding-top: var(--space-5); }
+}

@@ -1,0 +1,107 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_header %}
+<div class="dashboard-header dash-rise">
+    <div>
+        <h1><span class="spark dash-h1-glyph" aria-hidden="true">✻</span> {{ page_title }}</h1>
+        <p>API tokens let your own bots and sites read and change this server's economy.</p>
+    </div>
+    <button class="button primary small" id="add-token-btn">Create token</button>
+</div>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Send a token as <code>Authorization: Bearer pct_…</code> to <code>https://percy.klappstuhl.me/api/v1/guilds/{{ guild_id }}/…</code>. Read the <a href="/api">API reference</a> for every endpoint.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>A token works for <strong>this server only</strong> and only for the scopes you tick</li>
+                <li>The token is shown <strong>once</strong>, right after you create it; Percy keeps only a hash</li>
+                <li>Revoking a token takes effect immediately. Up to {{ max_tokens }} active tokens per server</li>
+                <li>Changes made through the API appear in the change log as <code>api:&lt;token name&gt;</code></li>
+            </ul>
+        </div>
+    </div>
+
+    {% if tokens.is_empty() %}
+    <section class="config-section">
+        <p class="empty-state">No API tokens yet. Click "Create token" to make the first one.</p>
+    </section>
+    {% else %}
+    <section class="config-section">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Scopes</th>
+                    <th>Created</th>
+                    <th>Last used</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tokens %}
+                <tr data-id="{{ t.id }}" data-name="{{ t.name }}">
+                    <td data-label="Name"><strong>{{ t.name }}</strong></td>
+                    <td data-label="Scopes">
+                        {% for s in t.scopes %}<span class="badge badge-muted">{{ s }}</span> {% endfor %}
+                    </td>
+                    <td data-label="Created"><span class="dev-ts" data-ts="{{ t.created_at }}">{{ t.created_at }}</span></td>
+                    <td data-label="Last used">
+                        {% match t.last_used_at %}{% when Some with (u) %}<span class="dev-ts" data-ts="{{ u }}">{{ u }}</span>{% when None %}<span class="text-muted">never</span>{% endmatch %}
+                    </td>
+                    <td>
+                        <button class="button small danger dev-revoke" data-id="{{ t.id }}">Revoke</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+<!-- Create modal -->
+<div class="modal-overlay" id="dev-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3>Create API token</h3>
+        <div class="modal-form">
+            <label class="config-label" for="dev_name">Name</label>
+            <input type="text" id="dev_name" class="config-input" placeholder="My shop bot" maxlength="50">
+            <span class="config-label">Scopes</span>
+            <div class="wh-events">
+                {% for (scope, blurb) in scopes %}
+                <label class="config-toggle wh-event-row" title="{{ blurb }}">
+                    <span class="config-label">{{ scope }} <span class="text-muted">{{ blurb }}</span></span>
+                    <input type="checkbox" class="dev-scope" value="{{ scope }}">
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="dev-modal-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="dev-modal-confirm">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Token reveal modal (shown once, after create) -->
+<div class="modal-overlay" id="dev-secret-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3>Your new token</h3>
+        <p class="text-muted">Copy it now. It is shown only once and cannot be recovered; if you lose it, revoke it and create another.</p>
+        <input type="text" id="dev-secret-value" class="config-input" readonly>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="dev-secret-copy">Copy</button>
+            <button type="button" class="button primary small" id="dev-secret-close">Done</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/guild/developers.js"></script>
+{% endblock %}

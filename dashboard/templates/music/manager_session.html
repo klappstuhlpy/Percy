@@ -1,0 +1,69 @@
+{# 24/7 and DJ mode (DJ). Moved from the retired guild/music.html. #}
+{% if let Some(music) = music %}
+    {# ─── 24/7 Always-On ─────────────────────────────────── #}
+    <section class="config-section" id="always-on-section">
+        <h2>24/7 Always-On</h2>
+        <p class="config-section-description">Keep the bot permanently in a voice channel playing an endless radio stream, a looping playlist, or autoplay recommendations. It reconnects and resumes automatically after disconnects or bot restarts.</p>
+
+        <div class="listener-status">
+            <span class="ls-indicator{% if music.always_on.enabled %} active{% endif %}"></span>
+            <span id="ao-status-text">
+                {% if music.always_on.enabled %}Active — mode: <strong>{{ music.always_on.mode.as_deref().unwrap_or("—") }}</strong>{% else %}Inactive{% endif %}
+            </span>
+        </div>
+
+        <div class="config-grid">
+            <div class="config-field">
+                <label class="config-label" for="ao-channel">Voice channel</label>
+                <select id="ao-channel" class="config-select">
+                    {% for ch in channels %}{% if ch.channel_type == "voice" || ch.channel_type == "stage_voice" %}
+                    <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                    {% endif %}{% endfor %}
+                </select>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="ao-mode">Mode</label>
+                <select id="ao-mode" class="config-select">
+                    <option value="radio">Radio / Stream URL</option>
+                    <option value="playlist">Playlist (looped)</option>
+                    <option value="autoplay">Autoplay (recommendations)</option>
+                </select>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="ao-source">Source</label>
+                <span class="config-description">A stream/radio URL, a playlist/album link or search, or an autoplay seed. For autoplay, leave it empty to continue from the song that is playing.</span>
+                <input type="text" id="ao-source" class="config-input" placeholder="e.g. https://stream.example.com/lofi" value="{{ music.always_on.source.as_deref().unwrap_or("") }}">
+            </div>
+        </div>
+        <div class="config-actions">
+            <button type="button" class="button primary small" id="ao-enable-btn">Enable 24/7</button>
+            <button type="button" class="button small danger" id="ao-disable-btn">Disable</button>
+        </div>
+    </section>
+
+    {# ─── DJ Mode ─────────────────────────────────────────────────── #}
+    <section class="config-section" id="dj-mode-section">
+        <h2>DJ Mode</h2>
+        <p class="config-section-description">Control who can interact with the music player panel and commands. The DJ role is any role named "DJ" or users with the <em>Manage Server</em> permission.</p>
+
+        <div class="config-grid">
+            <div class="config-field">
+                <label class="config-label" for="dj-mode-select">Access Level</label>
+                {% match music.setup %}{% when Some with (setup) %}
+                <select id="dj-mode-select" class="config-select">
+                    <option value="0" {% if setup.dj_mode == 0 %}selected{% endif %}>Everyone &mdash; anyone in the voice channel can use all controls</option>
+                    <option value="1" {% if setup.dj_mode == 1 %}selected{% endif %}>DJ Only &mdash; only DJ role or Manage Server can control playback</option>
+                    <option value="2" {% if setup.dj_mode == 2 %}selected{% endif %}>Hybrid &mdash; everyone can pause/resume; destructive actions require DJ</option>
+                </select>
+                {% when None %}
+                <select id="dj-mode-select" class="config-select" disabled>
+                    <option>Configure the music panel first</option>
+                </select>
+                {% endmatch %}
+            </div>
+        </div>
+        <p class="text-muted" id="dj-mode-description">
+            {% match music.setup %}{% when Some with (setup) %}{% if setup.dj_mode == 1 %}Only members with the DJ role or Manage Server permission can use the player.{% else if setup.dj_mode == 2 %}Basic controls (pause, volume) are available to everyone. Stop, shuffle, skip, and loop require the DJ role.{% else %}All voice channel members can freely interact with the player.{% endif %}{% when None %}Configure the music panel first to use DJ mode.{% endmatch %}
+        </p>
+    </section>
+{% endif %}

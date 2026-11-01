@@ -1,0 +1,78 @@
+/* Percy design tokens: the palette the music player was built on, shared by every surface.
+   Whitish-neutral: near-black canvas, cool off-white text, soft grey surfaces, one violet accent.
+   Percy orange stays available as --brand (from base.css) for logo moments only.
+   Light theme = [data-theme="light"], set before first paint by layout.html. */
+:root {
+    --brand: #d97757; /* Percy orange: logo and brand marks only, never UI state */
+    --app-font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --app-bg: #0a0a0b;
+    --app-glow: rgba(235, 238, 245, 0.075);
+    --surface-1: #121214;
+    --surface-2: #1a1a1d;
+    --surface-3: #232327;
+    --line: #26262a;
+    --text: #f0f1f3;
+    --text-muted: #a1a1a8;
+    --text-faint: #7a7a82;
+    --accent: #8351ed;
+    --accent-hover: #9469f2;
+    --accent-contrast: #ffffff;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-pill: 999px;
+    --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.45);
+    --dur-fast: 120ms;
+    --dur-base: 180ms;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+    --ring-focus: 0 0 0 2px var(--app-bg), 0 0 0 4px var(--accent);
+    --success-text: #4ade80;
+    --error-text: #f87171;
+    --warning-text: #fbbf24;
+    --info-text: #8aa4ff;
+}
+[data-theme="light"] {
+    --app-bg: #f5f5f3;
+    --app-glow: rgba(20, 20, 30, 0.05);
+    --surface-1: #ffffff;
+    --surface-2: #f0f0ee;
+    --surface-3: #e6e6e3;
+    --line: #e1e1dd;
+    --text: #141416;
+    --text-muted: #52525a;
+    --text-faint: #71717a;
+    --accent: #6e41cc;
+    --accent-hover: #5d34b3;
+    --accent-contrast: #ffffff;
+    --shadow-pop: 0 16px 40px rgba(20, 20, 30, 0.14);
+    --success-text: #15803d;
+    --error-text: #b91c1c;
+    --warning-text: #a16207;
+    --info-text: #1d4ed8;
+}
+
+/* The canvas: a soft highlight at the top centre and a faint accent wash top-right. */
+.app-canvas {
+    background:
+        radial-gradient(ellipse 70% 50% at 50% -8%, var(--app-glow), transparent 70%),
+        radial-gradient(ellipse 40% 30% at 85% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
+        var(--app-bg);
+    /* The glow belongs to the top of the page only; repeated, it restarts with a hard edge
+       every screen-height on long pages. */
+    background-repeat: no-repeat;
+    color: var(--text);
+    font-family: var(--app-font);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.45;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}

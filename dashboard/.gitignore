@@ -1,0 +1,14 @@
+/.claude
+/target
+**/*.rs.bk
+# Cargo.lock IS committed: this is a binary, so a locked dependency graph gives
+# reproducible builds and pins transitive deps to toolchain-compatible versions.
+/.idea
+reference/
+/reference
+.env
+/data
+.superpowers/
+/code-archive
+/docs
+*.log

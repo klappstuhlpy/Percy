@@ -1,0 +1,123 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Messages that collect enough star reactions get reposted to a highlight channel.</p>{% endblock %}
+
+{% block content %}
+
+<section class="config-section">
+    <h2>Settings</h2>
+    <p class="config-section-description">When a message reaches the threshold of {{ starboard.emoji }} reactions, Percy reposts it to the starboard channel and keeps the count up to date.</p>
+    <form id="starboard-form">
+        <div class="toggle-stack">
+            <label class="config-toggle">
+                <div>
+                    <span class="config-label">Starboard on</span>
+                    <span class="config-description">Needs a starboard channel</span>
+                </div>
+                <input type="checkbox" name="enabled" {% if starboard.enabled %}checked{% endif %}>
+            </label>
+            <label class="config-toggle">
+                <div>
+                    <span class="config-label">Count self-stars</span>
+                    <span class="config-description">Authors starring their own message count towards the threshold</span>
+                </div>
+                <input type="checkbox" name="self_star" {% if starboard.self_star %}checked{% endif %}>
+            </label>
+            <label class="config-toggle">
+                <div>
+                    <span class="config-label">Allow NSFW channels</span>
+                    <span class="config-description">Repost from age-restricted channels into a non-restricted starboard</span>
+                </div>
+                <input type="checkbox" name="allow_nsfw" {% if starboard.allow_nsfw %}checked{% endif %}>
+            </label>
+        </div>
+        <div class="config-grid">
+            <div class="config-field">
+                <label class="config-label" for="sb-channel">Starboard channel</label>
+                <span class="config-description">Where starred messages are reposted</span>
+                <select id="sb-channel" name="channel_id" class="config-select" data-needs="post">
+                    <option value="">None</option>
+                    {% for ch in channels %}<option value="{{ ch.id }}" {% if ch.id == selected_channel %}selected{% endif %}>#{{ ch.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="sb-threshold">Stars needed</label>
+                <span class="config-description">1–100 reactions</span>
+                <input type="number" id="sb-threshold" name="threshold" class="config-input" min="1" max="100" value="{{ starboard.threshold }}">
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="sb-emoji">Star emoji</label>
+                <span class="config-description">The reaction that counts (default ⭐)</span>
+                <input type="text" id="sb-emoji" name="emoji" class="config-input" maxlength="64" value="{{ starboard.emoji }}">
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="sb-age">Ignore messages older than</label>
+                <span class="config-description">Hours, 0 = no limit</span>
+                <input type="number" id="sb-age" name="max_age_hours" class="config-input" min="0" max="8760" value="{{ starboard.max_age_hours }}">
+            </div>
+            <div class="config-field grid-col-full">
+                <label class="config-label" for="sb-ignored">Ignored channels</label>
+                <span class="config-description">Stars in these channels never count.</span>
+                <select id="sb-ignored" name="ignored_channel_ids" class="config-select" multiple size="6">
+                    {% for ch in channels %}<option value="{{ ch.id }}" {% if ignored.contains(ch.id) %}selected{% endif %}>#{{ ch.name }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+    </form>
+</section>
+
+<section class="config-section">
+    <h2>Most starred</h2>
+    {% if starboard.top.is_empty() %}
+    <p class="config-section-description">Nothing has reached the starboard yet.</p>
+    {% else %}
+    <div class="data-table-wrap">
+        <table class="data-table">
+            <thead><tr><th class="numeric">Stars</th><th>Author</th><th>Channel</th><th></th></tr></thead>
+            <tbody>
+                {% for t in starboard.top %}
+                <tr>
+                    <td class="numeric">{{ t.stars }}</td>
+                    <td>{{ t.author.as_deref().unwrap_or("Left the server") }}</td>
+                    <td>{% match t.channel %}{% when Some with (ch) %}#{{ ch.name }}{% when None %}&mdash;{% endmatch %}</td>
+                    <td><a href="{{ t.jump_url }}" target="_blank" rel="noopener">Open</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+(function () {
+    const form = document.getElementById('starboard-form');
+    if (!form) return;
+    PercyUnsaved.watchForm(form, {
+        label: 'Starboard',
+        save: async (f) => {
+            const channel = f.querySelector('[name="channel_id"]').value;
+            const body = {
+                enabled: f.querySelector('[name="enabled"]').checked,
+                channel_id: channel || null,
+                threshold: parseInt(f.querySelector('[name="threshold"]').value, 10) || 3,
+                emoji: f.querySelector('[name="emoji"]').value.trim() || '⭐',
+                max_age_hours: parseInt(f.querySelector('[name="max_age_hours"]').value, 10) || 0,
+                self_star: f.querySelector('[name="self_star"]').checked,
+                allow_nsfw: f.querySelector('[name="allow_nsfw"]').checked,
+                ignored_channel_ids: [...f.querySelector('[name="ignored_channel_ids"]').selectedOptions].map(o => o.value),
+            };
+            const res = await fetch(`/dashboard/guild/{{ guild_id }}/starboard`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            return res.json();
+        },
+    });
+})();
+</script>
+{% endblock %}

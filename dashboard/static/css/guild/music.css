@@ -1,0 +1,92 @@
+/* Music page — equalizer canvas, presets, filter toggles, now-playing.
+   The `spin` and `pulse` keyframes live in dashboard.css (shared). */
+
+/* ── Equalizer ──────────────────────────────────────────────────────── */
+
+
+
+
+
+
+
+
+
+
+
+
+/* ── Filters ────────────────────────────────────────────────────────── */
+
+
+
+
+/* Lowpass: pill wrapper keeping the toggle + its numeric value together. */
+
+
+
+
+
+/* ── Now-playing pill / 24-7 listener status ────────────────────────── */
+.now-playing { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: var(--box); border: 1px solid var(--box-border); }
+
+
+.listener-status {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+.listener-status .ls-indicator { width: 9px; height: 9px; border-radius: 50%; background: #555; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, #555 25%, transparent); }
+.listener-status .ls-indicator.active { background: #4caf50; box-shadow: 0 0 0 3px color-mix(in srgb, #4caf50 30%, transparent); }
+.listener-status strong { color: var(--branding, #d97757); }
+
+/* ── Music Panel: settings cards (toggle + dedicated-channel row) ─────── */
+.panel-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1rem;
+    max-width: 680px;
+}
+/* Each row is a self-contained card. Overrides .config-toggle's compact
+   padding (music.css loads after dashboard.css, so these win on tie). */
+.panel-item {
+    margin: 0;
+    gap: 1rem;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    padding: 0.85rem 1rem;
+    border-radius: 0.55rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    transition: border-color 0.15s ease;
+}
+.panel-item:hover {
+    border-color: color-mix(in srgb, var(--branding) 35%, var(--box-border));
+}
+.panel-item > div { min-width: 0; }
+.panel-item .config-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--foreground, #eee);
+    margin-bottom: 0.15rem;
+}
+.panel-item .config-description {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-top: 0;
+    line-height: 1.45;
+}
+.panel-item .config-description strong { color: var(--branding, #d97757); }
+.panel-item-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.panel-item > .panel-item-action { flex-direction: row; }
+.panel-channel-select { flex: 1; min-width: 0; }
+.panel-item > .button, .panel-item > input[type="checkbox"] { align-self: flex-start; }

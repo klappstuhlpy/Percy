@@ -1,0 +1,145 @@
+/* Public server overview — read-only member-facing page. Composes the shared
+   dashboard primitives (.config-section, .listener-status, .now-playing) with a
+   handful of overview-only layouts. */
+
+.overview-container { max-width: 880px; }
+
+.overview-back {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+.overview-back:hover { color: var(--branding); }
+
+/* ── Hero ────────────────────────────────────────────────────────── */
+.overview-hero {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    margin-bottom: 1.4rem;
+}
+.overview-hero-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 1rem;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--box-border);
+}
+.overview-hero-icon-ph {
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    font-weight: 700;
+    background: var(--branding-dim);
+    color: var(--branding);
+}
+.overview-hero-text h1 { margin: 0.15rem 0; font-size: 1.6rem; }
+.overview-hero-text p { margin: 0; color: var(--text-muted); }
+.overview-hero-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--branding-bright);
+    background: var(--branding-dim);
+    border: 1px solid color-mix(in srgb, var(--branding) 35%, transparent);
+    border-radius: 0.4rem;
+    padding: 0.1rem 0.45rem;
+}
+
+/* ── Stat grid ───────────────────────────────────────────────────── */
+.overview-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 0.7rem;
+    margin: 0.4rem 0;
+}
+.overview-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.7rem 0.8rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 0.6rem;
+}
+.overview-stat-val { font-size: 1.3rem; font-weight: 700; color: var(--branding-bright); }
+.overview-stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.overview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    margin-top: 0.8rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+/* ── Music controls ──────────────────────────────────────────────── */
+
+
+
+/* ── Leaderboard ─────────────────────────────────────────────────── */
+.overview-subheading { margin: 1.1rem 0 0.4rem; font-size: 0.95rem; color: var(--text-muted); }
+.overview-lb { list-style: none; margin: 0; padding: 0; }
+.overview-lb-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--box-border);
+}
+.overview-lb-row:last-child { border-bottom: none; }
+.overview-lb-rank { width: 2rem; color: var(--branding); font-weight: 700; }
+.overview-lb-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.overview-lb-avatar-ph { background: var(--box-shade); border: 1px solid var(--box-border); }
+.overview-lb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-lb-level { color: var(--text-muted); font-size: 0.82rem; }
+.overview-lb-xp { color: var(--branding-bright); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+
+/* ── Generic lists (polls / giveaways) ───────────────────────────── */
+.overview-list { list-style: none; margin: 0; padding: 0; }
+.overview-list-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--box-border);
+}
+.overview-list-row:last-child { border-bottom: none; }
+.overview-list-title { font-weight: 600; }
+.overview-list-meta { color: var(--text-muted); font-size: 0.8rem; }
+
+/* ── Shop ────────────────────────────────────────────────────────── */
+.overview-shop {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.6rem;
+}
+.overview-shop-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.7rem 0.8rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 0.6rem;
+}
+.overview-shop-name { font-weight: 600; }
+.overview-shop-desc { color: var(--text-muted); font-size: 0.8rem; }
+.overview-shop-price { margin-top: 0.2rem; color: var(--branding-bright); font-size: 0.85rem; }
+.overview-lottery {
+    margin-top: 0.9rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--branding-dim);
+    border: 1px solid color-mix(in srgb, var(--branding) 25%, transparent);
+    border-radius: 0.6rem;
+    font-size: 0.88rem;
+}
+
+/* ── Bot links ───────────────────────────────────────────────────── */
+.overview-bot-links { display: flex; gap: 1rem; margin-top: 0.8rem; }
+.overview-bot-links a { color: var(--branding); text-decoration: none; font-size: 0.85rem; }
+.overview-bot-links a:hover { text-decoration: underline; }

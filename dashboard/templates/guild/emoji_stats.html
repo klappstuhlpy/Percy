@@ -1,0 +1,62 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Most used custom emoji across this server.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/guild/emoji_stats.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Percy tracks how often each <strong>custom emoji</strong> is used in this server. The ranking below helps you spot favourites and prune emojis nobody reaches for.</p>
+        </div>
+    </div>
+
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Total Uses</span>
+            <span class="tile-value">{{ data.total_uses }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Distinct Emojis</span>
+            <span class="tile-value">{{ data.distinct_emojis }}</span>
+        </div>
+    </div>
+
+    {% if data.entries.is_empty() %}
+    <section class="config-section">
+        <p class="text-muted">No emoji usage data recorded yet.</p>
+    </section>
+    {% else %}
+    <section class="config-section">
+        <table class="data-table sortable">
+            <thead>
+                <tr>
+                    <th>Emoji</th>
+                    <th data-sort="text">Name</th>
+                    <th data-sort="number">Uses</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in data.entries %}
+                <tr>
+                    <td data-label="Emoji">
+                        {% match entry.emoji_url %}
+                        {% when Some with (url) %}
+                        <img src="{{ url }}" alt="{{ entry.emoji_name }}" class="emoji-icon">
+                        {% when None %}
+                        <code>:{{ entry.emoji_name }}:</code>
+                        {% endmatch %}
+                    </td>
+                    <td data-label="Name"><code>{{ entry.emoji_name }}</code></td>
+                    <td data-label="Uses">{{ entry.total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+{% endblock %}
