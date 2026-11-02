@@ -114,10 +114,10 @@ small and self-contained first.
 | Router file | Routes | Notes |
 |---|---:|---|
 | `analytics.py` | 2 | **done (pilot)** |
-| `starboard.py` | 2 | **done** |
-| `profile.py` | 3 | `{ok}` replies + one object |
-| `gallery.py` | 3 | `asdict(dataclass)` results: model the dataclass fields |
-| `news.py` | 3 | **done** (typed; pure payload builders in `app/services/news/payload.py`) |
+| `starboard.py` | 2 | small, easy |
+| `profile.py` | 3 | **done** |
+| `gallery.py` | 3 | **done** |
+| `news.py` | 3 | pure payload builders in `app/services/news/payload.py` |
 | `webhooks.py` (vote webhooks) | 2 | no dashboard consumer; skip unless wanted |
 | `rolemenus.py` | 6 | **done** (ok-only DELETE/PATCH left as `dict`) |
 | `backup.py` | 6 | **done**: only `GET /templates` typed; export/import/apply stay `dict` |
@@ -131,7 +131,7 @@ small and self-contained first.
 | `moderation.py` | 12 | 1 route has no JSON body |
 | `leveling.py` | 12 | |
 | `economy.py` | 15 | |
-| `music.py` | 18 | |
+| `music.py` | 18 | **done** (models in `music_models.py`; `MusicHistoryItem` shared with users.py) |
 | `guild.py` | 20 | biggest config surface; `Option` leniency matters most here |
 | `users.py` | 21 | includes PNG-preview and data-export routes (leave non-JSON alone) |
 | `content.py` | 37 | **partly done**: polls, giveaways, tags list+detail, comics feeds, temp-channels, lockdowns, emoji-stats GETs typed (`content_models.py`). Left: `/commands` (`CommandInfo` is shared with `/commands/public`), `/status-feed` (`ChannelRef`), tag export/import, `{ok}` mutations |

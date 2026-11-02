@@ -112,6 +112,14 @@ pub use generated::{
     WatchUniverseSummary,
     WatchUniversesResponse,
 };
+    AlwaysOnState, CustomBotProfile, GalleryImage, GalleryResponse, GalleryUploadResult, LyricLine, MusicAlbum,
+    MusicAlbumInfo, MusicArtist, MusicArtistInfo, MusicAudio, MusicChannelRef, MusicEqualizer, MusicFiltersState,
+    MusicHistory, MusicHistoryItem, MusicInfo, MusicLyrics, MusicPlayResult, MusicRelease, MusicSearch, MusicSetup,
+    MusicSetupResponse, MusicTrending, MusicViewer, NowPlaying, QueueTrack, TrackLink, TrackRequester, TrendingTrack,
+}; // music + profile + gallery domain
+
+/// A track as Percy's `_serialize_track` sends it; the live queue uses the same shape.
+pub type MusicTrack = QueueTrack;
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

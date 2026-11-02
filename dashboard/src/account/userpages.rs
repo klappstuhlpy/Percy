@@ -399,7 +399,7 @@ pub async fn guild_overview(
         equalizer: vec![0.0; 15],
         filters: MusicFiltersState {
             nightcore: false,
-            eight_d: false,
+            x8d: false,
             lowpass: None,
         },
         presets: vec![],

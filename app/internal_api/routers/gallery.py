@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 import fastapi
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from ..dependencies import BotDep, GuildDep, verify_token
 
@@ -30,6 +31,40 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Gallery"], dependencies=[Depends(verify_token)])
 
 
+class GalleryImage(BaseModel):
+    """One image in a guild's gallery (metadata; the bytes live at ``raw_url`` on the hoster)."""
+
+    id: str
+    ext: str
+    mimetype: str
+    size: int
+    original_name: str | None
+    uploaded_at: str
+    url: str
+    raw_url: str
+
+
+class GalleryResponse(BaseModel):
+    images: list[GalleryImage]
+    total: int
+
+
+class GalleryUploadResult(BaseModel):
+    """Mirrors the hoster's ``UploadResult``."""
+
+    total: int
+    errors: int
+    skipped: int
+    infected: int
+    links: list[str]
+    raw_links: list[str]
+
+
+class GalleryDeleteResult(BaseModel):
+    file: str
+    failed: bool
+
+
 def _client_or_503(bot) -> KlappstuhlMeClient:
     """Return the configured klappstuhl.me client, or 503 when the hoster is off."""
     client = bot.klappstuhlme_internal_client
@@ -43,11 +78,11 @@ def _client_or_503(bot) -> KlappstuhlMeClient:
 
 
 @router.get("/gallery")
-async def list_gallery(guild: GuildDep, bot: BotDep) -> dict:
+async def list_gallery(guild: GuildDep, bot: BotDep) -> GalleryResponse:
     """List the guild's image gallery (newest first, expired images omitted)."""
     client = _client_or_503(bot)
     try:
-        return asdict(await client.list_guild_images(guild.id))
+        return GalleryResponse.model_validate(asdict(await client.list_guild_images(guild.id)))
     except Exception:
         log.exception("gallery list failed")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="gallery unavailable")
@@ -58,7 +93,7 @@ async def upload_gallery(
     guild: GuildDep,
     bot: BotDep,
     files: list[fastapi.UploadFile] = fastapi.File(...),
-) -> dict:
+) -> GalleryUploadResult:
     """Upload one or more images into the guild's gallery."""
     client = _client_or_503(bot)
 
@@ -86,15 +121,15 @@ async def upload_gallery(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="one or more images were rejected (unsupported type, too large, or failed a malware scan)",
         )
-    return asdict(result)
+    return GalleryUploadResult.model_validate(asdict(result))
 
 
 @router.delete("/gallery/{image_id}")
-async def delete_gallery_image(guild: GuildDep, bot: BotDep, image_id: str) -> dict:
+async def delete_gallery_image(guild: GuildDep, bot: BotDep, image_id: str) -> GalleryDeleteResult:
     """Delete an image from the guild's gallery."""
     client = _client_or_503(bot)
     try:
-        return asdict(await client.delete_guild_image(guild.id, image_id))
+        return GalleryDeleteResult.model_validate(asdict(await client.delete_guild_image(guild.id, image_id)))
     except Exception:
         log.exception("gallery delete failed")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="delete failed")
