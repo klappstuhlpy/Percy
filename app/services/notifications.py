@@ -28,7 +28,7 @@ __all__ = (
     'request_payload',
 )
 
-KINDS = ('missing_permission', 'action_request', 'request_decided', 'webhook_disabled', 'notice')
+KINDS = ('missing_permission', 'action_request', 'request_decided', 'webhook_disabled', 'notice', 'report')
 SEVERITIES = ('info', 'warning', 'critical')
 REQUEST_STATUSES = ('pending', 'approved', 'denied', 'cancelled', 'failed', 'expired')
 REQUEST_TTL = datetime.timedelta(hours=24)

@@ -8,16 +8,18 @@ the owner-only global ``notice`` commands.
 from __future__ import annotations
 
 import logging
+from contextlib import suppress
 from typing import Literal
 
 import discord
 from discord.ext import commands, tasks
 
-from app.core import Bot, Cog, Context, cooldown, describe, group
+from app.core import Bot, Cog, Context, command, cooldown, describe, group
 from app.services.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS, SEVERITIES, check_request
 from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
 
 from .decide import edit_request_message, notify
+from .reports import ReportButton, file_report
 from .ui import RequestDecisionButton, request_embed, request_view
 
 log = logging.getLogger(__name__)
@@ -37,12 +39,12 @@ class Notifications(Cog):
         super().__init__(bot)
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(RequestDecisionButton)
+        self.bot.add_dynamic_items(RequestDecisionButton, ReportButton)
         self.expire_requests.start()
         self.prune_notifications.start()
 
     async def cog_unload(self) -> None:
-        self.bot.remove_dynamic_items(RequestDecisionButton)
+        self.bot.remove_dynamic_items(RequestDecisionButton, ReportButton)
         self.expire_requests.cancel()
         self.prune_notifications.cancel()
 
@@ -179,6 +181,20 @@ class Notifications(Cog):
             return
         await edit_request_message(ctx.guild, dict(claimed))
         await ctx.send_success(f'Request #{request_id} cancelled.')
+
+    # -- Reports ---------------------------------------------------------------------------
+
+    @command('report', description='Privately report a member to the moderators.', guild_only=True, hybrid=True)
+    @cooldown(1, 10)
+    @describe(member='The member to report.', reason='What happened.')
+    async def report(self, ctx: Context, member: discord.Member, *, reason: str) -> None:
+        """Usage: `report @member spamming invites`. Only moderators see it."""
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
+        text = await file_report(self.bot, ctx.guild, ctx.author, member, reason)
+        if ctx.interaction is None:  # keep the report out of the channel
+            with suppress(discord.HTTPException):
+                await ctx.message.delete()
+        await ctx.send(text, ephemeral=True)
 
     # -- Owner notices -----------------------------------------------------------------------
 
