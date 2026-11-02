@@ -65,7 +65,7 @@ SAMPLES: list[tuple[type, dict]] = [
     (mod.ActivityResponse, {'activity': [{'day': '2026-01-01', 'count': 2}], 'days': 365}),
     (mod.WarnPolicy, {
         'expiry_days': None, 'thresholds': [{'warn_count': 3, 'action': 'mute', 'duration_seconds': 60}],
-        'actions': ['kick'],
+        'reasons': [{'name': 'spam', 'points': 3, 'description': None}], 'actions': ['kick'],
     }),
     (n.NotificationList, {'items': [{
         'id': 4, 'kind': 'k', 'severity': 'info', 'title': 't', 'body': 'b', 'link': None, 'meta': {'channel_id': '5'},

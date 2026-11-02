@@ -111,6 +111,7 @@ class ModerationCase:
     created_at: datetime.datetime
     expires_at: datetime.datetime | None = None
     pardoned_at: datetime.datetime | None = None
+    points: int = 1
 
     @classmethod
     def from_record(cls, record: asyncpg.Record) -> ModerationCase:
@@ -126,6 +127,7 @@ class ModerationCase:
             created_at=record['created_at'],
             expires_at=record.get('expires_at'),
             pardoned_at=record.get('pardoned_at'),
+            points=record.get('points', 1),
         )
 
     @property

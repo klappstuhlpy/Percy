@@ -66,6 +66,11 @@ class WarnThresholdBody(BaseModel):
     duration_seconds: int | None = None
 
 
+class WarnReasonBody(BaseModel):
+    points: int
+    description: str
+
+
 class PardonBody(BaseModel):
     moderator_id: str | int
 
@@ -146,9 +151,18 @@ class WarnThreshold(BaseModel):
     duration_seconds: int | None
 
 
+class WarnReason(BaseModel):
+    name: str
+    points: int
+    description: str | None
+
+
 class WarnPolicy(BaseModel):
+    """``WarnThreshold.warn_count`` is a threshold in active warn *points* (kept for compatibility)."""
+
     expiry_days: int | None
     thresholds: list[WarnThreshold]
+    reasons: list[WarnReason]
     actions: list[str]
 
 
@@ -195,6 +209,10 @@ async def _warn_policy_payload(bot, guild_id: int) -> WarnPolicy:
             {'warn_count': r['warn_count'], 'action': r['action'], 'duration_seconds': r['duration_seconds']}
             for r in rows
         ],
+        'reasons': [
+            {'name': r['name'], 'points': r['points'], 'description': r['description']}
+            for r in await bot.db.cases.get_warn_reasons(guild_id)
+        ],
         'actions': list(THRESHOLD_ACTIONS),
     })
 
@@ -233,6 +251,24 @@ async def put_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep, body
 async def delete_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep) -> None:
     if not await bot.db.cases.remove_warn_threshold(guild.id, warn_count):
         raise HTTPException(status_code=404, detail='no rule for that warn count')
+
+
+@router.put("/warn-policy/reasons/{name}")
+async def put_warn_reason(name: str, bot: BotDep, guild: GuildDep, body: WarnReasonBody) -> WarnPolicy:
+    """Adds or replaces a reason preset (a name worth N points, with the text it records)."""
+    name = name.strip().lower()
+    if not name or ' ' in name or len(name) > 32:
+        raise HTTPException(status_code=400, detail='name must be one word of at most 32 characters')
+    if not 1 <= body.points <= 100:
+        raise HTTPException(status_code=400, detail='points must be between 1 and 100')
+    await bot.db.cases.set_warn_reason(guild.id, name, body.points, body.description.strip() or None)
+    return await _warn_policy_payload(bot, guild.id)
+
+
+@router.delete("/warn-policy/reasons/{name}", status_code=204)
+async def delete_warn_reason(name: str, bot: BotDep, guild: GuildDep) -> None:
+    if not await bot.db.cases.remove_warn_reason(guild.id, name.strip().lower()):
+        raise HTTPException(status_code=404, detail='no such reason')
 
 
 @router.post("/cases/{case_index}/pardon")

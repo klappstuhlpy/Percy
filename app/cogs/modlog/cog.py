@@ -4,6 +4,7 @@ import datetime
 from contextlib import suppress
 
 import discord
+from discord.ext import commands  # noqa: TC002 - resolved at runtime for command/flag annotations
 
 from app.cogs.modlog.models import CaseType, ModerationCase
 from app.cogs.modlog.ui import CaseHistoryView, build_case_view, build_warn_result_view, send_warn_dm
@@ -11,14 +12,21 @@ from app.cogs.modlog.warns import (
     MAX_EXPIRY_DAYS,
     WarnThreshold,
     active_warn_count,
+    active_warn_points,
+    resolve_warn_reason,
     select_threshold,
     threshold_error,
     warn_expiry,
 )
-from app.core import Bot, Cog
+from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.utils.checks import hierarchy_error
 from app.utils.timetools import ShortTime, humanize_duration
+
+
+class WarnFlags(Flags):
+    points: commands.Range[int, 1, 100] = flag(description='Override the warn points (1-100).')
+
 
 #: How many cases ``cases`` loads. Enough for any real history while keeping the summary honest.
 HISTORY_LIMIT = 500
@@ -39,16 +47,18 @@ class ModLog(Cog):
         moderator_id: int | None,
         reason: str | None,
         expires_at: datetime.datetime | None = None,
+        points: int = 1,
     ) -> ModerationCase:
         """Persists a moderation case and announces it in the modlog channel.
 
         ``expires_at`` is when a temporary action ends; for a warn it comes from the guild's
-        warn-expiry setting.
+        warn-expiry setting;
+        ``points`` is only meaningful for a warn.
         """
         if action == CaseType.WARN.value and expires_at is None:
             days = await self.bot.db.cases.get_warn_expiry_days(guild_id)
             expires_at = warn_expiry(datetime.datetime.now(datetime.UTC), days)
-        record = await self.bot.db.cases.create_case(guild_id, action, target_id, moderator_id, reason, expires_at)
+        record = await self.bot.db.cases.create_case(guild_id, action, target_id, moderator_id, reason, expires_at, points)
         case = ModerationCase.from_record(record)
         self.bot.events.publish(guild_id, 'case.created', {'case_index': case.index})
         await self._post_to_modlog(case)
@@ -177,13 +187,20 @@ class ModLog(Cog):
 
     # -- warn policy ------------------------------------------------------
 
-    async def active_warns(self, guild_id: int, target_id: int, *, up_to_index: int | None = None) -> int:
-        """Warns that are neither pardoned nor expired."""
+    async def active_warns(self, guild_id: int, target_id: int) -> tuple[int, int]:
+        """``(count, points)`` of warns that are neither pardoned nor expired."""
+        rows = await self.bot.db.cases.get_warn_rows(guild_id, target_id)
+        return active_warn_count(r['expires_at'] for r in rows), active_warn_points(
+            (r['expires_at'], r['points']) for r in rows
+        )
+
+    async def active_points(self, guild_id: int, target_id: int, *, up_to_index: int | None = None) -> int:
+        """Total points of warns that are neither pardoned nor expired."""
         rows = await self.bot.db.cases.get_warn_rows(guild_id, target_id, up_to_index=up_to_index)
-        return active_warn_count(row['expires_at'] for row in rows)
+        return active_warn_points((r['expires_at'], r['points']) for r in rows)
 
     async def escalate(self, case: ModerationCase) -> str | None:
-        """Applies the guild's threshold for the target's new active-warn count, if any.
+        """Applies the guild's threshold the target's new active warn points crossed, if any.
 
         Goes through ``apply_member_action`` as Percy, so permissions and hierarchy are exactly
         those of a manual action. Returns a one-line note for the moderator, or ``None``.
@@ -194,20 +211,21 @@ class ModLog(Cog):
         if guild is None:
             return None
         rows = await self.bot.db.cases.get_warn_thresholds(case.guild_id)
-        count = await self.active_warns(case.guild_id, case.target_id, up_to_index=case.index)
+        count = await self.active_points(case.guild_id, case.target_id, up_to_index=case.index)
+        before = await self.active_points(case.guild_id, case.target_id, up_to_index=case.index - 1)
         rule = select_threshold(
-            (WarnThreshold(r['warn_count'], r['action'], r['duration_seconds']) for r in rows), count
+            (WarnThreshold(r['warn_count'], r['action'], r['duration_seconds']) for r in rows), count, before
         )
         if rule is None:
             return None
         try:
             await apply_member_action(
                 self.bot, guild, guild.me, case.target_id, action=rule.action,
-                reason=f'Automatic: {count} active warnings', duration=rule.duration,
+                reason=f'Automatic: {count} active warning points', duration=rule.duration,
             )
         except MemberActionError as e:
-            return f'Threshold at {count} warnings ({rule.action}) could not be applied: {e.detail}'
-        return f'Threshold reached at {count} warnings: **{rule.action}** applied.'
+            return f'Threshold at {count} warning points ({rule.action}) could not be applied: {e.detail}'
+        return f'Threshold reached at {count} warning points: **{rule.action}** applied.'
 
     # -- commands ---------------------------------------------------------
 
@@ -219,8 +237,13 @@ class ModLog(Cog):
         hybrid=True,
         user_permissions=PermissionTemplate.kick,
     )
-    @describe(member='The member to warn.', reason='Why they are being warned.')
-    async def warn(self, ctx: Context, member: discord.Member, *, reason: str | None = None) -> None:
+    @describe(
+        member='The member to warn.',
+        reason='Why they are being warned. A leading reason preset name applies its points and text.',
+    )
+    async def warn(
+        self, ctx: Context, member: discord.Member, *, reason: str | None = None, flags: WarnFlags
+    ) -> None:
         """Warn a member and log a case."""
         assert ctx.guild is not None
         if member.bot:
@@ -231,8 +254,16 @@ class ModLog(Cog):
             await ctx.send_error(error)
             return
 
-        case = await self.record_case(ctx.guild.id, CaseType.WARN.value, member.id, ctx.author.id, reason)
-        warn_count = await self.active_warns(ctx.guild.id, member.id)
+        presets = {
+            r['name'].lower(): (r['points'], r['description'])
+            for r in await self.bot.db.cases.get_warn_reasons(ctx.guild.id)
+        }
+        reason, points = resolve_warn_reason(reason, presets)
+        points = flags.points or points
+        case = await self.record_case(
+            ctx.guild.id, CaseType.WARN.value, member.id, ctx.author.id, reason, points=points
+        )
+        warn_count, _ = await self.active_warns(ctx.guild.id, member.id)
         delivered = await send_warn_dm(member, reason, case_index=case.index, warn_count=warn_count)
 
         await ctx.send(
@@ -280,8 +311,8 @@ class ModLog(Cog):
         if not records:
             await ctx.send_info(f'**{user}** has no warnings.')
             return
-        active = await self.active_warns(ctx.guild.id, user.id)
-        await ctx.send_info(f'**{user}** has **{active}** active warning(s).')
+        active, points = await self.active_warns(ctx.guild.id, user.id)
+        await ctx.send_info(f'**{user}** has **{active}** active warning(s) worth **{points}** point(s).')
         await CaseHistoryView.start(
             ctx, entries=[ModerationCase.from_record(r) for r in records], user=user, total=len(records)
         )
@@ -333,18 +364,18 @@ class ModLog(Cog):
         lines = [f'Warns expire after: **{f"{days} days" if days else "never"}**']
         for r in rows:
             dur = f' for {humanize_duration(r["duration_seconds"])}' if r['duration_seconds'] else ''
-            lines.append(f'{r["warn_count"]} active warns -> **{r["action"]}**{dur}')
+            lines.append(f'{r["warn_count"]} active points -> **{r["action"]}**{dur}')
         if not rows:
             lines.append('No escalation rules. Add one with `warnpolicy set`.')
         await ctx.send_info('\n'.join(lines))
 
     @warnpolicy.command(
         'set',
-        description='Escalate at N active warns: timeout, mute, kick or ban.',
+        description='Escalate at N active warn points: timeout, mute, kick or ban.',
         user_permissions=PermissionTemplate.manager,
     )
     @describe(
-        count='Active warn count that triggers it.',
+        count='Active warn points that trigger it.',
         action='timeout, mute, kick or ban.',
         duration='For timeout (required, max 28d) and mute (optional), e.g. 1h.',
     )
@@ -357,7 +388,7 @@ class ModLog(Cog):
             await ctx.send_error(error)
             return
         await self.bot.db.cases.set_warn_threshold(ctx.guild.id, count, action, seconds)
-        await ctx.send_success(f'At **{count}** active warns: **{action}**.')
+        await ctx.send_success(f'At **{count}** active warn points: **{action}**.')
 
     @warnpolicy.command(
         'remove', description='Remove the rule for a warn count.', user_permissions=PermissionTemplate.manager
@@ -385,6 +416,50 @@ class ModLog(Cog):
             return
         await self.bot.db.cases.set_warn_expiry_days(ctx.guild.id, days or None)
         await ctx.send_success(f'New warns expire after **{days} days**.' if days else 'Warns no longer expire.')
+
+    @group(
+        'warnreason',
+        fallback='list',
+        description='Show the warn reason presets.',
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    async def warnreason(self, ctx: Context) -> None:
+        """List reason presets."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.cases.get_warn_reasons(ctx.guild.id)
+        if not rows:
+            await ctx.send_info('No reason presets. Add one with `warnreason add <name> <points> <description>`.')
+            return
+        await ctx.send_info('\n'.join(f'**{r["name"]}** - {r["points"]} pt(s): {r["description"] or ""}' for r in rows))
+
+    @warnreason.command(
+        'add', description='Add or replace a warn reason preset.', user_permissions=PermissionTemplate.manager
+    )
+    @describe(
+        name='One word to use as the reason.',
+        points='Points the warn is worth (1-100).',
+        description='The reason text recorded for the warn.',
+    )
+    async def warnreason_add(
+        self, ctx: Context, name: str, points: commands.Range[int, 1, 100], *, description: str
+    ) -> None:
+        """Add or replace a preset."""
+        assert ctx.guild is not None
+        await self.bot.db.cases.set_warn_reason(ctx.guild.id, name.lower(), points, description)
+        await ctx.send_success(f'Preset **{name.lower()}**: {points} point(s).')
+
+    @warnreason.command(
+        'remove', description='Remove a warn reason preset.', user_permissions=PermissionTemplate.manager
+    )
+    @describe(name='The preset to remove.')
+    async def warnreason_remove(self, ctx: Context, name: str) -> None:
+        """Remove a preset."""
+        assert ctx.guild is not None
+        if await self.bot.db.cases.remove_warn_reason(ctx.guild.id, name.lower()):
+            await ctx.send_success(f'Removed preset **{name.lower()}**.')
+        else:
+            await ctx.send_error(f'No preset named **{name.lower()}**.')
 
     @command(
         'case',

@@ -2102,13 +2102,22 @@ pub struct UserSettings {
     pub track_history: bool,
     pub track_presence: bool,
 }
-///`WarnPolicy`
+///``WarnThreshold.warn_count`` is a threshold in active warn *points* (kept for compatibility).
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct WarnPolicy {
     pub actions: ::std::vec::Vec<::std::string::String>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub expiry_days: ::std::option::Option<i64>,
+    pub reasons: ::std::vec::Vec<WarnReason>,
     pub thresholds: ::std::vec::Vec<WarnThreshold>,
+}
+///`WarnReason`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct WarnReason {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub description: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+    pub points: i64,
 }
 ///`WarnThreshold`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]

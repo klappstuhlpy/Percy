@@ -65,7 +65,7 @@
     {# ─── Warn policy ─────────────────────────────────────────────── #}
     <section class="config-card" id="warn-policy-card">
         <h3>Warn policy</h3>
-        <p class="text-muted">Warns can expire, and reaching a warn count can trigger an automatic action.</p>
+        <p class="text-muted">Warns carry points and can expire; reaching a point total can trigger an automatic action.</p>
         <div class="config-field">
             <label class="config-label" for="warn-expiry">Warns expire after (days)</label>
             <span class="config-description">Leave empty to keep warns forever.</span>
@@ -74,11 +74,11 @@
         </div>
         <div class="data-table-wrap">
             <table class="data-table" id="warn-thresholds">
-                <thead><tr><th>Warns</th><th>Action</th><th>Duration</th><th></th></tr></thead>
+                <thead><tr><th>Points</th><th>Action</th><th>Duration</th><th></th></tr></thead>
                 <tbody>
                     {% for t in warn_policy.thresholds %}
                     <tr>
-                        <td data-label="Warns">{{ t.warn_count }}</td>
+                        <td data-label="Points">{{ t.warn_count }}</td>
                         <td data-label="Action"><span class="action-pill {{ t.action }}">{{ t.action }}</span></td>
                         <td data-label="Duration">{% match t.duration_seconds %}{% when Some with (s) %}{{ s / 60 }} min{% when None %}—{% endmatch %}</td>
                         <td><button type="button" class="button small danger outline warn-rule-remove" data-count="{{ t.warn_count }}">Remove</button></td>
@@ -89,12 +89,36 @@
         </div>
         {% if warn_policy.thresholds.is_empty() %}<p class="text-muted fs-xs">No rules yet.</p>{% endif %}
         <div class="warn-rule-add">
-            <input type="number" id="warn-rule-count" class="config-input" min="1" max="100" placeholder="Warn count" aria-label="Warn count">
+            <input type="number" id="warn-rule-count" class="config-input" min="1" max="100" placeholder="Warn points" aria-label="Warn points">
             <select id="warn-rule-action" class="config-select" aria-label="Action">
                 {% for a in warn_policy.actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
             </select>
             <input type="number" id="warn-rule-minutes" class="config-input" min="1" placeholder="Minutes (optional)" aria-label="Duration in minutes">
             <button type="button" class="button small primary" id="warn-rule-add">Add rule</button>
+        </div>
+        <h4>Reason presets</h4>
+        <p class="text-muted fs-xs">A warn whose reason starts with a preset name gets its points and text (<code>warn @member spam</code>).</p>
+        <div class="data-table-wrap">
+            <table class="data-table" id="warn-reasons">
+                <thead><tr><th>Name</th><th>Points</th><th>Reason text</th><th></th></tr></thead>
+                <tbody>
+                    {% for r in warn_policy.reasons %}
+                    <tr>
+                        <td data-label="Name">{{ r.name }}</td>
+                        <td data-label="Points">{{ r.points }}</td>
+                        <td data-label="Reason text">{% match r.description %}{% when Some with (d) %}{{ d }}{% when None %}—{% endmatch %}</td>
+                        <td><button type="button" class="button small danger outline warn-reason-remove" data-name="{{ r.name }}">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if warn_policy.reasons.is_empty() %}<p class="text-muted fs-xs">No presets yet.</p>{% endif %}
+        <div class="warn-rule-add">
+            <input type="text" id="warn-reason-name" class="config-input" maxlength="32" placeholder="Name (one word)" aria-label="Preset name">
+            <input type="number" id="warn-reason-points" class="config-input" min="1" max="100" placeholder="Points" aria-label="Preset points">
+            <input type="text" id="warn-reason-text" class="config-input" maxlength="500" placeholder="Reason text" aria-label="Reason text">
+            <button type="button" class="button small primary" id="warn-reason-add">Add preset</button>
         </div>
     </section>
 

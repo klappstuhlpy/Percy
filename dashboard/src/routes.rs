@@ -328,6 +328,10 @@ pub(crate) fn build_router(state: AppState) -> Router {
             patch(moderation::guild_warn_expiry),
         )
         .route(
+            "/dashboard/guild/:guild_id/warn-policy/reasons/:name",
+            put(moderation::guild_warn_reason_put).delete(moderation::guild_warn_reason_delete),
+        )
+        .route(
             "/dashboard/guild/:guild_id/warn-policy/thresholds/:warn_count",
             put(moderation::guild_warn_threshold_put).delete(moderation::guild_warn_threshold_delete),
         )

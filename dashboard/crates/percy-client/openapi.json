@@ -12476,6 +12476,7 @@
         "type": "object"
       },
       "WarnPolicy": {
+        "description": "``WarnThreshold.warn_count`` is a threshold in active warn *points* (kept for compatibility).",
         "properties": {
           "actions": {
             "items": {
@@ -12495,6 +12496,13 @@
             ],
             "title": "Expiry Days"
           },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/WarnReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
           "thresholds": {
             "items": {
               "$ref": "#/components/schemas/WarnThreshold"
@@ -12506,9 +12514,58 @@
         "required": [
           "expiry_days",
           "thresholds",
+          "reasons",
           "actions"
         ],
         "title": "WarnPolicy",
+        "type": "object"
+      },
+      "WarnReason": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "points",
+          "description"
+        ],
+        "title": "WarnReason",
+        "type": "object"
+      },
+      "WarnReasonBody": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points",
+          "description"
+        ],
+        "title": "WarnReasonBody",
         "type": "object"
       },
       "WarnThreshold": {
@@ -30589,6 +30646,202 @@
           }
         },
         "summary": "Patch Warn Policy",
+        "tags": [
+          "Moderation"
+        ]
+      }
+    },
+    "/api/v1/guilds/{guild_id}/warn-policy/reasons/{name}": {
+      "delete": {
+        "operationId": "delete_warn_reason_api_v1_guilds__guild_id__warn_policy_reasons__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Warn Reason",
+        "tags": [
+          "Moderation"
+        ]
+      },
+      "put": {
+        "description": "Adds or replaces a reason preset (a name worth N points, with the text it records).",
+        "operationId": "put_warn_reason_api_v1_guilds__guild_id__warn_policy_reasons__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarnReasonBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarnPolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Warn Reason",
         "tags": [
           "Moderation"
         ]

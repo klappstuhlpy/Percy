@@ -2378,6 +2378,36 @@ impl PercyClient {
         .await
     }
 
+    /// Add or replace a warn reason preset (`name` worth `points`, recording `description`).
+    pub async fn put_warn_reason(
+        &self,
+        guild_id: u64,
+        name: &str,
+        points: u32,
+        description: &str,
+    ) -> Result<WarnPolicy, PercyError> {
+        self.send_into(
+            self.client
+                .put(self.url(&format!(
+                    "/api/v1/guilds/{}/warn-policy/reasons/{}",
+                    seg(&guild_id),
+                    seg(&name)
+                )))
+                .json(&serde_json::json!({"points": points, "description": description})),
+        )
+        .await
+    }
+
+    /// Remove a warn reason preset.
+    pub async fn delete_warn_reason(&self, guild_id: u64, name: &str) -> Result<(), PercyError> {
+        self.send_unit(self.client.delete(self.url(&format!(
+            "/api/v1/guilds/{}/warn-policy/reasons/{}",
+            seg(&guild_id),
+            seg(&name)
+        ))))
+        .await
+    }
+
     /// Perform a bulk moderation action on multiple members.
     pub async fn bulk_member_action(
         &self,
