@@ -263,6 +263,14 @@
         kick:      { label: 'Kick', verb: 'kick', danger: true },
         softban:   { label: 'Softban', verb: 'softban', danger: true, purgeDays: true },
         ban:       { label: 'Ban', verb: 'ban', danger: true, purgeDays: true },
+        voicekick: { label: 'Voice Kick', verb: 'disconnect from voice' },
+        voiceban:  { label: 'Voice Ban', verb: 'voice ban', duration: true, optionalDuration: true },
+        voiceunban:{ label: 'Voice Unban', verb: 'lift the voice ban on' },
+        nick:      { label: 'Set Nickname', verb: 'change the nickname of', nickname: true },
+        nickfreeze:{ label: 'Freeze Nickname', verb: 'freeze the nickname of', nickname: true },
+        nickunfreeze:{ label: 'Unfreeze Nickname', verb: 'unfreeze the nickname of' },
+        channelmute:{ label: 'Channel Mute', verb: 'mute in one channel', duration: true, optionalDuration: true, channel: true },
+        channelunmute:{ label: 'Channel Unmute', verb: 'unmute in one channel', channel: true },
     };
 
     const title = document.getElementById('modal-title');
@@ -277,6 +285,10 @@
     const purgeDays = document.getElementById('modal-purge-days');
     const limitField = document.getElementById('modal-limit-field');
     const limitInput = document.getElementById('modal-limit');
+    const nicknameField = document.getElementById('modal-nickname-field');
+    const nicknameInput = document.getElementById('modal-nickname');
+    const channelField = document.getElementById('modal-channel-field');
+    const channelInput = document.getElementById('modal-channel');
 
     let pending = null;
 
@@ -301,9 +313,13 @@
             durationForever.hidden = !action.optionalDuration;
             duration.value = '3600';
             purgeField.hidden = !action.purgeDays;
-            purgeDays.value = '0';
+            purgeDays.value = '';
             limitField.hidden = !action.limit;
             limitInput.value = '100';
+            nicknameField.hidden = !action.nickname;
+            nicknameInput.value = '';
+            channelField.hidden = !action.channel;
+            channelInput.value = '';
 
             confirmBtn.className = action.danger ? 'button small danger' : 'button small primary';
             confirmBtn.textContent = action.label;
@@ -320,8 +336,11 @@
         const action = ACTIONS[pending];
         const body = { action: pending, reason: reason.value.trim() || undefined };
         if (action.duration && duration.value) body.duration = parseInt(duration.value, 10);
-        if (action.purgeDays) body.delete_message_days = parseInt(purgeDays.value, 10);
+        // Blank = server default: sending a value would override mod_default_ban_delete_days.
+        if (action.purgeDays && purgeDays.value !== '') body.delete_message_days = parseInt(purgeDays.value, 10);
         if (action.limit) body.limit = parseInt(limitInput.value, 10);
+        if (action.nickname) body.nickname = nicknameInput.value.trim();
+        if (action.channel) body.channel_id = channelInput.value.trim();
 
         confirmBtn.disabled = true;
         try {

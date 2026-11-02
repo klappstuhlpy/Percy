@@ -86,7 +86,7 @@ def select_trailer(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """Picks the single best trailer from a TMDB ``{movie,tv}/{id}/videos`` payload.
 
     Returns ``{'trailer_site', 'trailer_key', 'trailer_name'}`` -- the ``watch_titles`` columns
-    from ``V44__trailers.sql`` -- or ``None`` when nothing qualifies. ``None`` is the normal
+    from ``V13__watchlist.sql`` -- or ``None`` when nothing qualifies. ``None`` is the normal
     answer for plenty of titles, not an error: an unreleased film often has no video at all.
 
     Entries are first discarded outright when they are unrenderable -- not a dict, no ``key``,

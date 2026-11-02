@@ -622,6 +622,36 @@ pub(crate) struct AnalyticsTemplate {
     pub(crate) initial_series_json: String,
 }
 
+/// One permission rule with its target resolved to a name.
+#[derive(Clone)]
+pub(crate) struct RuleRow {
+    pub(crate) rule: CommandRule,
+    pub(crate) target_name: String,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "guild/command_rules.html")]
+pub(crate) struct CommandRulesTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) rules: Vec<RuleRow>,
+    pub(crate) subject_commands: Vec<String>,
+    pub(crate) subject_cogs: Vec<String>,
+    pub(crate) custom_commands: Vec<CustomCommandEntry>,
+    pub(crate) custom_types: Vec<String>,
+    pub(crate) max_commands: i64,
+    /// Sorted: the wire form is an unordered map.
+    pub(crate) placeholders: Vec<(String, String)>,
+    pub(crate) aliases: Vec<CommandAliasEntry>,
+    pub(crate) max_aliases: i64,
+    pub(crate) channels: Vec<Channel>,
+    pub(crate) roles: Vec<Role>,
+}
+
 #[allow(dead_code)]
 #[derive(Template)]
 #[template(path = "guild/webhooks.html")]
@@ -869,6 +899,56 @@ mod tests {
         // Exactly one row (the custom item) carries edit/delete controls.
         assert_eq!(html.matches("edit-item-btn\"").count(), 1);
         assert_eq!(html.matches("delete-item-btn\"").count(), 1);
+    }
+
+    /// The rules page renders rules, custom commands (placeholders sorted) and aliases.
+    #[test]
+    fn command_rules_template_renders() {
+        let html = CommandRulesTemplate {
+            account: Some(Viewer { name: "ferris".into() }),
+            guild_id: 42,
+            guild_name: "Test".into(),
+            nav_active: "command-rules",
+            page_title: "Rules & Custom Commands",
+            rules: vec![RuleRow {
+                rule: CommandRule {
+                    allow: false,
+                    subject: "ban".into(),
+                    target_id: "7".into(),
+                    target_type: "role".into(),
+                },
+                target_name: "Mods".into(),
+            }],
+            subject_commands: vec!["ban".into()],
+            subject_cogs: vec!["Moderation".into()],
+            custom_commands: vec![CustomCommandEntry {
+                id: 3,
+                name: "hug".into(),
+                signature: "<who:member>".into(),
+                responses: vec!["{author} hugs {who}".into()],
+                ..Default::default()
+            }],
+            custom_types: vec!["member".into()],
+            max_commands: 50,
+            placeholders: vec![
+                ("author".into(), "The caller".into()),
+                ("uses".into(), "Use count".into()),
+            ],
+            aliases: vec![CommandAliasEntry {
+                alias: "b".into(),
+                expansion: "ban".into(),
+                owner_id: None,
+            }],
+            max_aliases: 20,
+            channels: Vec::new(),
+            roles: Vec::new(),
+        }
+        .render()
+        .expect("render command rules");
+        for needle in ["Mods", "Deny", "hug", "{author} hugs {who}", "ban", "Moderation"] {
+            assert!(html.contains(needle), "missing {needle}");
+        }
+        assert!(html.find("{author}").unwrap() < html.find("{uses}").unwrap());
     }
 
     /// The webhooks page renders a subscription row + the event checkboxes.

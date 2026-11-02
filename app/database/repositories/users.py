@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from app.database.personal_data import DELETED
 from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
+    from collections.abc import Iterable
 
     import asyncpg
 
@@ -66,14 +68,13 @@ class UsersRepository(BaseRepository):
         self.invalidate_cache("user_config_changed", user_id)
 
     async def delete_personal_data(self, user_id: int) -> None:
-        """Removes a user's tracked history (presence, avatar and item) in one transaction."""
+        """Erases the user's data in every ``personal_data.DELETED`` table in one transaction."""
         async with self.acquire(timeout=300.0) as conn, conn.transaction():
-            # asyncpg runs parameterised statements through the extended protocol, which
-            # rejects multiple commands in one string — so issue each DELETE separately
-            # (still atomic within the surrounding transaction).
-            await conn.execute("DELETE FROM presence_history WHERE uuid = $1;", user_id)
-            await conn.execute("DELETE FROM avatar_history WHERE uuid = $1;", user_id)
-            await conn.execute("DELETE FROM item_history WHERE uuid = $1;", user_id)
+            # asyncpg's extended protocol rejects multiple commands per string, so one DELETE each
+            # (still atomic within the surrounding transaction). Names come from the constant registry.
+            for entry in DELETED:
+                table, column = entry.split('.')
+                await conn.execute(f"DELETE FROM {table} WHERE {column} = $1;", user_id)
 
     async def export_all_user_data(self, user_id: int) -> dict[str, object]:
         """Collects *all* personal data Percy stores about a user, for a data-access request.
@@ -90,6 +91,7 @@ class UsersRepository(BaseRepository):
         data, so it queries tables owned by other cogs rather than fanning out to their
         repositories.
         """
+        # Export is hand-written, not driven by personal_data.DELETED/RETAINED (left alone on purpose).
         uid_text = str(user_id)
 
         settings = await self.fetchrow("SELECT * FROM user_settings WHERE id = $1;", user_id)
@@ -317,6 +319,19 @@ class PlaylistsRepository(BaseRepository):
         return await self.fetchval(
             "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;",
             user_id, name, ensure_utc(created))
+
+    async def create_playlist_with_tracks(
+        self, user_id: int, name: str, created: datetime.datetime, tracks: Iterable[tuple[str, str | None, str | None]]
+    ) -> int:
+        """Creates a playlist and its ``(title, url, author)`` tracks in one transaction; a failure leaves nothing."""
+        async with self.acquire() as conn, conn.transaction():
+            playlist_id = await conn.fetchval(
+                "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;",
+                user_id, name, ensure_utc(created))
+            await conn.executemany(
+                "INSERT INTO playlist_lookup (playlist_id, name, url, author, artwork) VALUES ($1, $2, $3, $4, NULL);",
+                [(playlist_id, title, url, author) for title, url, author in tracks])
+        return playlist_id
 
     async def get_playlist_by_id(self, playlist_id: int) -> asyncpg.Record | None:
         """Fetches a playlist by its id."""

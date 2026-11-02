@@ -222,7 +222,7 @@ class WatchPeopleResponse(BaseModel):
 
 
 class WatchProgressEntry(BaseModel):
-    """One title's V39 watch state."""
+    """One title's V13 watch state."""
 
     status: str
     updated_at: str

@@ -192,7 +192,7 @@ async def get_title(
     ordering and the name of the path whose ``importance`` the title carries, neither of which
     is derivable from a title row alone.
 
-    ``parent`` and ``seasons`` are the two halves of ``V45``'s season context: a season names
+    ``parent`` and ``seasons`` are the two halves of ``V13``'s season context: a season names
     the series it belongs to, a series lists the seasons under it, and exactly one of the two is
     ever non-empty. Both are picked out of the page payload already in hand rather than queried,
     so the season context costs no round trip -- and both are always present (``null`` / ``[]``)

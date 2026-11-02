@@ -17,6 +17,9 @@ def _bot(thresholds: list[dict] | None = None, days: int | None = None) -> Magic
     cases = bot.db.cases
     cases.get_warn_thresholds = AsyncMock(return_value=thresholds or [])
     cases.get_warn_expiry_days = AsyncMock(return_value=days)
+    cases.get_warn_reasons = AsyncMock(return_value=[])
+    cases.set_warn_reason = AsyncMock()
+    cases.remove_warn_reason = AsyncMock(return_value=True)
     cases.set_warn_threshold = AsyncMock()
     cases.set_warn_expiry_days = AsyncMock()
     cases.remove_warn_threshold = AsyncMock(return_value=True)
@@ -52,6 +55,7 @@ async def test_get_payload_shape() -> None:
     assert out.model_dump() == {
         'expiry_days': 30,
         'thresholds': [{'warn_count': 3, 'action': 'kick', 'duration_seconds': None}],
+        'reasons': [],
         'actions': ['timeout', 'mute', 'kick', 'ban'],
     }
 
@@ -108,3 +112,21 @@ async def test_pardon_returns_the_case(monkeypatch: pytest.MonkeyPatch) -> None:
     out = await api.pardon_case(5, bot, guild, api.PardonBody(moderator_id=9))
     assert out.case_index == 5
     assert out.action == 'warn' and out.pardoned
+
+
+async def test_put_reason_normalises_validates_then_writes() -> None:
+    bot = _bot()
+    await api.put_warn_reason('Spam', bot, _guild(), api.WarnReasonBody(points=3, description=' No spam '))
+    bot.db.cases.set_warn_reason.assert_awaited_once_with(1, 'spam', 3, 'No spam')
+    for name, points in (('two words', 3), ('spam', 0), ('spam', 101)):
+        with pytest.raises(HTTPException) as exc:
+            await api.put_warn_reason(name, bot, _guild(), api.WarnReasonBody(points=points, description='x'))
+        assert exc.value.status_code == 400
+
+
+async def test_delete_reason_404s_when_missing() -> None:
+    bot = _bot()
+    bot.db.cases.remove_warn_reason = AsyncMock(return_value=False)
+    with pytest.raises(HTTPException) as exc:
+        await api.delete_warn_reason('nope', bot, _guild())
+    assert exc.value.status_code == 404

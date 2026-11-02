@@ -1,4 +1,5 @@
 from app.database.repositories.base import BaseRepository
+from app.database.repositories.command_rules import CommandRulesRepository
 from app.database.repositories.community import (
     GiveawaysRepository,
     PollsRepository,
@@ -11,6 +12,7 @@ from app.database.repositories.content import (
     StatCountersRepository,
     TempChannelsRepository,
 )
+from app.database.repositories.custom_commands import CustomCommandsRepository
 from app.database.repositories.economy import EconomyRepository, LevelingRepository
 from app.database.repositories.guilds import AdminRepository, GuildsRepository
 from app.database.repositories.integrations import EventWebhooksRepository, GuildTemplatesRepository
@@ -20,8 +22,10 @@ from app.database.repositories.music_plays import MusicPlaysRepository
 from app.database.repositories.news import NewsRepository
 from app.database.repositories.notifications import NotificationsRepository
 from app.database.repositories.releases import ReleasesRepository
+from app.database.repositories.restrictions import RestrictionsRepository
 from app.database.repositories.stats import EmojiStatsRepository, GameStatsRepository, StatsRepository
 from app.database.repositories.timers import TimersRepository
+from app.database.repositories.trivia import TriviaRepository
 from app.database.repositories.users import (
     PlaylistsRepository,
     UsersRepository,
@@ -34,6 +38,8 @@ __all__ = (
     'BaseRepository',
     'CasesRepository',
     'ComicsRepository',
+    'CommandRulesRepository',
+    'CustomCommandsRepository',
     'EconomyRepository',
     'EmojiStatsRepository',
     'EventWebhooksRepository',
@@ -51,6 +57,7 @@ __all__ = (
     'PlaylistsRepository',
     'PollsRepository',
     'ReleasesRepository',
+    'RestrictionsRepository',
     'RoleMenusRepository',
     'StarboardRepository',
     'StatCountersRepository',
@@ -58,6 +65,7 @@ __all__ = (
     'TagsRepository',
     'TempChannelsRepository',
     'TimersRepository',
+    'TriviaRepository',
     'UsersRepository',
     'VotesRepository',
     'WatchlistRepository',

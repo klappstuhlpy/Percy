@@ -48,7 +48,7 @@ async def test_list_titles_story_sort_orders_by_story_order(mock_db: MagicMock) 
     await repo.list_titles('mcu', sort='story')
 
     query, *params = mock_db.fetch.await_args.args
-    # The season tiebreak (V45) sits between the order column and the id: a season inherits its
+    # The season tiebreak (V13) sits between the order column and the id: a season inherits its
     # series' order value exactly, so this clause is the only thing placing it under its series.
     assert 'ORDER BY t.story_order, COALESCE(t.season_number, -1), t.id' in query
     assert params == ['mcu', None]
@@ -197,13 +197,13 @@ async def test_upsert_title_insert_columns_match_row_builder_output(mock_db: Mag
     await repo.upsert_title('mcu', row)
 
     query, *_params = mock_db.fetchval.await_args.args
-    # V45's three columns are written from `data.get(...)`, so a film's row legitimately omits
+    # V13's three columns are written from `data.get(...)`, so a film's row legitimately omits
     # them (they land as NULL) -- see the season-row test below for the exact-match half.
     assert _insert_columns(query) == set(row) | {'universe', 'season_number', 'season_name', 'parent_id'}
 
 
 async def test_upsert_title_insert_columns_cover_every_season_row_key(mock_db: MagicMock) -> None:
-    # V45: a season row is the widest row the ingest builds -- it is the one that fills every
+    # V13: a season row is the widest row the ingest builds -- it is the one that fills every
     # column including the three season ones, so it is what pins the INSERT list exactly.
     seed_title = TitleSeed(tmdb_type='tv', tmdb_id=61889, era='phase4', story=500, release=500)
     row = tv_row(
@@ -221,14 +221,14 @@ async def test_upsert_title_insert_columns_cover_every_season_row_key(mock_db: M
     query, *params = mock_db.fetchval.await_args.args
     assert _insert_columns(query) == set(season) | {'universe'}
     assert len(set(_PLACEHOLDER_RE.findall(query))) == len(params)
-    # Identity is the V45 expression index; a bare `season_number` here would stop matching films.
+    # Identity is the V13 expression index; a bare `season_number` here would stop matching films.
     assert 'ON CONFLICT (universe, tmdb_type, tmdb_id, COALESCE(season_number, -1))' in query
     # season_number is part of the key, so the update clause must not try to move it.
     assert 'season_number = EXCLUDED' not in query
 
 
 async def test_titles_releasing_between_skips_container_rows(mock_db: MagicMock) -> None:
-    # V45: a series exploded into seasons shares its first season's air date, so dispatching both
+    # V13: a series exploded into seasons shares its first season's air date, so dispatching both
     # would DM a subscriber about the series and its season 1 on the same day.
     repo = make_repo(mock_db)
 

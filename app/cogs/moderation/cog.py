@@ -19,6 +19,7 @@ from app.core.pagination import LinePaginator
 from app.core.views import View
 from app.database.base import GuildConfig
 from app.services import ModerationAssessor, build_purge_predicate
+from app.services.moderation_settings import MOD_SWITCHES
 from app.utils import (
     checks,
     fuzzy,
@@ -38,9 +39,12 @@ from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_mo
 from .antispam import SpamChecker, check_raid, mention_spam_ban, mention_threshold
 from .infractions import (
     TIMER_RETRY_BASE,
+    announce,
     check_member_hierarchy,
     default_reason,
     mute_role_error,
+    refuse_without_reason,
+    reinvite_if_enabled,
     retry_expiry_timer,
     safe_reason_append,
     softban,
@@ -1215,6 +1219,64 @@ class Moderation(Cog):
                 f"Mention spam protection threshold must be between **{MIN_MENTION_COUNT}** and **{MAX_MENTION_COUNT}**."
             )
 
+    @moderation.group(
+        "settings",
+        fallback="show",
+        description="Shows how moderation actions behave on this server.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.mod,
+    )
+    async def moderation_settings(self, ctx: ModGuildContext) -> None:
+        """Shows the moderation switches: DM on action, required reasons, reinvite on unban, default ban cleanup."""
+        assert ctx.guild is not None
+        config = await self.bot.db.get_guild_config(ctx.guild.id)
+
+        def on(value: bool) -> str:
+            return "**on**" if value else "off"
+
+        await ctx.send_info(
+            "\n".join(
+                [
+                    f"`dm` DM members what was done to them: {on(config.mod_dm_on_action)}",
+                    f"`reason` Require a reason for kick/ban/softban/tempban/warn/mute: {on(config.mod_require_reason)}",
+                    f"`reinvite` DM a single-use invite on unban: {on(config.mod_reinvite_on_unban)}",
+                    f"`bandays` Days of messages a ban deletes by default: **{config.mod_default_ban_delete_days}**",
+                ]
+            )
+        )
+
+    @moderation_settings.command(
+        "toggle",
+        description="Turns a moderation switch on or off.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.mod,
+    )
+    @describe(setting="Which switch.", enabled="On or off; toggles if not given.")
+    async def moderation_settings_toggle(
+        self, ctx: ModGuildContext, setting: Literal["dm", "reason", "reinvite"], enabled: bool | None = None
+    ) -> None:
+        """Turns `dm`, `reason` or `reinvite` on or off."""
+        assert ctx.guild is not None
+        column = MOD_SWITCHES[setting]
+        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        value = not getattr(config, column) if enabled is None else enabled
+        await config.update(**{column: value})
+        await ctx.send_success(f"`{setting}` is now **{'on' if value else 'off'}**.")
+
+    @moderation_settings.command(
+        "bandays",
+        description="Sets how many days of messages a ban deletes when not told otherwise.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.mod,
+    )
+    @describe(days="0 to 7.")
+    async def moderation_settings_bandays(self, ctx: ModGuildContext, days: commands.Range[int, 0, 7]) -> None:
+        """Sets the default message cleanup of `ban`."""
+        assert ctx.guild is not None
+        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        await config.update(mod_default_ban_delete_days=days)
+        await ctx.send_success(f"Bans now delete **{days}** day(s) of messages by default.")
+
     @moderation.command(
         "ignore",
         description="Specifies what roles, members, or channels ignore Moderation Inspections.",
@@ -1577,6 +1639,8 @@ class Moderation(Cog):
     ) -> discord.Message | None:
         """Kicks a member from the server."""
         assert ctx.guild is not None
+        if await refuse_without_reason(ctx, "kick", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -1588,7 +1652,8 @@ class Moderation(Cog):
             await ctx.send_error(error)
             return
 
-        await ctx.guild.kick(member, reason=reason)
+        async with announce(self.bot, ctx.guild, member, "kick", reason, ctx.author):
+            await ctx.guild.kick(member, reason=reason)
         self.bot.dispatch("mod_action", ctx.guild.id, "kick", member.id, ctx.author.id, reason)
         await ctx.send_success(f"Kicked {member}.")
 
@@ -1615,6 +1680,8 @@ class Moderation(Cog):
         in the server or not.
         """
         assert ctx.guild is not None
+        if await refuse_without_reason(ctx, "ban", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -1622,7 +1689,9 @@ class Moderation(Cog):
             await ctx.send_error(error)
             return
 
-        await ctx.guild.ban(member, reason=reason)
+        days = (await self.bot.db.get_guild_config(ctx.guild.id)).mod_default_ban_delete_days
+        async with announce(self.bot, ctx.guild, member, "ban", reason, ctx.author):
+            await ctx.guild.ban(member, reason=reason, delete_message_seconds=days * 86400)
         # A permanent ban replaces any tempban, so its expiry must not lift this one later.
         await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.id)
         self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
@@ -1650,6 +1719,8 @@ class Moderation(Cog):
         This only works through banning via ID.
         """
         assert ctx.guild is not None
+        if await refuse_without_reason(ctx, "ban", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -1676,11 +1747,13 @@ class Moderation(Cog):
         if not confirm:
             return
 
+        days = (await self.bot.db.get_guild_config(ctx.guild.id)).mod_default_ban_delete_days
         async with ctx.progress(f"Banning {total_members} members...") as progress:
             failed = 0
             for i, member in enumerate(members, 1):
                 try:
-                    await ctx.guild.ban(member, reason=reason)
+                    async with announce(self.bot, ctx.guild, member, "ban", reason, ctx.author):
+                        await ctx.guild.ban(member, reason=reason, delete_message_seconds=days * 86400)
                 except discord.HTTPException:
                     failed += 1
                 else:
@@ -1714,6 +1787,8 @@ class Moderation(Cog):
         kick the member while removing their messages.
         """
         assert ctx.guild is not None
+        if await refuse_without_reason(ctx, "softban", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -1726,7 +1801,9 @@ class Moderation(Cog):
             await ctx.send_error(error)
             return
 
-        if not await softban(self.bot, ctx.guild, member, reason=reason):
+        async with announce(self.bot, ctx.guild, member, "softban", reason, ctx.author):
+            lifted = await softban(self.bot, ctx.guild, member, reason=reason)
+        if not lifted:
             self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
             await ctx.send_warning(
                 f"Banned **{member}**, but lifting the ban again failed, so they are still banned. "
@@ -1764,6 +1841,7 @@ class Moderation(Cog):
         # An early unban ends the tempban; its timer must not lift a later ban.
         await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.user.id)
         self.bot.dispatch("mod_action", ctx.guild.id, "unban", member.user.id, ctx.author.id, reason)
+        await reinvite_if_enabled(self.bot, ctx.guild, member.user.id)
         if member.reason:
             await ctx.send_success(
                 f"Unbanned {member.user} (ID: `{member.user.id}`); Previously banned for **{member.reason}**."
@@ -1807,6 +1885,8 @@ class Moderation(Cog):
         The App Commands version of this command does not support banning by ID.
         """
         assert ctx.guild is not None
+        if await refuse_without_reason(ctx, "tempban", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -1895,6 +1975,7 @@ class Moderation(Cog):
             await retry_expiry_timer(self.bot, timer, str(exc))
         else:
             self.bot.dispatch("mod_action", guild_id, "unban", member_id, guild.me.id, reason)
+            await reinvite_if_enabled(self.bot, guild, member_id)
 
     # MUTE
 
@@ -1928,6 +2009,8 @@ class Moderation(Cog):
         if (total := len(members)) == 0:
             raise BadArgument("Missing members to mute.", "members")
 
+        if await refuse_without_reason(ctx, "mute", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -1956,7 +2039,8 @@ class Moderation(Cog):
                 # and would end this indefinite mute.
                 await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
                 try:
-                    await member.add_roles(role, reason=reason)
+                    async with announce(self.bot, ctx.guild, member, "mute", reason, ctx.author):
+                        await member.add_roles(role, reason=reason)
                 except discord.HTTPException:
                     failed += 1
                 else:
@@ -2075,6 +2159,8 @@ class Moderation(Cog):
         The App Commands version of this command does not support banning by ID.
         """
         assert ctx.guild is not None
+        if await refuse_without_reason(ctx, "tempmute", reason):
+            return
         if reason is None:
             reason = default_reason(ctx.author)
 
@@ -2101,7 +2187,8 @@ class Moderation(Cog):
 
         # The member is not muted, so any tempmute timer left over is stale and would end this one early.
         await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
-        await member.add_roles(discord.Object(id=role_id), reason=reason)
+        async with announce(self.bot, ctx.guild, member, "tempmute", reason, ctx.author):
+            await member.add_roles(discord.Object(id=role_id), reason=reason)
         self.bot.dispatch("mod_action", ctx.guild.id, "tempmute", member.id, ctx.author.id, reason, duration.dt)
 
         zone = await self.bot.db.get_user_timezone(ctx.author.id)

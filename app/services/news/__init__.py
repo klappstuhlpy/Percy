@@ -1,7 +1,7 @@
 """News: feed parsing and conservative subject tagging.
 
 The second stream over the same subjects releases fan out through. See
-``migrations/V43__news.sql`` for the tables, ``app/database/repositories/news.py`` for the
+``migrations/V14__comics_releases_news.sql`` for the tables, ``app/database/repositories/news.py`` for the
 data-access layer, ``app/clients/news.py`` for the transport, and the plan's §4.5 for why a
 story is tagged with the same keys a subscription is expressed in.
 """

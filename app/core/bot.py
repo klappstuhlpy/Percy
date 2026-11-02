@@ -25,6 +25,7 @@ from app.clients import OllamaClient
 from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand, assign_native_permissions
 from app.core.context import Context
+from app.core.errors import CommandDisabled
 from app.core.feature_flags import FeatureFlags
 from app.core.flags import FlagMeta
 from app.core.help import PaginatedHelpCommand
@@ -131,6 +132,7 @@ class Bot(commands.Bot):
 
     if TYPE_CHECKING:
         blacklist: Config[int, bool]
+        server_lock: Config[str, bool]
         temp_channels: Config[int, bool]
         doc_links: Config[str, dict[str, str | list[str]] | list[str]]
 
@@ -255,6 +257,7 @@ class Bot(commands.Bot):
         self.prepare_jishaku_flags()
 
         self.blacklist = Config('blacklist')
+        self.server_lock = Config('server_lock.json')
         self.temp_channels = Config('temp_channels.json')
         self.doc_links = Config('doc_links.json')
 
@@ -462,14 +465,27 @@ class Bot(commands.Bot):
         if ctx.command is None:
             # No command matched. discord.py only raises CommandNotFound from invoke(),
             # which we skip here. When the user used the prefix (ctx.invoked_with is set),
-            # first try a deterministic typo correction (e.g. "aks" -> "ask"); only if the
-            # word is not a near-miss of a real command do we fall back to AI intent routing
-            # (if enabled). Typos must win over AI guessing, or "b.aks <question>" gets
-            # mis-routed as natural language.
+            # a guild alias or custom command gets the word first (a real command always won
+            # already, by matching above); then a deterministic typo correction (e.g. "aks" ->
+            # "ask"); only if the word is not a near-miss of a real command do we fall back to
+            # AI intent routing (if enabled). Typos must win over AI guessing, or
+            # "b.aks <question>" gets mis-routed as natural language.
+            if ctx.invoked_with and await self._maybe_dispatch_custom(ctx):
+                return
             if ctx.invoked_with and not await self._maybe_suggest_command(ctx):
                 await self._maybe_route_with_ai(ctx)
             return
 
+        await self.invoke_matched(ctx, message)
+
+    async def _maybe_dispatch_custom(self, ctx: Context) -> bool:
+        """Hand a prefix miss to the CustomCommands cog (aliases, custom commands); whether it ran one."""
+        dispatch = getattr(self.get_cog('CustomCommands'), 'try_dispatch', None)
+        return ctx.guild is not None and dispatch is not None and await dispatch(ctx)
+
+    async def invoke_matched(self, ctx: Context, message: discord.Message) -> None:
+        """Run a context whose command matched: spam control, feature flags, invoke, metrics."""
+        assert ctx.command is not None
         if await self.spam_control.is_spam(ctx, message):
             return
 
@@ -511,6 +527,9 @@ class Bot(commands.Bot):
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         if guild.id in self.blacklist:
+            await guild.leave()
+        elif self.server_lock.get('on'):
+            self.log.warning('Server lock is on; leaving new guild %s (%s)', guild.name, guild.id)
             await guild.leave()
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
@@ -760,7 +779,11 @@ class Bot(commands.Bot):
         self.metrics.record_error(type(error).__name__)
 
         # CommandNotFound is handled earlier in process_commands (an unmatched command never
-        # reaches invoke(), so it is never raised here); CheckFailure stays silent.
+        # reaches invoke(), so it is never raised here); CheckFailure stays silent, bar the one reply a
+        # server asked for when a disabled command is invoked.
+        if isinstance(error, CommandDisabled):
+            await ctx.send(error.message, delete_after=10, allowed_mentions=NO_MENTIONS)
+            return
         if isinstance(error, (commands.CommandNotFound, commands.CheckFailure)):
             return
 

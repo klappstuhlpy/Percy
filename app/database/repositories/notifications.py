@@ -1,5 +1,5 @@
 """Data access for guild notifications and moderator -> admin action requests
-(``migrations/V50__notifications.sql``).
+(``migrations/V10__notifications.sql``).
 
 Only :meth:`NotificationsRepository.update_request_settings` touches a cached row
 (``guild_config``) and so fires the cache signal; everything else is uncached.
@@ -74,6 +74,33 @@ class NotificationsRepository(BaseRepository):
             LIMIT $3
         """
         return await self.fetch(query, guild_id, before_id, limit)
+
+    async def recent_reports(self, guild_id: int, reporter_id: int, since: datetime.datetime) -> list[tuple[int, datetime.datetime]]:
+        """The reporter's ``(target_id, created_at)`` pairs since ``since`` (for the rate limit)."""
+        query = """
+            SELECT (meta->>'target_id')::bigint AS target_id, created_at FROM guild_notifications
+            WHERE guild_id = $1 AND kind = 'report' AND meta->>'reporter_id' = $2 AND created_at > $3
+        """
+        return [(r['target_id'], r['created_at']) for r in await self.fetch(query, guild_id, str(reporter_id), since)]
+
+    async def get_report(self, guild_id: int, report_id: int) -> asyncpg.Record | None:
+        query = "SELECT * FROM guild_notifications WHERE id = $1 AND guild_id = $2 AND kind = 'report'"
+        return await self.fetchrow(query, report_id, guild_id)
+
+    async def claim_report(self, guild_id: int, report_id: int, *, handler_id: int, outcome: str) -> bool:
+        """Atomically marks an unhandled report handled; ``False`` when someone else got there first."""
+        query = """
+            UPDATE guild_notifications SET meta = meta || $3::jsonb
+            WHERE id = $1 AND guild_id = $2 AND kind = 'report' AND NOT (meta ? 'handled_by')
+            RETURNING true
+        """
+        meta = json.dumps({'handled_by': str(handler_id), 'outcome': outcome})
+        return await self.fetchval(query, report_id, guild_id, meta) is True
+
+    async def release_report_claim(self, guild_id: int, report_id: int) -> None:
+        """Undoes :meth:`claim_report` after the action failed, so another moderator can retry."""
+        query = "UPDATE guild_notifications SET meta = meta - 'handled_by' - 'outcome' WHERE id = $1 AND guild_id = $2 AND kind = 'report'"
+        await self.execute(query, report_id, guild_id)
 
     async def delete(self, notification_id: int) -> bool:
         return await self.fetchval('DELETE FROM guild_notifications WHERE id = $1 RETURNING true', notification_id) is True

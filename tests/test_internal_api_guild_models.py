@@ -19,6 +19,8 @@ GUILD = {
     'mention_count': None, 'ignored_entities': [{'id': '3', 'type': 'role', 'name': 'x'}], 'mute_role': None,
     'alert_channel': CH, 'mod_log_channel': None, 'message_log_channel': None, 'voice_log_channel': None,
     'audit_log_flags': {'member_ban': True}, 'music_panel_channel': None, 'use_music_panel': False,
+    'mod_dm_on_action': False, 'mod_require_reason': True, 'mod_reinvite_on_unban': False,
+    'mod_default_ban_delete_days': 1, 'disabled_command_message': None,
     'prefixes': ['p.'], 'is_new_config': False,
 }
 SAMPLES = [

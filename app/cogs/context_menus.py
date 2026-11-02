@@ -16,6 +16,7 @@ from discord.ext import commands
 
 from app.clients import TranslateClient, TranslationError
 from app.clients.base import HTTPClientError
+from app.cogs.notifications.reports import ReportModal, report_setup_error
 from app.core import Accent, Bot, Cog, make_notice
 from app.utils import timetools, truncate
 from config import Emojis
@@ -89,6 +90,7 @@ class ContextMenus(Cog):
             app_commands.ContextMenu(name='Quote as Image', callback=self.quote_message),
             app_commands.ContextMenu(name='Bookmark to DMs', callback=self.bookmark_message),
             app_commands.ContextMenu(name='Remind Me About This', callback=self.remind_message),
+            app_commands.ContextMenu(name='Report Message', callback=self.report_message),
         )
         for menu in self._menus:
             bot.tree.add_command(menu)
@@ -168,6 +170,14 @@ class ContextMenus(Cog):
     async def remind_message(self, interaction: discord.Interaction, message: discord.Message) -> None:
         """Open a modal to schedule a reminder that links back to the message."""
         await interaction.response.send_modal(RemindModal(self.bot, message))
+
+    @app_commands.guild_only()
+    async def report_message(self, interaction: discord.Interaction, message: discord.Message) -> None:
+        """Open a modal asking why the message is being reported."""
+        if interaction.guild and (error := await report_setup_error(self.bot, interaction.guild)):
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+        await interaction.response.send_modal(ReportModal(self.bot, message))
 
 
 async def setup(bot: Bot) -> None:

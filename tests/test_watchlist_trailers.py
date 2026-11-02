@@ -162,5 +162,5 @@ def test_the_title_payload_carries_the_trailer() -> None:
         'url': 'https://www.youtube.com/watch?v=k-best',
         'embed_url': 'https://www.youtube.com/embed/k-best',
     }
-    # A row from before V44 (or a title with no trailer) shapes to a null key, never a KeyError.
+    # A row from before V13 (or a title with no trailer) shapes to a null key, never a KeyError.
     assert title_payload({k: v for k, v in row.items() if not k.startswith('trailer_')})['trailer'] is None

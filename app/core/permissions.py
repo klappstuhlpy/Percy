@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Literal, NamedTuple, Union
@@ -7,6 +8,10 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NamedTuple, Union
 import discord
 from discord.ext import commands
 from discord.flags import flag_value
+
+from app.services.command_rules import Decision, Invocation, resolve
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -19,7 +24,10 @@ __all__ = (
     "PermissionInput",
     "PermissionSpec",
     "PermissionTemplate",
+    "check_rules",
     "command_permission_check",
+    "custom_command_name",
+    "normalize_rule_subject",
 )
 
 VALID_FLAGS: dict[str, int] = discord.Permissions.VALID_FLAGS
@@ -329,6 +337,74 @@ class CommandOverride:
         return any(role.id in self.allowed_roles for role in member.roles)
 
 
+#: Rules never apply to these cogs: a deny on ``*`` must not be able to lock admins out of fixing it.
+RULE_EXEMPT_COGS = frozenset({"Config"})
+
+
+async def check_rules(
+    db,
+    guild: discord.Guild,
+    member: discord.Member,
+    channel: discord.abc.GuildChannel | discord.Thread | None,
+    qualified_name: str,
+    cog_name: str | None = None,
+) -> Decision:
+    """Resolve the guild's command rules for ``member`` running ``qualified_name`` in ``channel``.
+
+    Usable without a :class:`commands.Command` (custom commands pass their own name and ``cog_name=None``).
+    ``allowed`` is ``None`` when no rule applies. Owner bypass is the caller's job.
+    """
+    if cog_name in RULE_EXEMPT_COGS:
+        return Decision(None, reason="Commands in the Config cog are never restricted by rules.")
+    try:
+        rules = await db.get_command_rules(guild.id)
+    except Exception:
+        # A cache/DB hiccup must never harden into a lockout.
+        log.warning("Command rules of guild %s could not be loaded; failing open.", guild.id, exc_info=True)
+        return Decision(None, reason="Rules could not be loaded.")
+    if not rules:
+        return Decision(None)
+    parent = channel.parent if isinstance(channel, discord.Thread) else channel
+    roles = sorted((r for r in member.roles if r.id != guild.id), key=lambda r: r.position, reverse=True)
+    return resolve(
+        rules,
+        Invocation(
+            qualified_name=qualified_name,
+            user_id=member.id,
+            guild_id=guild.id,
+            cog_name=cog_name,
+            role_ids=[r.id for r in roles],
+            channel_id=parent.id if parent is not None else None,
+            category_id=getattr(parent, "category_id", None),
+        ),
+    )
+
+
+async def custom_command_name(db, guild: discord.Guild | None, name: str) -> str | None:
+    """The canonical name of ``guild``'s custom command called (or aliased) ``name``, if there is one.
+
+    Lets rules and ``config`` disables target custom commands, which have no :class:`commands.Command`.
+    """
+    if guild is None:
+        return None
+    cc = (await db.get_custom_command_index(guild.id)).lookup.get(name.lower())
+    return cc.name if cc else None
+
+
+def normalize_rule_subject(bot: Bot, subject: str) -> str | None:
+    """Canonical rule subject (``*``, ``cog:<Name>`` or a command's qualified name), or ``None`` if unknown."""
+    subject = " ".join(subject.split())
+    if subject == "*":
+        return subject
+    if subject.lower().startswith("cog:"):
+        wanted = subject[4:].strip().lower()
+        return next((f"cog:{name}" for name in bot.cogs if name.lower() == wanted and name not in RULE_EXEMPT_COGS), None)
+    command = bot.get_command(subject.lower())
+    if command is None or command.cog_name in RULE_EXEMPT_COGS:
+        return None
+    return command.qualified_name
+
+
 async def command_permission_check(ctx: Context) -> bool:
     """Command check enforcing the command's :class:`PermissionSpec`, honoring guild overrides.
 
@@ -351,6 +427,12 @@ async def command_permission_check(ctx: Context) -> bool:
     guild = ctx.guild
     if guild is not None:
         db = getattr(ctx.bot, "db", None)
+        if db is not None and isinstance(ctx.author, discord.Member):
+            decision = await check_rules(db, guild, ctx.author, ctx.channel, command.qualified_name, command.cog_name)
+            if decision.allowed:
+                # An explicit allow replaces the user gate (like an override's allowed role); the bot's own stays.
+                spec.check_bot(ctx)
+                return True
         if db is not None:
             try:
                 overrides = await db.get_command_overrides(guild.id)

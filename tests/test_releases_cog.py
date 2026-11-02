@@ -724,7 +724,7 @@ def gather_bot(titles: list[dict[str, Any]], credits: list[dict[str, Any]]) -> M
 
 
 async def test_a_season_carries_its_series_person_subjects() -> None:
-    """V45 made a multi-season show one row per season plus a container, and the container is
+    """V13 made a multi-season show one row per season plus a container, and the container is
     the only row that holds credits -- while the season is the only row that can dispatch. Look
     credits up by the season's own id and a subscriber following an actor is simply never told.
     """

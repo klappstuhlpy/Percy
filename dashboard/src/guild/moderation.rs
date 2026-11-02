@@ -474,6 +474,48 @@ pub async fn guild_warn_threshold_delete(
     }
 }
 
+#[derive(Deserialize)]
+pub struct WarnReasonBody {
+    points: u32,
+    description: String,
+}
+
+/// `PUT /dashboard/guild/:guild_id/warn-policy/reasons/:name`
+pub async fn guild_warn_reason_put(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, name)): Path<(u64, String)>,
+    Json(body): Json<WarnReasonBody>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy
+        .put_warn_reason(guild_id, &name, body.points, &body.description)
+        .await
+    {
+        Ok(p) => policy_json(&p),
+        Err(e) => err_json(&e),
+    }
+}
+
+/// `DELETE /dashboard/guild/:guild_id/warn-policy/reasons/:name`
+pub async fn guild_warn_reason_delete(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, name)): Path<(u64, String)>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy.delete_warn_reason(guild_id, &name).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => err_json(&e),
+    }
+}
+
 /// `POST /dashboard/guild/:guild_id/cases/:case_index/pardon` — the moderator is
 /// always the session user, never a value from the browser.
 pub async fn guild_case_pardon(

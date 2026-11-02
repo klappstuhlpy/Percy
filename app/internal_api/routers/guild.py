@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 import config
 from app.services import ModelTier, build_dashboard_assistant_system
 from app.services.guild_health import ChannelState, FeatureFacts, RoleState, summarize
+from app.services.moderation_settings import check_disabled_message
 from app.utils import truncate
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 from app.utils.webhooks import send_webhook
@@ -49,6 +50,11 @@ class PatchGuildConfigBody(BaseModel):
     mod_log_channel_id: int | None = None
     message_log_channel_id: int | None = None
     voice_log_channel_id: int | None = None
+    mod_dm_on_action: bool | None = None
+    mod_require_reason: bool | None = None
+    mod_reinvite_on_unban: bool | None = None
+    mod_default_ban_delete_days: int | None = None
+    disabled_command_message: str | None = None
     flags: dict[str, bool] | None = None
     prefixes: list[str] | None = None
 
@@ -124,6 +130,8 @@ _ALLOWED_CONFIG_FIELDS = {
     "alert_channel_id", "music_panel_channel_id", "use_music_panel",
     "mod_log_channel_id", "message_log_channel_id", "voice_log_channel_id",
 }
+
+_MOD_SWITCHES = frozenset({"mod_dm_on_action", "mod_require_reason", "mod_reinvite_on_unban"})
 
 _FLAG_MAP = {"audit_log": 1, "raid": 2, "alerts": 4, "sentinel": 8, "mentions": 16}
 
@@ -233,6 +241,21 @@ def _build_config_updates(data: dict, guild_config, guild: discord.Guild | None 
             if not isinstance(value, bool):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="use_music_panel must be a boolean")
             updates[key] = value
+        elif key in _MOD_SWITCHES:
+            if not isinstance(value, bool):
+                raise _bad_request(f"{key} must be a boolean")
+            updates[key] = value
+        elif key == "mod_default_ban_delete_days":
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 7:
+                raise _bad_request("mod_default_ban_delete_days must be between 0 and 7")
+            updates[key] = value
+        elif key == "disabled_command_message":
+            if value is not None and not isinstance(value, str):
+                raise _bad_request("disabled_command_message must be text")
+            try:
+                updates[key] = check_disabled_message(value)
+            except ValueError as e:
+                raise _bad_request(str(e)) from None
         elif key in _ALLOWED_CONFIG_FIELDS:
             # /batch hands over an untyped dict, so a string here would otherwise reach asyncpg as a 500.
             updates[key] = None if value is None else parse_id(value, key)
@@ -310,6 +333,11 @@ async def get_guild_config(guild: GuildDep, bot: BotDep) -> GuildInfo:
         "audit_log_flags": guild_config.audit_log_flags or {},
         "music_panel_channel": resolve_channel(guild, guild_config.music_panel_channel_id),
         "use_music_panel": guild_config.use_music_panel,
+        "mod_dm_on_action": guild_config.mod_dm_on_action,
+        "mod_require_reason": guild_config.mod_require_reason,
+        "mod_reinvite_on_unban": guild_config.mod_reinvite_on_unban,
+        "mod_default_ban_delete_days": guild_config.mod_default_ban_delete_days,
+        "disabled_command_message": guild_config.disabled_command_message,
         "prefixes": list(guild_config.prefixes),
         "is_new_config": guild_config.flags.value == 0 and guild_config.audit_log_channel_id is None,
     })

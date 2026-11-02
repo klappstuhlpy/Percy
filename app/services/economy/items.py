@@ -1,7 +1,7 @@
 """Pure item-catalogue rules: rarity, categories, listing metadata and purchase outcomes.
 
 The shop row carries an ``effect`` (what ``use`` does, see :mod:`.core`) plus the
-presentation/gating columns added in V51 (``emoji``, ``rarity``, ``stock``,
+presentation/gating columns added in V2 (``emoji``, ``rarity``, ``stock``,
 ``required_role_id``, ``max_per_user``). This module owns everything about those
 that does not need Discord: which category an effect belongs to, how rarities
 sort, what limits are valid, and the user-facing text for each purchase outcome.

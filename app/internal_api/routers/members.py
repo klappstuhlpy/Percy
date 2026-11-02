@@ -35,9 +35,13 @@ class MemberActionBody(BaseModel):
     #: duration becomes a ``tempmute`` and is lifted by a timer).
     duration: int | None = None
     #: Days of message history to wipe, for ``ban`` and ``softban`` (Discord allows 0-7).
-    delete_message_days: int = 0
+    delete_message_days: int | None = None
     #: How many of the member's recent messages ``purge`` should delete.
     limit: int = 100
+    #: The channel, for ``channelmute`` / ``channelunmute``.
+    channel_id: str | int | None = None
+    #: The new nickname, for ``nick`` (blank resets) and ``nickfreeze``.
+    nickname: str | None = None
 
 
 class MemberRolesBody(BaseModel):
@@ -236,6 +240,16 @@ class AvatarHistoryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _channel_id(value: str | int | None) -> int | None:
+    """The body's channel snowflake (JS sends ids as strings), 400 on anything else."""
+    if value is None or value == '':
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_id must be a snowflake') from None
 
 
 def _message_payload(message: discord.Message) -> MemberMessage:
@@ -540,6 +554,8 @@ async def member_action(
             duration=body.duration,
             delete_message_days=body.delete_message_days,
             limit=body.limit,
+            channel_id=_channel_id(body.channel_id),
+            nickname=body.nickname,
         ))
     except MemberActionError as e:
         raise HTTPException(status_code=e.status, detail=e.detail) from None

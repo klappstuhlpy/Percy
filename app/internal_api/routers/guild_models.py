@@ -87,6 +87,11 @@ class GuildInfo(BaseModel):
     audit_log_flags: dict[str, bool]
     music_panel_channel: ChannelRef | None
     use_music_panel: bool
+    mod_dm_on_action: bool
+    mod_require_reason: bool
+    mod_reinvite_on_unban: bool
+    mod_default_ban_delete_days: U32
+    disabled_command_message: str | None
     prefixes: list[str]
     is_new_config: bool
 

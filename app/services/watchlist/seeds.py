@@ -33,7 +33,7 @@ __all__ = (
 
 #: Default accent colour when a seed omits ``accent``. Not the same value as
 #: ``watch_universes.accent``'s SQL column default (15082537, i.e. ``#E62429`` -- see
-#: ``migrations/V38__watchlist_core.sql``); that default only applies to rows written outside
+#: ``migrations/V13__watchlist.sql``); that default only applies to rows written outside
 #: this seed pipeline, since :func:`accent_to_int` always resolves this value explicitly.
 _DEFAULT_ACCENT = '#D97757'
 

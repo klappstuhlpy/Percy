@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from app.cogs.music.cog import Music
 from app.cogs.music.player import Player
@@ -38,3 +42,34 @@ async def test_playlist_by_id_is_owner_only() -> None:
     assert await Music.get_playlist(cog, stranger, 7) is None  # type: ignore[arg-type]
     found = await Music.get_playlist(cog, owner, 7)  # type: ignore[arg-type]
     assert found is not None and found.name == "theirs"
+
+
+async def test_playlist_import_is_one_transaction() -> None:
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.database.repositories.users import PlaylistsRepository
+
+    events: list[str] = []
+    conn = MagicMock()
+    conn.fetchval = AsyncMock(return_value=9)
+    conn.executemany = AsyncMock()
+
+    @asynccontextmanager
+    async def txn() -> AsyncIterator[None]:
+        events.append('begin')
+        yield
+        events.append('commit')
+
+    conn.transaction = txn
+
+    @asynccontextmanager
+    async def acquire(**_: object) -> AsyncIterator[MagicMock]:
+        yield conn
+
+    repo = PlaylistsRepository(MagicMock(acquire=acquire))
+    import datetime
+
+    pid = await repo.create_playlist_with_tracks(1, 'n', datetime.datetime(2026, 1, 1), [('t', 'u', 'a')])
+    assert pid == 9 and events == ['begin', 'commit']
+    assert conn.executemany.await_args.args[1] == [(9, 't', 'u', 'a')]

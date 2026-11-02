@@ -27,7 +27,7 @@ Dedupe order is §5.1's: ``url`` first, then ``(source, external_id)``. A syndic
 republished under two guids is one story; a feed that rewrites its links while keeping its guid
 is the case the second axis catches. Within one document there is only one source, so the
 second axis is just ``external_id`` here -- the cross-source half is the unique constraint in
-``migrations/V43__news.sql``.
+``migrations/V14__comics_releases_news.sql``.
 
 Malformed input never raises into the caller. A document that will not parse comes back as an
 empty :class:`ParsedFeed` carrying a ``error`` string, which the caller writes to

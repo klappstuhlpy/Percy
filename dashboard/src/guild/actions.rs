@@ -67,7 +67,7 @@ pub async fn guild_members_json(
 /// softban, warn, mute/unmute, timeout/untimeout, purge.
 ///
 /// The body is forwarded to Percy as-is (minus the moderator id, which is overwritten):
-/// each action carries its own parameters (`duration`, `delete_message_days`, `limit`) and
+/// each action carries its own parameters (`duration`, `delete_message_days`, `limit`, `channel_id`, `nickname`) and
 /// Percy owns the whitelist, so the dashboard does not re-validate them.
 pub async fn guild_member_action(
     State(app): State<AppState>,

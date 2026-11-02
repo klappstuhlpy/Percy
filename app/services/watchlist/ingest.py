@@ -15,7 +15,7 @@ columns (``title``, ``runtime``, ``episodes``, ``release_date``, ``poster_path``
 ``season_name``) come only from TMDB. No column is ever written from both sources -- keeps a
 re-sync from letting a curated field drift back to whatever TMDB happens to say, and vice versa.
 
-``V45`` added the per-season entries: a TV show with :data:`SEASON_SPLIT_MIN` or more countable
+``V13`` added the per-season entries: a TV show with :data:`SEASON_SPLIT_MIN` or more countable
 seasons becomes a container row plus one row per season, built by the (also pure)
 :func:`_season_rows` and attached to the series row under the ``'_seasons'`` key for the
 orchestrator to write once it knows the series' id.
@@ -80,7 +80,7 @@ DISCOVER_PAGE_CAP = 10
 DISCOVER_ORDER_BASE = 10000
 DISCOVER_ORDER_STEP = 10
 
-#: How many countable seasons a show needs before it is split into one entry per season (``V45``).
+#: How many countable seasons a show needs before it is split into one entry per season (``V13``).
 #:
 #: Two, so a limited series stays a single row reading "WandaVision" rather than the sillier
 #: "WandaVision: Season 1", and so a show that has only ever had one season is *byte-identically*
@@ -143,7 +143,7 @@ def movie_row(seed_title: TitleSeed, payload: Mapping[str, Any], *, universe: st
 def _wanted_seasons(seed_title: TitleSeed, available: Iterable[int]) -> set[int]:
     """Season numbers that count toward runtime/episodes: pinned seasons, else all but 0.
 
-    **The season-0 rule, in one place for both counting and per-season entries (``V45``):**
+    **The season-0 rule, in one place for both counting and per-season entries (``V13``):**
     TMDB's season 0 is the "Specials" bucket, and it is a grab-bag -- recaps, webisodes,
     convention panels, behind-the-scenes shorts. The plan excludes behind-the-scenes material
     from the catalogue outright, and a watch order that opens with a specials entry nobody can
@@ -301,13 +301,13 @@ def tv_row(
     them to :func:`~app.services.watchlist.people.credit_rows` rather than re-fetching the
     show. Movies have no equivalent and :func:`movie_row` emits no such key.
 
-    ``'_seasons'`` is the third such key (``V45``): the per-season rows from
+    ``'_seasons'`` is the third such key (``V13``): the per-season rows from
     :func:`_season_rows`, present only when the show has :data:`SEASON_SPLIT_MIN` or more
     countable seasons. The orchestrator pops them off, upserts this row first to learn its id,
     and writes each season with that id as its ``parent_id`` -- which this function cannot do,
     since it has never seen the database. This row keeps its aggregate ``runtime``/``episodes``
     either way; when it has seasons it becomes a *container* the read side excludes from counts
-    (see ``V45``), so the aggregate is the series' own figure rather than a double count.
+    (see ``V13``), so the aggregate is the series' own figure rather than a double count.
     """
     wanted = _wanted_seasons(seed_title, season_payloads.keys())
     fallback_runtime = next(iter(payload.get('episode_run_time') or []), None)
@@ -356,7 +356,7 @@ def provider_rows(payload: Mapping[str, Any], region: str) -> list[dict[str, Any
 
     ``link`` is TMDB's own per-*region* watch link, copied onto every row of that region: TMDB's
     terms ask for it wherever the provider logos appear, so it travels with the logos rather than
-    in a table of its own (see ``V46``). A region that carries a link but no offers yields no rows
+    in a table of its own (see ``V13``). A region that carries a link but no offers yields no rows
     and so keeps no link -- which is the right answer, since there is no logo to attribute.
     """
     region_data = (payload.get('results') or {}).get(region)
@@ -534,13 +534,13 @@ class WatchlistIngest:
         forever. See :meth:`~app.database.repositories.watchlist.WatchlistRepository
         .prune_importance` and the ``credits_of`` clearing pass below.
 
-        Credits (cast/crew, ``V41``) and the trailer (``V44``) are both fetched for every seeded
+        Credits (cast/crew, ``V13``) and the trailer (``V13``) are both fetched for every seeded
         title *including unreleased ones* -- a person subscription that only knew about released
         films would be useless, and an unreleased title is precisely the one whose trailer people
         come looking for. People left with no credit at all are swept once at the end.
 
         A TV show with :data:`SEASON_SPLIT_MIN` or more countable seasons additionally writes
-        one row per season (``V45``), each carrying the series' id as its ``parent_id``, the
+        one row per season (``V13``), each carrying the series' id as its ``parent_id``, the
         series' order value, and its own importance and provider rows. The series row stays as
         the container the seasons hang off; it is the read side, not the ingest, that stops
         counting it as an entry. See :func:`_season_rows`.
@@ -568,7 +568,7 @@ class WatchlistIngest:
         report = IngestReport(universe=seed.slug, dry_run=dry_run)
 
         existing_rows = await self._repo.list_titles(seed.slug)
-        # Keyed by full row identity (``V45`` put every season of a show on the show's tmdb_id,
+        # Keyed by full row identity (``V13`` put every season of a show on the show's tmdb_id,
         # so a two-part key would collapse them and mis-report the dry-run prune).
         existing_ids = {
             (row['tmdb_type'], row['tmdb_id'], row.get('season_number')): row['id']
@@ -726,7 +726,7 @@ class WatchlistIngest:
         """Upserts one title row, disambiguating its slug rather than dropping it on a collision.
 
         ``watch_titles`` carries ``UNIQUE (universe, slug)`` beside its identity index, and two
-        distinct titles do slugify identically. Until ``V45`` this raised straight out of
+        distinct titles do slugify identically. Until ``V13`` this raised straight out of
         :meth:`sync`, which warned and skipped -- and that is how ``star-wars`` lost tv ``4194``
         and ``x-men`` lost movie ``166424``, entire catalogue entries gone behind one log line.
         Now each of :func:`slug_candidates`' forms is tried in turn and what it settled on is
@@ -776,7 +776,7 @@ class WatchlistIngest:
     ) -> None:
         """Writes one row's per-path importance and per-region providers, pruning stale importance.
 
-        Shared by a title and by each of its season entries (``V45``): a season inherits its
+        Shared by a title and by each of its season entries (``V13``): a season inherits its
         series' importance, or a path-filtered watch order would drop every season it has, and
         it inherits the series' providers because TMDB's availability *is* series-level -- an
         entry that renders no "where to watch" chip is a visible regression against the row it

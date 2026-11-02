@@ -52,8 +52,9 @@ from app.cogs.games.engine.wordle import WORD_LENGTH, daily_index
 from app.cogs.games.models import Game, GameResult
 from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
-from app.core.models import Context, command, cooldown, describe
+from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.services.economy import GuildEconomySettings, roll_death
+from app.services.trivia.lists import MAX_FILE_BYTES, NAME_RE, TriviaListError, answer_matches, parse_list
 from app.utils import (
     FAILED_CRIME_RESPONSES,
     FAILED_SLUT_RESPONSES,
@@ -110,6 +111,7 @@ class Games(Cog):
         # (guild_id, user_id, date.toordinal()) of members who already played today's Wordle.
         self.wordle_played: set[tuple[int, int, int]] = set()
         self._trivia_questions: list[RawQuestion] | None = None
+        self._trivia_channels: set[int] = set()  # channels with an open custom round
         self._wordle_words: list[str] | None = None
 
     async def cog_load(self) -> None:
@@ -769,13 +771,124 @@ class Games(Cog):
         game.message = await self._send_staked(ctx, bet, view=game)
 
     @command("trivia", description="Answer a trivia question — first correct answer wins.", guild_only=True, hybrid=True)
+    @describe(list_name="A custom trivia list to play from (default: the built-in questions).")
     @cooldown(1, 8.0, commands.BucketType.channel)
-    async def trivia(self, ctx: Context) -> None:
-        """Post a multiple-choice trivia question; the first member to answer correctly wins coins."""
+    async def trivia(self, ctx: Context, list_name: str | None = None) -> None:
+        """Post a trivia question; built-in ones are multiple choice, custom lists are answered by typing."""
+        if list_name is not None:
+            if ctx.channel.id in self._trivia_channels:
+                await ctx.send_warning("A custom trivia round is already running in this channel.")
+                return
+            self._trivia_channels.add(ctx.channel.id)
+            try:
+                await self._play_custom_trivia(ctx, list_name.lower())
+            finally:
+                self._trivia_channels.discard(ctx.channel.id)
+            return
         raw = random.choice(self._load_trivia())
         view = trivia_ui.TriviaView(build_round(raw))
         message = await ctx.send(view=view)
         view.message = message
+
+    async def _play_custom_trivia(self, ctx: Context, name: str) -> None:
+        assert ctx.guild is not None
+        rows = await self.bot.db.trivia.get_questions(ctx.guild.id, name)
+        if rows is None:
+            await ctx.send_error(f"No trivia list named `{name}`. See `{ctx.clean_prefix}trivialist all`.")
+            return
+        row = random.choice(rows)
+        answers: list[str] = row["answers"]
+        await ctx.send_info(f"**{row['question']}**\n-# Type your answer in chat — you have 25 seconds.")
+
+        def check(msg: discord.Message) -> bool:
+            return (
+                msg.channel == ctx.channel and not msg.author.bot and bool(msg.content)
+                and answer_matches(msg.content, answers)
+            )
+
+        try:
+            msg = await self.bot.wait_for("message", check=check, timeout=25.0)
+        except TimeoutError:
+            await ctx.send_warning(f"Time's up! The answer was **{answers[0]}**.")
+            return
+        await self.bot.db.trivia.record_correct(ctx.guild.id, msg.author.id)
+        await msg.reply(f"\N{WHITE HEAVY CHECK MARK} Correct, {msg.author.mention}! The answer was **{answers[0]}**.")
+
+    # Prefix-only on purpose: the bot sits at 99/100 global slash commands, so the list tooling adds no slot.
+    @group("trivialist", description="Manage custom trivia lists.", guild_only=True)
+    async def trivialist(self, ctx: Context) -> None:
+        """Custom trivia lists. Play one with `trivia <name>`."""
+        await ctx.send_help("trivialist")
+
+    @trivialist.command("upload", description="Upload a JSON trivia list.", guild_only=True,
+                        user_permissions=PermissionTemplate.manager)
+    async def trivialist_upload(self, ctx: Context, name: str) -> None:
+        """Attach a JSON file: `{"question": ["answer", ...]}` (Red's format) or the built-in shape."""
+        assert ctx.guild is not None
+        name = name.lower()
+        if not NAME_RE.fullmatch(name):
+            await ctx.send_error("List names use only `a-z`, `0-9`, `_` and `-`, up to 32 characters.")
+            return
+        if not ctx.message.attachments:
+            await ctx.send_error("Attach a `.json` file to this message.")
+            return
+        attachment = ctx.message.attachments[0]
+        if attachment.size > MAX_FILE_BYTES:
+            await ctx.send_error(f"The file is {attachment.size // 1024} KB (max {MAX_FILE_BYTES // 1024} KB).")
+            return
+        try:
+            questions = parse_list(await attachment.read())
+        except TriviaListError as exc:
+            await ctx.send_error(str(exc))
+            return
+        if not await self.bot.db.trivia.create_list(ctx.guild.id, name, ctx.author.id, questions):
+            await ctx.send_error(f"A list named `{name}` already exists. Delete it first.")
+            return
+        await ctx.send_success(f"Saved `{name}` with {len(questions)} questions. Play it with `trivia {name}`.")
+
+    @trivialist.command("delete", description="Delete a trivia list.", guild_only=True,
+                        user_permissions=PermissionTemplate.manager)
+    async def trivialist_delete(self, ctx: Context, name: str) -> None:
+        """Delete a custom trivia list."""
+        assert ctx.guild is not None
+        if await self.bot.db.trivia.delete_list(ctx.guild.id, name.lower()):
+            await ctx.send_success(f"Deleted `{name.lower()}`.")
+        else:
+            await ctx.send_error(f"No trivia list named `{name.lower()}`.")
+
+    @trivialist.command("show", description="Show a trivia list's questions.", guild_only=True)
+    async def trivialist_show(self, ctx: Context, name: str) -> None:
+        """Show the first questions of a list."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.trivia.get_questions(ctx.guild.id, name.lower())
+        if rows is None:
+            await ctx.send_error(f"No trivia list named `{name.lower()}`.")
+            return
+        lines = [f"{i}. {r['question']}" for i, r in enumerate(rows[:15], 1)]
+        more = f"\n-# …and {len(rows) - 15} more." if len(rows) > 15 else ""
+        await ctx.send_info(f"**{name.lower()}** — {len(rows)} questions\n" + "\n".join(lines) + more)
+
+    @trivialist.command("all", aliases=["lists"], description="List this server's trivia lists.", guild_only=True)
+    async def trivialist_all(self, ctx: Context) -> None:
+        """List this server's custom trivia lists."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.trivia.get_lists(ctx.guild.id)
+        if not rows:
+            await ctx.send_info("No custom trivia lists yet. Upload one with `trivialist upload <name>`.")
+            return
+        await ctx.send_info("\n".join(f"`{r['name']}` — {r['questions']} questions" for r in rows))
+
+    @trivialist.command("leaderboard", description="Top 10 custom-list trivia players.", guild_only=True)
+    async def trivialist_leaderboard(self, ctx: Context) -> None:
+        """The server's top 10 for custom trivia lists."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.trivia.top_scores(ctx.guild.id)
+        if not rows:
+            await ctx.send_info("Nobody has scored yet.")
+            return
+        await ctx.send_info("\n".join(
+            f"{i}. <@{r['user_id']}> — {r['correct']} correct" for i, r in enumerate(rows, 1)
+        ))
 
     @command("wordle", description="Guess the guild's daily 5-letter word.", guild_only=True, hybrid=True)
     async def wordle(self, ctx: Context) -> None:

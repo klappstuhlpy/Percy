@@ -9,6 +9,8 @@ import datetime
 import json
 from typing import TYPE_CHECKING, Any
 
+from app.services.restrictions import RESTRICTION_ACTIONS
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -26,7 +28,7 @@ __all__ = (
     'request_payload',
 )
 
-KINDS = ('missing_permission', 'action_request', 'request_decided', 'webhook_disabled', 'notice')
+KINDS = ('missing_permission', 'action_request', 'request_decided', 'webhook_disabled', 'notice', 'report')
 SEVERITIES = ('info', 'warning', 'critical')
 REQUEST_STATUSES = ('pending', 'approved', 'denied', 'cancelled', 'failed', 'expired')
 REQUEST_TTL = datetime.timedelta(hours=24)
@@ -46,9 +48,20 @@ ACTION_PERMISSIONS: dict[str, str] = {
     'timeout': 'moderate_members',
     'untimeout': 'moderate_members',
     'purge': 'manage_messages',
+    # Member restrictions (app/services/restrictions.py). Channel mutes additionally need Manage Channels,
+    # checked against the channel by the executor.
+    'voicekick': 'move_members',
+    'voiceban': 'manage_roles',
+    'voiceunban': 'manage_roles',
+    'nick': 'manage_nicknames',
+    'nickfreeze': 'manage_nicknames',
+    'nickunfreeze': 'manage_nicknames',
+    'channelmute': 'manage_roles',
+    'channelunmute': 'manage_roles',
 }
 # Purge reads live channel history and has no single target; unban's target is no longer a member.
-REQUESTABLE_ACTIONS = frozenset(ACTION_PERMISSIONS) - {'purge', 'unban'}
+# The restriction actions need a channel or a nickname, which a request row has no column for.
+REQUESTABLE_ACTIONS = frozenset(ACTION_PERMISSIONS) - {'purge', 'unban'} - RESTRICTION_ACTIONS
 
 _TIMEOUT_MIN, _TIMEOUT_MAX = 60, 2_419_200  # Discord caps a timeout at 28 days
 

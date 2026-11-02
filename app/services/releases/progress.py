@@ -8,7 +8,7 @@ overview cards use -- ``{brand}/{slug}`` for comics, ``{universe}/{slug}`` for t
 :mod:`app.services.releases.subjects`). One string names an item on the page, in the DM and in
 the tracker, so a card can be joined against progress without a lookup table.
 
-``release_progress`` covers both media; V39's ``watch_progress`` is deliberately *not* dropped
+``release_progress`` covers both media; V13's ``watch_progress`` is deliberately *not* dropped
 and keeps serving the universe order pages (the plan's §4.4). Nothing here reads or writes it.
 
 The status sets are per medium and only overlap on ``skipped``: a comic is ``read``, a film is

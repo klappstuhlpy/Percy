@@ -482,6 +482,33 @@ pub struct ComicSeriesSummary {
 pub struct ComicsResponse {
     pub feeds: ::std::vec::Vec<ComicFeedEntry>,
 }
+///`CommandAliasEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandAliasEntry {
+    pub alias: ::std::string::String,
+    pub expansion: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_id: ::std::option::Option<::std::string::String>,
+}
+///`CommandAliasesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandAliasesResponse {
+    pub aliases: ::std::vec::Vec<CommandAliasEntry>,
+    pub max_aliases: i64,
+}
+///`CommandRule`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandRule {
+    pub allow: bool,
+    pub subject: ::std::string::String,
+    pub target_id: ::std::string::String,
+    pub target_type: ::std::string::String,
+}
+///`CommandRulesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandRulesResponse {
+    pub rules: ::std::vec::Vec<CommandRule>,
+}
 ///`CommandUsage`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct CommandUsage {
@@ -506,6 +533,39 @@ pub struct CustomBotProfile {
     pub banner_url: ::std::option::Option<::std::string::String>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub name: ::std::option::Option<::std::string::String>,
+}
+///`CustomCommandEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CustomCommandEntry {
+    pub aliases: ::std::vec::Vec<::std::string::String>,
+    pub allowed_role_ids: ::std::vec::Vec<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub cooldown_per: ::std::option::Option<f64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub cooldown_rate: ::std::option::Option<i64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub created_at: ::std::option::Option<::std::string::String>,
+    pub delete_invocation: bool,
+    pub id: i64,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub required_permissions: ::std::option::Option<::std::string::String>,
+    pub responses: ::std::vec::Vec<::std::string::String>,
+    pub signature: ::std::string::String,
+    pub uses: i64,
+}
+///`CustomCommandsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CustomCommandsResponse {
+    pub commands: ::std::vec::Vec<CustomCommandEntry>,
+    pub max_commands: i64,
+    pub placeholders: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::string::String,
+    >,
+    pub types: ::std::vec::Vec<::std::string::String>,
 }
 ///`EconomyInfo`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
@@ -658,6 +718,8 @@ pub struct GuildInfo {
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub audit_log_channel: ::std::option::Option<ChannelRef>,
     pub audit_log_flags: ::std::collections::HashMap<::std::string::String, bool>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub disabled_command_message: ::std::option::Option<::std::string::String>,
     pub flags: GuildFlags,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub icon_url: ::std::option::Option<::std::string::String>,
@@ -670,8 +732,12 @@ pub struct GuildInfo {
     pub mention_count: ::std::option::Option<u32>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub message_log_channel: ::std::option::Option<ChannelRef>,
+    pub mod_default_ban_delete_days: u32,
+    pub mod_dm_on_action: bool,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub mod_log_channel: ::std::option::Option<ChannelRef>,
+    pub mod_reinvite_on_unban: bool,
+    pub mod_require_reason: bool,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub music_panel_channel: ::std::option::Option<ChannelRef>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
@@ -2102,13 +2168,22 @@ pub struct UserSettings {
     pub track_history: bool,
     pub track_presence: bool,
 }
-///`WarnPolicy`
+///``WarnThreshold.warn_count`` is a threshold in active warn *points* (kept for compatibility).
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct WarnPolicy {
     pub actions: ::std::vec::Vec<::std::string::String>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub expiry_days: ::std::option::Option<i64>,
+    pub reasons: ::std::vec::Vec<WarnReason>,
     pub thresholds: ::std::vec::Vec<WarnThreshold>,
+}
+///`WarnReason`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct WarnReason {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub description: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+    pub points: i64,
 }
 ///`WarnThreshold`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
@@ -2215,7 +2290,7 @@ pub struct WatchPrefs {
 pub struct WatchProgressDeleted {
     pub deleted: i64,
 }
-///One title's V39 watch state.
+///One title's V13 watch state.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct WatchProgressEntry {
     pub status: ::std::string::String,

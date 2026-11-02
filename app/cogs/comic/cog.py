@@ -139,7 +139,7 @@ class Comics(Cog):
             else:
                 log.debug('Fetched %s inventory.', brand.name)
                 if data:
-                    # Write-through to the archive (V40). Best-effort by design: the cache the
+                    # Write-through to the archive (V14). Best-effort by design: the cache the
                     # Discord feed renders from is already set above, so a database problem
                     # costs us the persisted copy, never the feed. ComicIngest never raises.
                     report = await self.ingest.ingest(brand.name, data)

@@ -216,10 +216,11 @@ class CaseHistoryView(BasePaginatorV2[ModerationCase]):
             emoji, label = _labels(case)
             by = f' · by <@{case.moderator_id}>' if case.moderator_id else ''
             pardoned = ' · `Pardoned`' if case.pardoned_at is not None else ''
+            pts = f' · {case.points} pt{"s" if case.points != 1 else ""}' if case.action == 'warn' else ''
             items.append(discord.ui.Separator())
             items.append(
                 discord.ui.TextDisplay(
-                    f'{emoji} **Case #{case.index} · {label}**{pardoned} · {_ts(case.created_at, "R")}{by}\n'
+                    f'{emoji} **Case #{case.index} · {label}**{pts}{pardoned} · {_ts(case.created_at, "R")}{by}\n'
                     f'{_quote(case.reason, EXCERPT_LIMIT)}'
                 )
             )

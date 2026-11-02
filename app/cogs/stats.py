@@ -532,7 +532,7 @@ class Stats(Cog):
 
         try:
             sources = await self.bot.db.news.list_sources()
-        except asyncpg.UndefinedTableError:  # V43 not applied yet
+        except asyncpg.UndefinedTableError:  # V14 not applied yet
             sources = []
         for source in sources:
             status = source["last_status"]

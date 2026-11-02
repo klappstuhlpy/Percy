@@ -27,7 +27,8 @@ def test_check_request() -> None:
 def test_requestable_excludes_purge_and_unban() -> None:
     assert 'purge' not in REQUESTABLE_ACTIONS
     assert 'unban' not in REQUESTABLE_ACTIONS
-    assert len(ACTION_PERMISSIONS) == 10
+    assert len(ACTION_PERMISSIONS) == 18  # 10 member actions + 8 restrictions (never requestable)
+    assert len(REQUESTABLE_ACTIONS) == 8
 
 
 def _note(**kw: Any) -> dict[str, Any]:

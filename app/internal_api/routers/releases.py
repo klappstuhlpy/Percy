@@ -5,7 +5,7 @@ way watch progress is per user rather than per server. ``guild_id`` is recorded 
 place a subscription was created from, never as a scope.
 
 A subscription is the tuple ``(user_id, media, subject_type, subject_value)`` (see
-``migrations/V42__subscriptions.sql``). ``subject_value`` is a *string key*, not a foreign key,
+``migrations/V14__comics_releases_news.sql``). ``subject_value`` is a *string key*, not a foreign key,
 and it only works because both sides normalise it exactly once: the repository on every write
 and lookup, :func:`app.services.releases.match` on every comparison. So subject values travel
 through these handlers *raw* -- normalising here as well would only casefold the display label
@@ -34,8 +34,8 @@ catalogue halves are cached, its personalised halves are recomputed per request 
 is returned as a map beside the cards rather than as a field on them precisely so the cached
 half never has to hold a value that belongs to one reader.
 
-Progress uses ``release_progress`` (V42), keyed by the ``(media, release_key)`` identity the
-delivery claim already uses. V39's ``watch_progress`` is untouched and still backs the universe
+Progress uses ``release_progress`` (V14), keyed by the ``(media, release_key)`` identity the
+delivery claim already uses. V13's ``watch_progress`` is untouched and still backs the universe
 order pages via ``routers/watchlist.py`` -- one table replacing the other is a later migration,
 not a side effect of this one (the plan's §4.4).
 """
@@ -546,7 +546,7 @@ async def releases_overview(
     catalogues:
 
     * **Comics** are backward-only, ``first_seen >= today - days``. ``first_seen`` (not
-      ``release_date``) is the honest measure of new here -- it is why ``V40`` carries the
+      ``release_date``) is the honest measure of new here -- it is why ``V14`` carries the
       column -- because it survives a restart and because the ingest learns about a book when
       it is *solicited*, often months early. A forward window on comics would fill the page
       with books nobody can buy yet, and would show them again on the week they actually ship.

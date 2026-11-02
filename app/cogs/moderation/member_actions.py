@@ -12,6 +12,9 @@ from contextlib import suppress
 
 import discord
 
+from app.cogs.moderation.infractions import announce, reinvite_if_enabled, softban
+from app.services.moderation_settings import reason_missing
+from app.services.restrictions import RESTRICTION_ACTIONS
 from app.utils.checks import hierarchy_error
 
 # Percy keeps no message archive (the gateway cache holds 10 messages), so both the message
@@ -32,7 +35,8 @@ MAX_MUTE_SECONDS = 365 * 24 * 60 * 60
 
 # Actions Discord only lets Percy perform on a member it outranks. Every action also requires the
 # moderator to outrank the member; a mute only needs the mute role below Percy, not the member.
-HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout', 'untimeout'})
+# A nickname change needs Percy above the member; voice bans and channel mutes only touch a role/overwrite.
+HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout', 'untimeout', 'nick', 'nickfreeze'})
 
 
 class MemberActionError(Exception):
@@ -174,15 +178,20 @@ async def apply_member_action(
     action: str,
     reason: str | None = None,
     duration: int | None = None,
-    delete_message_days: int = 0,
+    delete_message_days: int | None = None,
     limit: int = 100,
+    channel_id: int | None = None,
+    nickname: str | None = None,
 ) -> dict:
     """Apply one moderation action to a member on behalf of an already-resolved ``moderator``.
 
     Every action that changes a member's standing is recorded as a modlog case through the
     same ``mod_action`` dispatch the in-Discord commands use. Raises :class:`MemberActionError`.
     """
-    if action == 'mute':
+    config = await bot.db.get_guild_config(guild.id)
+    if reason_missing(action, reason, config.mod_require_reason):
+        raise MemberActionError(400, f'this server requires a reason to {action}')
+    if action in ('mute', 'voiceban', 'channelmute'):
         # Before the role goes on, so a bad duration never leaves a permanent mute behind.
         validate_mute_duration(duration)
 
@@ -199,8 +208,11 @@ async def apply_member_action(
         raise MemberActionError(403, error)
     if action == 'timeout' and member is not None and member.guild_permissions.administrator:
         raise MemberActionError(400, 'Discord does not allow timing out administrators')
+    if action == 'channelmute' and member is not None and member.guild_permissions.administrator:
+        raise MemberActionError(400, 'administrators ignore channel overwrites, so a channel mute would do nothing')
 
-    delete_days = max(0, min(7, delete_message_days))
+    delete_days = config.mod_default_ban_delete_days if delete_message_days is None else delete_message_days
+    delete_days = max(0, min(7, delete_days))
     extra: dict = {}
     # The recorded case can differ from the requested action (a mute with a duration is a
     # tempmute), so actions set this rather than assuming action.
@@ -212,21 +224,24 @@ async def apply_member_action(
             await guild.unban(discord.Object(id=user_id), reason=reason)
             # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
             await bot.timers.delete_member_timer('tempban', guild.id, user_id)
+            await reinvite_if_enabled(bot, guild, user_id)
         elif action == 'purge':
             extra['deleted'] = await purge_member_messages(guild, user_id, max(1, min(500, limit)), reason)
         else:
             assert member is not None
             if action == 'kick':
-                await member.kick(reason=reason)
+                async with announce(bot, guild, member, action, reason, moderator):
+                    await member.kick(reason=reason)
             elif action == 'ban':
-                await member.ban(reason=reason, delete_message_seconds=delete_days * 86400)
+                async with announce(bot, guild, member, action, reason, moderator):
+                    await member.ban(reason=reason, delete_message_seconds=delete_days * 86400)
                 # A permanent ban replaces any tempban, so its expiry must not lift this one later.
                 await bot.timers.delete_member_timer('tempban', guild.id, user_id)
             elif action == 'softban':
-                from app.cogs.moderation.infractions import softban
-
                 wipe = (delete_days or 1) * 86400
-                if not await softban(bot, guild, member, reason=reason, delete_message_seconds=wipe):
+                async with announce(bot, guild, member, action, reason, moderator):
+                    lifted = await softban(bot, guild, member, reason=reason, delete_message_seconds=wipe)
+                if not lifted:
                     # The ban stands: record what happened, not a softban, and say so instead of failing.
                     case_action = 'ban'
                     extra['warning'] = 'banned, but lifting the ban again failed, so the member is still banned'
@@ -240,11 +255,35 @@ async def apply_member_action(
                     raise MemberActionError(400, 'member is not timed out')
                 await member.timeout(None, reason=reason)
             elif action == 'mute':
-                case_action = await apply_mute(bot, guild, member, moderator, reason, duration)
+                async with announce(bot, guild, member, action, reason, moderator):
+                    case_action = await apply_mute(bot, guild, member, moderator, reason, duration)
                 if duration is not None:
                     case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
             elif action == 'unmute':
                 await lift_mute(bot, guild, member, reason)
+            elif action in RESTRICTION_ACTIONS:
+                from app.cogs.restrictions import actions as restrict
+
+                if action == 'voicekick':
+                    await restrict.apply_voicekick(member, reason)
+                elif action == 'voiceban':
+                    await restrict.apply_voiceban(bot, guild, member, moderator, reason, duration)
+                    if duration is not None:
+                        case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
+                elif action == 'voiceunban':
+                    await restrict.lift_voiceban(bot, guild, member, reason)
+                elif action == 'nick':
+                    await restrict.apply_nick(bot, member, nickname, reason)
+                elif action == 'nickfreeze':
+                    await restrict.apply_nickfreeze(bot, member, nickname, reason)
+                elif action == 'nickunfreeze':
+                    await restrict.lift_nickfreeze(bot, member)
+                elif action == 'channelmute':
+                    await restrict.apply_channelmute(bot, guild, member, moderator, channel_id, reason, duration)
+                    if duration is not None:
+                        case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
+                elif action == 'channelunmute':
+                    await restrict.lift_channelmute(bot, guild, member, moderator, channel_id, reason)
             elif action == 'warn':
                 if member.bot:
                     raise MemberActionError(400, 'cannot warn a bot')

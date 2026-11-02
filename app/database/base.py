@@ -20,6 +20,8 @@ from app.database.repositories import (
     AdminRepository,
     CasesRepository,
     ComicsRepository,
+    CommandRulesRepository,
+    CustomCommandsRepository,
     EconomyRepository,
     EmojiStatsRepository,
     EventWebhooksRepository,
@@ -37,6 +39,7 @@ from app.database.repositories import (
     PlaylistsRepository,
     PollsRepository,
     ReleasesRepository,
+    RestrictionsRepository,
     RoleMenusRepository,
     StarboardRepository,
     StatCountersRepository,
@@ -44,11 +47,13 @@ from app.database.repositories import (
     TagsRepository,
     TempChannelsRepository,
     TimersRepository,
+    TriviaRepository,
     UsersRepository,
     VotesRepository,
     WatchlistRepository,
 )
 from app.database.sentinel_roles import SentinelRoleQueue
+from app.services.custom_commands.models import CustomCommandIndex
 from app.utils import BaseFlags, cache, flag_value
 from app.utils.query_tracker import QueryTracker
 from app.utils.signals import CacheSignalHub
@@ -63,6 +68,7 @@ if TYPE_CHECKING:
 
     from app.core import Bot
     from app.core.permissions import CommandOverride
+    from app.services.command_rules import Rule
 
     DatabaseT = TypeVar("DatabaseT", bound="_Database")
 
@@ -298,6 +304,7 @@ class Database(_Database):
     music_plays: MusicPlaysRepository
     admin: AdminRepository
     timers: TimersRepository
+    trivia: TriviaRepository
     comics: ComicsRepository
     starboard: StarboardRepository
     cases: CasesRepository
@@ -343,6 +350,10 @@ class Database(_Database):
         self.releases = ReleasesRepository(self)
         self.news = NewsRepository(self)
         self.notifications = NotificationsRepository(self)
+        self.restrictions = RestrictionsRepository(self)
+        self.command_rules = CommandRulesRepository(self)
+        self.custom_commands = CustomCommandsRepository(self)
+        self.trivia = TriviaRepository(self)
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
@@ -357,6 +368,8 @@ class Database(_Database):
         s.register("sentinel_changed").connect(self.get_guild_sentinel, None)
         s.register("ai_config_changed").connect(self.get_guild_ai_config, None)
         s.register("command_overrides_changed").connect(self.get_command_overrides, None)
+        s.register("command_rules_changed").connect(self.get_command_rules, None)
+        s.register("custom_commands_changed").connect(self.get_custom_command_index, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -410,6 +423,26 @@ class Database(_Database):
             )
             for record in records
         }
+
+    @cache.cache()
+    async def get_command_rules(self, guild_id: int) -> tuple[Rule, ...]:
+        """|coro| @cached
+
+        A guild's command allow/deny rules; consulted on every command invocation, busted via
+        the ``command_rules_changed`` signal.
+        """
+        return await self.command_rules.list_rules(guild_id)
+
+    @cache.cache()
+    async def get_custom_command_index(self, guild_id: int) -> CustomCommandIndex:
+        """|coro| @cached
+
+        A guild's custom commands and aliases, keyed for dispatch; read on every prefix miss and
+        busted via the ``custom_commands_changed`` signal.
+        """
+        return CustomCommandIndex.build(
+            await self.custom_commands.list_commands(guild_id), await self.custom_commands.list_aliases(guild_id)
+        )
 
     @cache.cache()
     async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:
@@ -1020,6 +1053,12 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     safe_automod_entity_ids: set[int]
     muted_members: set[int]
     mute_role_id: int | None
+    voiceban_role_id: int | None
+    mod_dm_on_action: bool
+    mod_require_reason: bool
+    mod_reinvite_on_unban: bool
+    mod_default_ban_delete_days: int
+    disabled_command_message: str | None
 
     request_channel_id: int | None
     request_role_ids: list[int]
@@ -1027,7 +1066,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     alert_webhook_url: str | None
     alert_channel_id: int | None
 
-    # Added by V21 migration — accessed via getattr() until migration is applied.
+    # Added by V11 migration — accessed via getattr() until migration is applied.
     mod_log_channel_id: int | None
     message_log_channel_id: int | None
     voice_log_channel_id: int | None
@@ -1051,12 +1090,17 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         "audit_log_flags",
         "audit_log_webhook_url",
         "bot",
+        "disabled_command_message",
         "flags",
         "id",
         "linked_automod_rules",
         "mention_count",
         "message_log_channel_id",
+        "mod_default_ban_delete_days",
+        "mod_dm_on_action",
         "mod_log_channel_id",
+        "mod_reinvite_on_unban",
+        "mod_require_reason",
         "music_dj_mode",
         "music_panel_channel_id",
         "music_panel_message_id",
@@ -1071,11 +1115,12 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         "safe_automod_entity_ids",
         "use_music_panel",
         "voice_log_channel_id",
+        "voiceban_role_id",
     )
 
     def _coerce(self) -> None:
         self.flags = self.AutoModFlags(self.flags or 0)  # type: ignore
-        # ``ai_flags`` is added by the V32 migration; tolerate its absence (getattr) so a
+        # ``ai_flags`` is added by the V8 migration; tolerate its absence (getattr) so a
         # record loaded before the migration applies still coerces cleanly to 0.
         self.ai_flags = self.AIFlags(getattr(self, "ai_flags", 0) or 0)  # type: ignore
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])

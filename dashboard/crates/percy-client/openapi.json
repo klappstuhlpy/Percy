@@ -2495,6 +2495,101 @@
         "title": "ComicsResponse",
         "type": "object"
       },
+      "CommandAliasEntry": {
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "expansion": {
+            "title": "Expansion",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          }
+        },
+        "required": [
+          "alias",
+          "expansion",
+          "owner_id"
+        ],
+        "title": "CommandAliasEntry",
+        "type": "object"
+      },
+      "CommandAliasesResponse": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/CommandAliasEntry"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "max_aliases": {
+            "title": "Max Aliases",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "aliases",
+          "max_aliases"
+        ],
+        "title": "CommandAliasesResponse",
+        "type": "object"
+      },
+      "CommandRule": {
+        "properties": {
+          "allow": {
+            "title": "Allow",
+            "type": "boolean"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "target_type",
+          "target_id",
+          "allow"
+        ],
+        "title": "CommandRule",
+        "type": "object"
+      },
+      "CommandRulesResponse": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/CommandRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "title": "CommandRulesResponse",
+        "type": "object"
+      },
       "CommandUsage": {
         "properties": {
           "command": {
@@ -3173,6 +3268,251 @@
           "about_me"
         ],
         "title": "CustomBotProfile",
+        "type": "object"
+      },
+      "CustomCommandBody": {
+        "properties": {
+          "aliases": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "allowed_role_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Role Ids",
+            "type": "array"
+          },
+          "cooldown_per": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Per"
+          },
+          "cooldown_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Rate"
+          },
+          "delete_invocation": {
+            "default": false,
+            "title": "Delete Invocation",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "required_permissions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Permissions"
+          },
+          "responses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Responses",
+            "type": "array"
+          },
+          "signature": {
+            "default": "",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "responses"
+        ],
+        "title": "CustomCommandBody",
+        "type": "object"
+      },
+      "CustomCommandEntry": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "allowed_role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Role Ids",
+            "type": "array"
+          },
+          "cooldown_per": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Per"
+          },
+          "cooldown_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Rate"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "delete_invocation": {
+            "title": "Delete Invocation",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "required_permissions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Permissions"
+          },
+          "responses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Responses",
+            "type": "array"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "aliases",
+          "signature",
+          "responses",
+          "required_permissions",
+          "allowed_role_ids",
+          "cooldown_rate",
+          "cooldown_per",
+          "delete_invocation",
+          "owner_id",
+          "uses",
+          "created_at"
+        ],
+        "title": "CustomCommandEntry",
+        "type": "object"
+      },
+      "CustomCommandsResponse": {
+        "properties": {
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/CustomCommandEntry"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "max_commands": {
+            "title": "Max Commands",
+            "type": "integer"
+          },
+          "placeholders": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Placeholders",
+            "type": "object"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "commands",
+          "types",
+          "placeholders",
+          "max_commands"
+        ],
+        "title": "CustomCommandsResponse",
         "type": "object"
       },
       "DJModeBody": {
@@ -3954,6 +4294,17 @@
             "title": "Audit Log Flags",
             "type": "object"
           },
+          "disabled_command_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Command Message"
+          },
           "flags": {
             "$ref": "#/components/schemas/GuildFlags"
           },
@@ -4021,6 +4372,16 @@
               }
             ]
           },
+          "mod_default_ban_delete_days": {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Mod Default Ban Delete Days",
+            "type": "integer"
+          },
+          "mod_dm_on_action": {
+            "title": "Mod Dm On Action",
+            "type": "boolean"
+          },
           "mod_log_channel": {
             "anyOf": [
               {
@@ -4030,6 +4391,14 @@
                 "type": "null"
               }
             ]
+          },
+          "mod_reinvite_on_unban": {
+            "title": "Mod Reinvite On Unban",
+            "type": "boolean"
+          },
+          "mod_require_reason": {
+            "title": "Mod Require Reason",
+            "type": "boolean"
           },
           "music_panel_channel": {
             "anyOf": [
@@ -4128,6 +4497,11 @@
           "audit_log_flags",
           "music_panel_channel",
           "use_music_panel",
+          "mod_dm_on_action",
+          "mod_require_reason",
+          "mod_reinvite_on_unban",
+          "mod_default_ban_delete_days",
+          "disabled_command_message",
           "prefixes",
           "is_new_config"
         ],
@@ -5165,10 +5539,30 @@
             "title": "Action",
             "type": "string"
           },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
           "delete_message_days": {
-            "default": 0,
-            "title": "Delete Message Days",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delete Message Days"
           },
           "duration": {
             "anyOf": [
@@ -5199,6 +5593,17 @@
               }
             ],
             "title": "Moderator Id"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
           },
           "reason": {
             "anyOf": [
@@ -8155,6 +8560,120 @@
         "title": "PatchCustomBotBody",
         "type": "object"
       },
+      "PatchCustomCommandBody": {
+        "properties": {
+          "aliases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "allowed_role_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Role Ids"
+          },
+          "cooldown_per": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Per"
+          },
+          "cooldown_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Rate"
+          },
+          "delete_invocation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delete Invocation"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "required_permissions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Permissions"
+          },
+          "responses": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responses"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          }
+        },
+        "title": "PatchCustomCommandBody",
+        "type": "object"
+      },
       "PatchGuildConfigBody": {
         "properties": {
           "alert_channel_id": {
@@ -8178,6 +8697,17 @@
               }
             ],
             "title": "Audit Log Channel Id"
+          },
+          "disabled_command_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Command Message"
           },
           "flags": {
             "anyOf": [
@@ -8215,6 +8745,28 @@
             ],
             "title": "Message Log Channel Id"
           },
+          "mod_default_ban_delete_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Default Ban Delete Days"
+          },
+          "mod_dm_on_action": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Dm On Action"
+          },
           "mod_log_channel_id": {
             "anyOf": [
               {
@@ -8225,6 +8777,28 @@
               }
             ],
             "title": "Mod Log Channel Id"
+          },
+          "mod_reinvite_on_unban": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Reinvite On Unban"
+          },
+          "mod_require_reason": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Require Reason"
           },
           "music_panel_channel_id": {
             "anyOf": [
@@ -9837,6 +10411,58 @@
           }
         },
         "title": "PutAIOverrideBody",
+        "type": "object"
+      },
+      "PutAliasBody": {
+        "properties": {
+          "expansion": {
+            "title": "Expansion",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          }
+        },
+        "required": [
+          "expansion"
+        ],
+        "title": "PutAliasBody",
+        "type": "object"
+      },
+      "PutCommandRuleBody": {
+        "properties": {
+          "allow": {
+            "title": "Allow",
+            "type": "boolean"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "target_type",
+          "target_id",
+          "allow"
+        ],
+        "title": "PutCommandRuleBody",
         "type": "object"
       },
       "QueueTrack": {
@@ -12476,6 +13102,7 @@
         "type": "object"
       },
       "WarnPolicy": {
+        "description": "``WarnThreshold.warn_count`` is a threshold in active warn *points* (kept for compatibility).",
         "properties": {
           "actions": {
             "items": {
@@ -12495,6 +13122,13 @@
             ],
             "title": "Expiry Days"
           },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/WarnReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
           "thresholds": {
             "items": {
               "$ref": "#/components/schemas/WarnThreshold"
@@ -12506,9 +13140,58 @@
         "required": [
           "expiry_days",
           "thresholds",
+          "reasons",
           "actions"
         ],
         "title": "WarnPolicy",
+        "type": "object"
+      },
+      "WarnReason": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "points",
+          "description"
+        ],
+        "title": "WarnReason",
+        "type": "object"
+      },
+      "WarnReasonBody": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points",
+          "description"
+        ],
+        "title": "WarnReasonBody",
         "type": "object"
       },
       "WarnThreshold": {
@@ -12960,7 +13643,7 @@
         "type": "object"
       },
       "WatchProgressEntry": {
-        "description": "One title's V39 watch state.",
+        "description": "One title's V13 watch state.",
         "properties": {
           "status": {
             "title": "Status",
@@ -16007,6 +16690,289 @@
         ]
       }
     },
+    "/api/v1/guilds/{guild_id}/aliases": {
+      "get": {
+        "operationId": "list_aliases_api_v1_guilds__guild_id__aliases_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandAliasesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Aliases",
+        "tags": [
+          "Custom commands"
+        ]
+      }
+    },
+    "/api/v1/guilds/{guild_id}/aliases/{alias}": {
+      "delete": {
+        "operationId": "delete_alias_api_v1_guilds__guild_id__aliases__alias__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alias",
+            "required": true,
+            "schema": {
+              "title": "Alias",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Alias",
+        "tags": [
+          "Custom commands"
+        ]
+      },
+      "put": {
+        "operationId": "put_alias_api_v1_guilds__guild_id__aliases__alias__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alias",
+            "required": true,
+            "schema": {
+              "title": "Alias",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutAliasBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandAliasesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Alias",
+        "tags": [
+          "Custom commands"
+        ]
+      }
+    },
     "/api/v1/guilds/{guild_id}/analytics/series": {
       "get": {
         "description": "A zero-filled time-series for one metric over a range.\n\nReturns ``{metric, range, granularity, total, points: [{bucket, value}]}``. ``points`` is\ncontiguous — buckets with no activity report ``0`` — so a chart never shows a false gap.",
@@ -17940,6 +18906,296 @@
         ]
       }
     },
+    "/api/v1/guilds/{guild_id}/command-rules": {
+      "delete": {
+        "operationId": "delete_command_rule_api_v1_guilds__guild_id__command_rules_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_type",
+            "required": true,
+            "schema": {
+              "title": "Target Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Command Rule",
+        "tags": [
+          "Command rules"
+        ]
+      },
+      "get": {
+        "operationId": "list_command_rules_api_v1_guilds__guild_id__command_rules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandRulesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Command Rules",
+        "tags": [
+          "Command rules"
+        ]
+      },
+      "put": {
+        "operationId": "put_command_rule_api_v1_guilds__guild_id__command_rules_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutCommandRuleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandRulesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Command Rule",
+        "tags": [
+          "Command rules"
+        ]
+      }
+    },
     "/api/v1/guilds/{guild_id}/commands": {
       "get": {
         "operationId": "get_commands_api_v1_guilds__guild_id__commands_get",
@@ -18692,6 +19948,385 @@
         "summary": "Reset Custom Bot",
         "tags": [
           "Profile"
+        ]
+      }
+    },
+    "/api/v1/guilds/{guild_id}/custom-commands": {
+      "get": {
+        "operationId": "list_custom_commands_api_v1_guilds__guild_id__custom_commands_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomCommandsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Custom Commands",
+        "tags": [
+          "Custom commands"
+        ]
+      },
+      "post": {
+        "operationId": "create_custom_command_api_v1_guilds__guild_id__custom_commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomCommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomCommandEntry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Custom Command",
+        "tags": [
+          "Custom commands"
+        ]
+      }
+    },
+    "/api/v1/guilds/{guild_id}/custom-commands/{command_id}": {
+      "delete": {
+        "operationId": "delete_custom_command_api_v1_guilds__guild_id__custom_commands__command_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Custom Command",
+        "tags": [
+          "Custom commands"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_custom_command_api_v1_guilds__guild_id__custom_commands__command_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchCustomCommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomCommandEntry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Custom Command",
+        "tags": [
+          "Custom commands"
         ]
       }
     },
@@ -30594,6 +32229,202 @@
         ]
       }
     },
+    "/api/v1/guilds/{guild_id}/warn-policy/reasons/{name}": {
+      "delete": {
+        "operationId": "delete_warn_reason_api_v1_guilds__guild_id__warn_policy_reasons__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Warn Reason",
+        "tags": [
+          "Moderation"
+        ]
+      },
+      "put": {
+        "description": "Adds or replaces a reason preset (a name worth N points, with the text it records).",
+        "operationId": "put_warn_reason_api_v1_guilds__guild_id__warn_policy_reasons__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "title": "Guild Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarnReasonBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarnPolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "max_bet must be between 0 and 100000000"
+                }
+              }
+            },
+            "description": "Bad request — a field failed validation or no fields were supplied."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Not authenticated"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "item not found"
+                }
+              }
+            },
+            "description": "The guild or target resource does not exist."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Warn Reason",
+        "tags": [
+          "Moderation"
+        ]
+      }
+    },
     "/api/v1/guilds/{guild_id}/warn-policy/thresholds/{warn_count}": {
       "delete": {
         "operationId": "delete_warn_threshold_api_v1_guilds__guild_id__warn_policy_thresholds__warn_count__delete",
@@ -31951,7 +33782,7 @@
     },
     "/api/v1/releases/overview": {
       "get": {
-        "description": "The front door: what just landed and what is imminent, across both media.\n\n**The window is deliberately asymmetric**, because \"new\" means different things to the two\ncatalogues:\n\n* **Comics** are backward-only, ``first_seen >= today - days``. ``first_seen`` (not\n  ``release_date``) is the honest measure of new here -- it is why ``V40`` carries the\n  column -- because it survives a restart and because the ingest learns about a book when\n  it is *solicited*, often months early. A forward window on comics would fill the page\n  with books nobody can buy yet, and would show them again on the week they actually ship.\n* **Film/TV** is symmetric, ``release_date`` within ``[today - days, today + days]``.\n  ``watch_titles`` has no ``first_seen``, its dates are known long in advance, and half the\n  value of a film/TV overview is what is *about to* land. The forward half is only\n  trustworthy because the ``Releases`` cog re-checks the next 30 days against TMDB nightly.\n\nThe returned ``window`` reports the union, ``[today - days, today + days]``: it bounds every\ncard in the response, and comics simply never occupy its forward half.\n\n``discord_id`` is optional and additive, and adds two things. ``followed`` is the subset of\nthe cards already in ``comics``/``titles`` that this user's subscriptions match, computed\nwith the same :func:`~app.services.releases.match` the DM dispatch uses. ``progress`` is\nwhat that user has already read or watched, keyed by ``(media, release_key)`` -- the same\n``key`` every card carries. Without a ``discord_id`` the first is ``[]`` and the second is\ntwo empty maps: empty rather than null or a 401, so the signed-out page is the same page\nwith two sections quiet.\n\n``progress`` rides beside the cards rather than as a field on them, and that is a caching\nconstraint rather than a style choice: the cards themselves come out of a shared TTL cache,\nso writing one reader's status into a card would hand it to the next visitor who hits the\nsame entry. Two extra queries per personalised request, neither of them cached.\n\nCaching: the two catalogue halves come from a :data:`CATALOGUE_TTL`-second TTL cache keyed\non the window (see :func:`_overview_entries`); both personalised halves are **never**\ncached. Subscriptions and progress are per-user mutable state with no getter to invalidate,\nand a user who has just followed or marked something must see it on the very next load --\nthe same rule the handlers above follow.",
+        "description": "The front door: what just landed and what is imminent, across both media.\n\n**The window is deliberately asymmetric**, because \"new\" means different things to the two\ncatalogues:\n\n* **Comics** are backward-only, ``first_seen >= today - days``. ``first_seen`` (not\n  ``release_date``) is the honest measure of new here -- it is why ``V14`` carries the\n  column -- because it survives a restart and because the ingest learns about a book when\n  it is *solicited*, often months early. A forward window on comics would fill the page\n  with books nobody can buy yet, and would show them again on the week they actually ship.\n* **Film/TV** is symmetric, ``release_date`` within ``[today - days, today + days]``.\n  ``watch_titles`` has no ``first_seen``, its dates are known long in advance, and half the\n  value of a film/TV overview is what is *about to* land. The forward half is only\n  trustworthy because the ``Releases`` cog re-checks the next 30 days against TMDB nightly.\n\nThe returned ``window`` reports the union, ``[today - days, today + days]``: it bounds every\ncard in the response, and comics simply never occupy its forward half.\n\n``discord_id`` is optional and additive, and adds two things. ``followed`` is the subset of\nthe cards already in ``comics``/``titles`` that this user's subscriptions match, computed\nwith the same :func:`~app.services.releases.match` the DM dispatch uses. ``progress`` is\nwhat that user has already read or watched, keyed by ``(media, release_key)`` -- the same\n``key`` every card carries. Without a ``discord_id`` the first is ``[]`` and the second is\ntwo empty maps: empty rather than null or a 401, so the signed-out page is the same page\nwith two sections quiet.\n\n``progress`` rides beside the cards rather than as a field on them, and that is a caching\nconstraint rather than a style choice: the cards themselves come out of a shared TTL cache,\nso writing one reader's status into a card would hand it to the next visitor who hits the\nsame entry. Two extra queries per personalised request, neither of them cached.\n\nCaching: the two catalogue halves come from a :data:`CATALOGUE_TTL`-second TTL cache keyed\non the window (see :func:`_overview_entries`); both personalised halves are **never**\ncached. Subscriptions and progress are per-user mutable state with no getter to invalidate,\nand a user who has just followed or marked something must see it on the very next load --\nthe same rule the handlers above follow.",
         "operationId": "releases_overview_api_v1_releases_overview_get",
         "parameters": [
           {
@@ -35202,7 +37033,7 @@
     },
     "/api/v1/watchlist/titles/{universe}/{slug}": {
       "get": {
-        "description": "One title in detail: providers, the title it plays the credits of, and its neighbours.\n\nNeighbours come from the same ordering the page uses, so \"next\" on a detail page always\nmatches the row below it on the watch order. ``position``/``total`` and ``path`` complete\nthe same thought -- the detail page's \"position N of M\" strip needs the index within that\nordering and the name of the path whose ``importance`` the title carries, neither of which\nis derivable from a title row alone.\n\n``parent`` and ``seasons`` are the two halves of ``V45``'s season context: a season names\nthe series it belongs to, a series lists the seasons under it, and exactly one of the two is\never non-empty. Both are picked out of the page payload already in hand rather than queried,\nso the season context costs no round trip -- and both are always present (``null`` / ``[]``)\nso a renderer never has to guess which kind of row it is holding.",
+        "description": "One title in detail: providers, the title it plays the credits of, and its neighbours.\n\nNeighbours come from the same ordering the page uses, so \"next\" on a detail page always\nmatches the row below it on the watch order. ``position``/``total`` and ``path`` complete\nthe same thought -- the detail page's \"position N of M\" strip needs the index within that\nordering and the name of the path whose ``importance`` the title carries, neither of which\nis derivable from a title row alone.\n\n``parent`` and ``seasons`` are the two halves of ``V13``'s season context: a season names\nthe series it belongs to, a series lists the seasons under it, and exactly one of the two is\never non-empty. Both are picked out of the page payload already in hand rather than queried,\nso the season context costs no round trip -- and both are always present (``null`` / ``[]``)\nso a renderer never has to guess which kind of row it is holding.",
         "operationId": "get_title_api_v1_watchlist_titles__universe___slug__get",
         "parameters": [
           {

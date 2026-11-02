@@ -1,5 +1,5 @@
 """Data access for the comic catalogue: ``comic_releases``, ``comic_creators`` and
-``comic_characters`` (see ``migrations/V40__comic_catalogue.sql``).
+``comic_characters`` (see ``migrations/V14__comics_releases_news.sql``).
 
 Separate from :class:`~app.database.repositories.content.ComicsRepository`, which owns
 ``comic_config`` -- the per-guild feed *schedule*. This one owns the *content*: what was
@@ -7,7 +7,7 @@ published, by whom, about whom. None of these tables are behind a ``@cache.cache
 so methods here never fire cache-invalidation signals.
 
 Named ``releases`` rather than ``comics`` because film/TV releases join these tables' shape in
-a later phase; the subscription and delivery tables (``V42__subscriptions.sql``) live here too,
+a later phase; the subscription and delivery tables (``V14__comics_releases_news.sql``) live here too,
 and those *are* cross-media -- a subscription's subject is a string key, not a foreign key.
 """
 

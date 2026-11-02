@@ -303,6 +303,7 @@ class CasesRepository(BaseRepository):
         moderator_id: int | None,
         reason: str | None,
         expires_at: datetime.datetime | None = None,
+        points: int = 1,
     ) -> asyncpg.Record:
         """Inserts a case with the next per-guild ``case_index`` and returns the row.
 
@@ -324,13 +325,13 @@ class CasesRepository(BaseRepository):
                     SET last_case_index = GREATEST(modlog_config.last_case_index + 1, EXCLUDED.last_case_index)
                 RETURNING last_case_index
             )
-            INSERT INTO mod_cases (guild_id, case_index, action, target_id, moderator_id, reason, expires_at)
-            SELECT $1, last_case_index, $2, $3, $4, $5, $6 FROM allocated
+            INSERT INTO mod_cases (guild_id, case_index, action, target_id, moderator_id, reason, expires_at, points)
+            SELECT $1, last_case_index, $2, $3, $4, $5, $6, $7 FROM allocated
             RETURNING *;
         """
         async with self.acquire() as con, con.transaction():
             await con.execute('SELECT pg_advisory_xact_lock($1);', guild_id)
-            return await con.fetchrow(query, guild_id, action, target_id, moderator_id, reason, expires_at)
+            return await con.fetchrow(query, guild_id, action, target_id, moderator_id, reason, expires_at, points)
 
     async def set_log_message(self, case_id: int, log_message_id: int) -> None:
         """Records the id of the announcement message posted for a case."""
@@ -358,13 +359,13 @@ class CasesRepository(BaseRepository):
     async def get_warn_rows(
         self, guild_id: int, target_id: int, *, up_to_index: int | None = None
     ) -> list[asyncpg.Record]:
-        """A target's un-pardoned warns (``expires_at``/``pardoned_at`` only), for active counting.
+        """A target's un-pardoned warns (``expires_at``/``points`` only), for active counting.
 
         ``up_to_index`` counts only warns up to and including that case, so two warns recorded at
         once each see their own count instead of both seeing the later one.
         """
         return await self.fetch(
-            "SELECT expires_at FROM mod_cases WHERE guild_id = $1 AND target_id = $2 AND action = 'warn' "
+            "SELECT expires_at, points FROM mod_cases WHERE guild_id = $1 AND target_id = $2 AND action = 'warn' "
             'AND pardoned_at IS NULL AND ($3::int IS NULL OR case_index <= $3);',
             guild_id, target_id, up_to_index,
         )
@@ -413,6 +414,22 @@ class CasesRepository(BaseRepository):
     async def remove_warn_threshold(self, guild_id: int, count: int) -> bool:
         result = await self.execute(
             'DELETE FROM warn_thresholds WHERE guild_id = $1 AND warn_count = $2;', guild_id, count)
+        return result.endswith(' 1')
+
+    async def get_warn_reasons(self, guild_id: int) -> list[asyncpg.Record]:
+        return await self.fetch(
+            'SELECT name, points, description FROM warn_reasons WHERE guild_id = $1 ORDER BY name;', guild_id)
+
+    async def set_warn_reason(self, guild_id: int, name: str, points: int, description: str | None) -> None:
+        await self.execute(
+            'INSERT INTO warn_reasons (guild_id, name, points, description) VALUES ($1, $2, $3, $4) '
+            'ON CONFLICT (guild_id, name) DO UPDATE '
+            'SET points = EXCLUDED.points, description = EXCLUDED.description;',
+            guild_id, name, points, description,
+        )
+
+    async def remove_warn_reason(self, guild_id: int, name: str) -> bool:
+        result = await self.execute('DELETE FROM warn_reasons WHERE guild_id = $1 AND name = $2;', guild_id, name)
         return result.endswith(' 1')
 
     async def count_user_cases(self, guild_id: int, target_id: int) -> int:

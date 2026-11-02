@@ -1,7 +1,7 @@
 """Comic catalogue endpoints: browse, one release, series, and creator/character name lists.
 
 Not guild-scoped -- the comic archive (``comic_releases`` / ``comic_creators`` /
-``comic_characters``, see ``migrations/V40__comic_catalogue.sql``) is global content, same as
+``comic_characters``, see ``migrations/V14__comics_releases_news.sql``) is global content, same as
 the watchlist universes. Reads only; ingest is the comic cog's existing 6 h refresh task
 (``app/services/comics/ingest.py``), a separate process from this API.
 

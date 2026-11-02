@@ -108,7 +108,8 @@
             <div class="config-field mt-md" id="modal-purge-field" hidden>
                 <label class="config-label" for="modal-purge-days">Delete message history</label>
                 <select id="modal-purge-days" class="config-input">
-                    <option value="0" selected>Don't delete any</option>
+                    <option value="" selected>Server default</option>
+                    <option value="0">Don't delete any</option>
                     <option value="1">Last 24 hours</option>
                     <option value="3">Last 3 days</option>
                     <option value="7">Last 7 days</option>
@@ -119,6 +120,16 @@
                 <label class="config-label" for="modal-limit">Messages to delete</label>
                 <input type="number" id="modal-limit" class="config-input" min="1" max="500" value="100">
                 <span class="config-description">Scans the most recently active channels for this member's messages. Discord cannot bulk-delete messages older than 14 days.</span>
+            </div>
+
+            <div class="config-field mt-md" id="modal-nickname-field" hidden>
+                <label class="config-label" for="modal-nickname">Nickname</label>
+                <input type="text" id="modal-nickname" class="config-input" maxlength="32" placeholder="Leave blank to reset">
+            </div>
+
+            <div class="config-field mt-md" id="modal-channel-field" hidden>
+                <label class="config-label" for="modal-channel">Channel ID</label>
+                <input type="text" id="modal-channel" class="config-input" inputmode="numeric" placeholder="Right-click the channel, Copy Channel ID">
             </div>
 
             <div class="config-field mt-md mb-md">

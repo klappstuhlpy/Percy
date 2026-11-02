@@ -1,5 +1,5 @@
 """Data access for the news stream: ``news_sources``, ``news_items`` and ``news_subjects``
-(see ``migrations/V43__news.sql``).
+(see ``migrations/V14__comics_releases_news.sql``).
 
 Separate from :class:`~app.database.repositories.releases.ReleasesRepository`, which owns the
 comic catalogue and the subscription tables, but deliberately the *same shape* where it counts:
