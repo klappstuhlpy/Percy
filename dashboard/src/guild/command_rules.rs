@@ -4,6 +4,7 @@
 
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -18,6 +19,14 @@ use crate::{
     view::Viewer,
     AppState,
 };
+
+fn bad_request(message: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({"ok": false, "error": message})),
+    )
+        .into_response()
+}
 
 /// Resolve a rule's target id to a name the viewer recognises. Users have no cheap
 /// lookup, so they stay an id (the bot's `config rules` shows the same).
@@ -53,12 +62,31 @@ pub async fn guild_command_rules(State(app): State<AppState>, session: Session, 
     let mut roles = roles.unwrap_or_default();
     roles.retain(|r| r.id != guild_id.to_string() && !r.managed);
     roles.sort_by_key(|r| std::cmp::Reverse(r.position));
+    let rules = rules.map(|r| r.rules).unwrap_or_default();
+    // User targets: Percy lists members by id, so `after = id - 1, limit 1` is an exact lookup.
+    let user_ids: Vec<u64> = rules
+        .iter()
+        .filter(|r| r.target_type == "user")
+        .filter_map(|r| r.target_id.parse().ok())
+        .collect();
+    let mut user_names = std::collections::HashMap::new();
+    for id in user_ids {
+        if let Some(m) = percy
+            .get_guild_members(guild_id, 1, id.saturating_sub(1), None)
+            .await
+            .ok()
+            .and_then(|r| r.members.into_iter().next())
+        {
+            user_names.insert(m.id, m.display_name);
+        }
+    }
     let rules: Vec<RuleRow> = rules
-        .map(|r| r.rules)
-        .unwrap_or_default()
         .into_iter()
         .map(|r| RuleRow {
-            target_name: target_name(&r, &guild.name, &channels, &roles),
+            target_name: user_names
+                .get(&r.target_id)
+                .cloned()
+                .unwrap_or_else(|| target_name(&r, &guild.name, &channels, &roles)),
             rule: r,
         })
         .collect();
@@ -68,7 +96,7 @@ pub async fn guild_command_rules(State(app): State<AppState>, session: Session, 
     let mut cogs: Vec<String> = commands
         .iter()
         .map(|c| c.category.clone())
-        .filter(|c| !c.is_empty())
+        .filter(|c| !c.is_empty() && c != "Uncategorized")
         .collect();
     cogs.sort();
     cogs.dedup();
@@ -113,10 +141,15 @@ pub async fn guild_command_rule_put(
         Err(response) => return response,
     };
     let text = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-    let allow = body.get("allow").and_then(|v| v.as_bool()).unwrap_or(false);
     let (subject, target_type, target_id) = (text("subject"), text("target_type"), text("target_id"));
+    let Some(allow) = body.get("allow").and_then(|v| v.as_bool()) else {
+        return bad_request("Choose allow or deny.");
+    };
+    if !["user", "role", "channel", "category", "guild"].contains(&target_type.as_str()) {
+        return bad_request("Unknown target type.");
+    }
     if subject.is_empty() || target_id.is_empty() {
-        return Json(serde_json::json!({"ok": false, "error": "Pick a command and a target."})).into_response();
+        return bad_request("Pick a command and a target.");
     }
     ok_or_err(
         percy

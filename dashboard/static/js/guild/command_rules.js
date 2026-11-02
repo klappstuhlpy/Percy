@@ -24,7 +24,7 @@
 
     function done(msg) {
         showToast('success', msg);
-        setTimeout(function() { location.reload(); }, 400);
+        setTimeout(function() { location.reload(); }, 1200);
     }
 
     function el(tag, cls, text) {
@@ -57,11 +57,14 @@
         var wrap = document.getElementById('rule-target-wrap');
         wrap.hidden = (type === 'guild');
         ruleInput.hidden = (type !== 'user');
+        memberSearch.hidden = (type !== 'user');
+        memberResults.innerHTML = '';
+        memberSearch.value = '';
         ruleSelect.hidden = (type === 'user' || type === 'guild');
         ruleInput.value = '';
-        ruleInput.placeholder = 'Discord user ID';
+        ruleInput.placeholder = 'or paste a Discord user ID';
         document.getElementById('rule-target-hint').textContent =
-            type === 'user' ? 'Copy a member’s ID with Developer Mode on.' : '';
+            type === 'user' ? 'Search by name, or paste an ID.' : '';
         document.getElementById('rule-target-label').textContent =
             { user: 'Member ID', role: 'Role', channel: 'Channel', category: 'Category' }[type] || 'Target';
         ruleSelect.innerHTML = '';
@@ -81,6 +84,34 @@
             ruleSelect.appendChild(opt);
         });
     }
+
+    // Member search: debounced, fills the ID input from the chosen result.
+    var memberSearch = document.getElementById('rule-member-search');
+    var memberResults = document.getElementById('rule-member-results');
+    var searchTimer = null;
+    memberSearch.addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        var q = memberSearch.value.trim();
+        memberResults.innerHTML = '';
+        if (!q) return;
+        searchTimer = setTimeout(async function() {
+            try {
+                var resp = await fetch(base + '/members.json?limit=8&search=' + encodeURIComponent(q));
+                var data = await resp.json();
+                memberResults.innerHTML = '';
+                (data.members || []).forEach(function(m) {
+                    var btn = el('button', 'button small', m.display_name + ' (' + m.name + ')');
+                    btn.type = 'button';
+                    btn.addEventListener('click', function() {
+                        ruleInput.value = m.id;
+                        memberSearch.value = m.display_name;
+                        memberResults.innerHTML = '';
+                    });
+                    memberResults.appendChild(btn);
+                });
+            } catch (e) { /* the ID box still works */ }
+        }, 250);
+    });
 
     function setAllow(allow) {
         ruleAllow = allow;
@@ -107,6 +138,10 @@
 
     document.getElementById('rule-save').addEventListener('click', async function() {
         var type = ruleType.value;
+        if (type === 'user' && !/^\d+$/.test(ruleInput.value.trim())) {
+            showError('rule-error', 'Pick a member from the search, or enter a numeric user ID.');
+            return;
+        }
         var target = type === 'guild' ? GUILD_ID : (type === 'user' ? ruleInput.value.trim() : ruleSelect.value);
         var data = await api('PUT', base + '/command-rules', {
             subject: document.getElementById('rule-subject').value.trim(),

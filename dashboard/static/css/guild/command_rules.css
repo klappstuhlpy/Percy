@@ -14,7 +14,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.cc-response-row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
+.cc-response-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
 .cc-response-row textarea { flex: 1; min-height: 3rem; resize: vertical; }
 .cc-placeholders { margin-top: var(--space-2); }
 .cc-placeholders dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-3); margin: var(--space-2) 0 0; }
