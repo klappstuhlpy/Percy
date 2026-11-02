@@ -255,8 +255,18 @@ class TrendingTrack(BaseModel):
     plays: int
 
 
+class ChartTrack(BaseModel):
+    title: str
+    author: str | None
+    artwork: str | None
+    length_ms: int | None
+    url: str | None
+
+
 class MusicTrending(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     server: list[TrendingTrack]
     global_: list[TrendingTrack] = Field(alias='global')
+    #: Deezer's worldwide chart; empty when Deezer is unreachable or the Music cog is not loaded.
+    charts: list[ChartTrack] = []

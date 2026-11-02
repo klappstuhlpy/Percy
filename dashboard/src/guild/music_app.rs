@@ -905,7 +905,8 @@ fn build_recommendations(
     json!({"ok": true, "groups": groups})
 }
 
-/// `GET /dashboard/music/:guild_id/trending` — the week's most-picked tracks here and across Percy.
+/// `GET /dashboard/music/:guild_id/trending` — the week's most-picked tracks here and across Percy,
+/// plus Deezer's worldwide chart.
 pub async fn music_trending(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
     let percy = match member_gate(&app, &session, guild_id).await {
         Ok(p) => p,
@@ -917,7 +918,7 @@ pub async fn music_trending(State(app): State<AppState>, session: Session, Path(
     }
     match percy.get_music_trending(guild_id).await {
         Ok(t) => {
-            let out = json!({"ok": true, "server": t.server, "global": t.global});
+            let out = json!({"ok": true, "server": t.server, "global": t.global, "charts": t.charts});
             TRENDING_CACHE.put(key, out.clone());
             Json(out).into_response()
         }

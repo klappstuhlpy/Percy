@@ -22,7 +22,7 @@ from discord.utils import MISSING
 from wavelink import Playable
 
 import config
-from app.clients import LRCLibClient
+from app.clients import DeezerChartClient, LRCLibClient
 from app.core import Bot, Cog, Context, Flags, PermissionTemplate, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
 from app.services import (
@@ -130,6 +130,8 @@ class Music(Cog):
         super().__init__(bot)
         # Free, key-less synced-lyrics provider (Genius scrape stays a plain fallback).
         self.lyrics_client: LRCLibClient = LRCLibClient(self.bot.session)
+        # Key-less worldwide chart for the dashboard music app's global shelf.
+        self.charts_client: DeezerChartClient = DeezerChartClient(self.bot.session)
         # Phase 4: natural-language "vibe" → search query + filter (gated on AIFlags.music).
         self._music_intent: MusicIntentParser = MusicIntentParser(self.bot.ai)
         # Guards the one-shot session restore (node-ready can fire multiple times).

@@ -1631,6 +1631,67 @@
         "title": "ChannelRef",
         "type": "object"
       },
+      "ChartTrack": {
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "artwork",
+          "length_ms",
+          "url"
+        ],
+        "title": "ChartTrack",
+        "type": "object"
+      },
       "ComicBrowseFilters": {
         "description": "Echoes the filters ``GET /comics`` applied.",
         "properties": {
@@ -7559,6 +7620,14 @@
       },
       "MusicTrending": {
         "properties": {
+          "charts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChartTrack"
+            },
+            "title": "Charts",
+            "type": "array"
+          },
           "global": {
             "items": {
               "$ref": "#/components/schemas/TrendingTrack"
@@ -26997,7 +27066,7 @@
     },
     "/api/v1/guilds/{guild_id}/music/trending": {
       "get": {
-        "description": "The week's most-picked tracks in this guild (``server``) and across every guild (``global``).",
+        "description": "The week's most-picked tracks in this guild (``server``) and across every guild (``global``),\nplus Deezer's worldwide chart (``charts``).",
         "operationId": "get_music_trending_api_v1_guilds__guild_id__music_trending_get",
         "parameters": [
           {

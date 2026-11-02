@@ -914,10 +914,33 @@ async def _trending(bot: Any, guild_id: int | None) -> list[dict]:
     return items
 
 
+_CHARTS_TTL = 3600.0  # Deezer's chart moves daily at most
+_charts_cache: tuple[float, list[dict]] = (0.0, [])
+
+
+async def _charts(bot: Any) -> list[dict]:
+    global _charts_cache
+    now = time.monotonic()
+    if _charts_cache[0] > now:
+        return _charts_cache[1]
+    cog = bot.get_cog('Music')
+    if cog is None:
+        return []
+    try:
+        items = await cog.charts_client.top_tracks()
+    except Exception:  # an outage costs the shelf, never the endpoint
+        return _charts_cache[1]
+    _charts_cache = (now + _CHARTS_TTL, items)
+    return items
+
+
 @router.get("/music/trending")
 async def get_music_trending(guild: GuildDep, bot: BotDep) -> MusicTrending:
-    """The week's most-picked tracks in this guild (``server``) and across every guild (``global``)."""
-    return MusicTrending.model_validate({'server': await _trending(bot, guild.id), 'global': await _trending(bot, None)})
+    """The week's most-picked tracks in this guild (``server``) and across every guild (``global``),
+    plus Deezer's worldwide chart (``charts``)."""
+    return MusicTrending.model_validate({
+        'server': await _trending(bot, guild.id), 'global': await _trending(bot, None), 'charts': await _charts(bot),
+    })
 
 
 @router.post("/music/control")

@@ -861,8 +861,9 @@
         once(`vibe:${query}`, null, () => playTrack({ query, label }, false));
     }
 
-    // Trending: this server's and Percy's most-picked tracks of the week, fetched after first paint.
-    // Hidden when both charts are empty (a new server, or nobody has queued anything yet).
+    // Trending: this server's and Percy's most-picked tracks of the week plus Deezer's worldwide chart,
+    // fetched after first paint. Hidden when all three are empty. Chart entries have no uri, so they
+    // play as a title + artist search like any other uri-less card.
     async function loadTrending() {
         const box = $('#mapp-trending-body'), sec = $('#mapp-trending');
         if (!box || !hasGuild) return;
@@ -873,7 +874,9 @@
                 <p class="mapp-recs-cap">${ico(icon)}${cap}</p>
                 <div class="mapp-shelf">${list.map((t, i) => cardHtml({ uri: t.uri, title: t.title, author: t.author, artwork: t.artwork, rank: i + 1, rankNote: listeners(t.listeners) })).join('')}</div>
             </div>` : '');
-        const html = shelf('Popular in this server', 'users', r.data.server || []) + shelf('Trending on Percy', 'trend', r.data.global || []);
+        const charts = (r.data.charts || []).map((t, i) => cardHtml({ title: t.title, author: t.author, artwork: t.artwork, rank: i + 1, rankNote: 'Deezer worldwide chart' }));
+        const html = shelf('Popular in this server', 'users', r.data.server || []) + shelf('Trending on Percy', 'trend', r.data.global || [])
+            + (charts.length ? `<div class="mapp-recs-group"><p class="mapp-recs-cap">${ico('trend')}Top worldwide on <b>Deezer</b></p><div class="mapp-shelf">${charts.join('')}</div></div>` : '');
         if (sec) sec.hidden = !html;
         box.innerHTML = html;
         applyRole(); syncHearts();

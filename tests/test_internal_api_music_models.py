@@ -77,7 +77,7 @@ SAMPLES: list[tuple[type, object]] = [
     }),
     (mm.MusicPlayResult, {'queued': [TRACK], 'started': True}),
     (mm.MusicHistory, {'items': [HIST]}),
-    (mm.MusicTrending, {'server': [TREND], 'global': [TREND]}),
+    (mm.MusicTrending, {'server': [TREND], 'global': [TREND], 'charts': [{'title': 't', 'author': None, 'artwork': None, 'length_ms': 1000, 'url': 'u'}]}),
     (profile.CustomBotProfile, {'name': None, 'avatar_url': 'u', 'banner_url': None, 'accent_color': None, 'about_me': None}),
     (gallery.GalleryResponse, {'images': [{'id': 'a', 'ext': 'png', 'mimetype': 'image/png', 'size': 3,
                                            'original_name': None, 'uploaded_at': 't', 'url': 'u', 'raw_url': 'r'}],

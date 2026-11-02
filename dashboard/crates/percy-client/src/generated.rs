@@ -300,6 +300,19 @@ pub struct ChannelRef {
     #[serde(rename = "type")]
     pub type_: ::std::string::String,
 }
+///`ChartTrack`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ChartTrack {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub author: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub length_ms: ::std::option::Option<i64>,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub url: ::std::option::Option<::std::string::String>,
+}
 ///Echoes the filters ``GET /comics`` applied.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct ComicBrowseFilters {
@@ -1438,6 +1451,8 @@ pub struct MusicTrackFull {
 ///`MusicTrending`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct MusicTrending {
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub charts: ::std::vec::Vec<ChartTrack>,
     pub global: ::std::vec::Vec<TrendingTrack>,
     pub server: ::std::vec::Vec<TrendingTrack>,
 }
