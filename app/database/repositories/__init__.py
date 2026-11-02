@@ -25,6 +25,7 @@ from app.database.repositories.releases import ReleasesRepository
 from app.database.repositories.restrictions import RestrictionsRepository
 from app.database.repositories.stats import EmojiStatsRepository, GameStatsRepository, StatsRepository
 from app.database.repositories.timers import TimersRepository
+from app.database.repositories.trivia import TriviaRepository
 from app.database.repositories.users import (
     PlaylistsRepository,
     UsersRepository,
@@ -64,6 +65,7 @@ __all__ = (
     'TagsRepository',
     'TempChannelsRepository',
     'TimersRepository',
+    'TriviaRepository',
     'UsersRepository',
     'VotesRepository',
     'WatchlistRepository',

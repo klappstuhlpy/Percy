@@ -47,6 +47,7 @@ from app.database.repositories import (
     TagsRepository,
     TempChannelsRepository,
     TimersRepository,
+    TriviaRepository,
     UsersRepository,
     VotesRepository,
     WatchlistRepository,
@@ -303,6 +304,7 @@ class Database(_Database):
     music_plays: MusicPlaysRepository
     admin: AdminRepository
     timers: TimersRepository
+    trivia: TriviaRepository
     comics: ComicsRepository
     starboard: StarboardRepository
     cases: CasesRepository
@@ -351,6 +353,7 @@ class Database(_Database):
         self.restrictions = RestrictionsRepository(self)
         self.command_rules = CommandRulesRepository(self)
         self.custom_commands = CustomCommandsRepository(self)
+        self.trivia = TriviaRepository(self)
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
