@@ -345,6 +345,19 @@ pub async fn guild_user_lookup(
     .into_response()
 }
 
+/// Percy's own answer to "may this member drive the player" (`resolve_viewer`): listeners
+/// in the bot's channel, plus DJs and Manage Server from anywhere, with DJ-only mode
+/// applied. `false` when Percy can't say.
+async fn viewer_can_control_music(percy: &percy_client::PercyClient, guild_id: u64, discord_id: &str) -> bool {
+    let Ok(user_id) = discord_id.parse::<u64>() else {
+        return false;
+    };
+    percy
+        .get_music_viewer(guild_id, user_id)
+        .await
+        .is_ok_and(|v| v.can_control)
+}
+
 /// `GET /dashboard/guild/:guild_id/overview` — read-only public overview for
 /// members who can't manage the guild.
 pub async fn guild_overview(
@@ -372,6 +385,7 @@ pub async fn guild_overview(
         percy.get_games_stats(guild_id),
         percy.get_economy_balances(guild_id, 5),
     );
+    let viewer_can_control = viewer_can_control_music(percy, guild_id, discord_id).await;
 
     let guild = match guild {
         Ok(g) => g,
@@ -412,7 +426,7 @@ pub async fn guild_overview(
         always_on: Default::default(),
         listeners: Vec::new(),
     });
-    let can_control_music = music.active && music.listeners.contains(discord_id);
+    let can_control_music = music.active && viewer_can_control;
     let leaderboard = leaderboard.unwrap_or(LeaderboardResponse {
         entries: Vec::new(),
         total: 0,
@@ -469,7 +483,7 @@ pub async fn guild_overview_music_status(
     }
     match percy.get_music(guild_id).await {
         Ok(music) => {
-            let can_control = music.active && music.listeners.contains(discord_id);
+            let can_control = music.active && viewer_can_control_music(percy, guild_id, discord_id).await;
             Json(serde_json::json!({
                 "ok": true,
                 "active": music.active,
