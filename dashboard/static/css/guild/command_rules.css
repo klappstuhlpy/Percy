@@ -3,10 +3,14 @@
 .alias-form {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
     margin-bottom: var(--space-4);
 }
 .alias-form .config-input { flex: 1 1 12rem; }
+/* Buttons keep their intrinsic size next to inputs and in row action cells. */
+.alias-form .button,
+.data-table td.col-actions .button { flex: 0 0 auto; width: auto; align-self: center; }
 
 .cc-response {
     max-width: 28rem;
