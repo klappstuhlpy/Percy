@@ -20,6 +20,7 @@ from app.database.repositories import (
     AdminRepository,
     CasesRepository,
     ComicsRepository,
+    CommandRulesRepository,
     EconomyRepository,
     EmojiStatsRepository,
     EventWebhooksRepository,
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
 
     from app.core import Bot
     from app.core.permissions import CommandOverride
+    from app.services.command_rules import Rule
 
     DatabaseT = TypeVar("DatabaseT", bound="_Database")
 
@@ -345,6 +347,7 @@ class Database(_Database):
         self.news = NewsRepository(self)
         self.notifications = NotificationsRepository(self)
         self.restrictions = RestrictionsRepository(self)
+        self.command_rules = CommandRulesRepository(self)
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
@@ -359,6 +362,7 @@ class Database(_Database):
         s.register("sentinel_changed").connect(self.get_guild_sentinel, None)
         s.register("ai_config_changed").connect(self.get_guild_ai_config, None)
         s.register("command_overrides_changed").connect(self.get_command_overrides, None)
+        s.register("command_rules_changed").connect(self.get_command_rules, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -412,6 +416,15 @@ class Database(_Database):
             )
             for record in records
         }
+
+    @cache.cache()
+    async def get_command_rules(self, guild_id: int) -> tuple[Rule, ...]:
+        """|coro| @cached
+
+        A guild's command allow/deny rules; consulted on every command invocation, busted via
+        the ``command_rules_changed`` signal.
+        """
+        return await self.command_rules.list_rules(guild_id)
 
     @cache.cache()
     async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:

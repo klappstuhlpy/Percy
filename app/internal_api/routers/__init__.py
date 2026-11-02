@@ -4,6 +4,7 @@ from __future__ import annotations
 from .analytics import router as analytics_router
 from .backup import router as backup_router
 from .comics import router as comics_router
+from .command_rules import router as command_rules_router
 from .content import router as content_router
 from .economy import router as economy_router
 from .events import router as events_router
@@ -32,6 +33,7 @@ ALL_ROUTERS = [
     leveling_router,
     economy_router,
     content_router,
+    command_rules_router,
     music_router,
     profile_router,
     stats_router,

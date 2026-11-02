@@ -13,6 +13,8 @@ from app.core import Cog, Context
 from app.core.errors import CommandDisabled
 from app.core.models import PermissionSpec, PermissionTemplate, cooldown, describe, group
 from app.core.pagination import LinePaginator
+from app.core.permissions import check_rules, normalize_rule_subject
+from app.services.command_rules import Decision
 from app.services.moderation_settings import DISABLED_MESSAGE_VARIABLES, check_disabled_message, render_disabled_message
 from app.utils import cache, get_asset_url, helpers
 
@@ -64,6 +66,35 @@ class CommandName(commands.Converter[str]):
             raise commands.BadArgument(f"Command {lowered!r} is not valid.")
 
         return lowered
+
+
+class RuleTarget(commands.Converter["tuple[str, int]"]):
+    """A member, role, channel or category (mention/id/name), or the literal ``server``, as ``(target_type, id)``."""
+
+    async def convert(self, ctx: Context, argument: str) -> tuple[str, int]:
+        if argument.lower() in ("server", "guild", "everyone"):
+            return "guild", ctx.guild.id
+        for converter, kind in (
+            (commands.MemberConverter, "user"),
+            (commands.RoleConverter, "role"),
+            (commands.GuildChannelConverter, "channel"),
+        ):
+            try:
+                obj = await converter().convert(ctx, argument)
+            except commands.BadArgument:
+                continue
+            return ("category" if isinstance(obj, discord.CategoryChannel) else kind), obj.id
+        raise commands.BadArgument(f"{argument!r} is not a member, role, channel, category or `server`.")
+
+
+def describe_target(target_type: str, target_id: int) -> str:
+    return {
+        "user": f"<@{target_id}>",
+        "role": f"<@&{target_id}>",
+        "channel": f"<#{target_id}>",
+        "category": f"<#{target_id}> (category)",
+        "guild": "the whole server",
+    }[target_type]
 
 
 async def plonk_iterator(ctx: commands.Context, records: list[asyncpg.Record]) -> AsyncIterator[str]:
@@ -291,6 +322,14 @@ class Config(Cog):
 
         if await ctx.bot.is_owner(ctx.author):
             return True
+
+        decision = await check_rules(
+            self.bot.db, ctx.guild, ctx.author, ctx.channel, ctx.command.qualified_name, ctx.command.cog_name
+        ) if isinstance(ctx.author, discord.Member) else Decision(None)
+        if decision.allowed is False:
+            return ctx.author.id == ctx.guild.owner_id  # silent deny; the guild owner bypasses
+        if decision.allowed:
+            return True  # an explicit allow beats a channel/server disable
 
         resolved = await self.get_commands_configuration(guild_id=ctx.guild.id)
         if not resolved.is_blocked(ctx):
@@ -775,6 +814,158 @@ class Config(Cog):
             await ctx.send_error(f"**{command}** has no permission override.")
             return
         await ctx.send_success(f"Removed the permission override for **{command}**; it now uses its default gate.")
+
+    # -- command rules ---------------------------------------------------
+
+    async def _set_rule(self, ctx: Context, subject: str, target: tuple[str, int], allow: bool) -> None:
+        canonical = normalize_rule_subject(self.bot, subject)
+        if canonical is None:
+            await ctx.send_error(
+                f"`{subject}` is not a command, `cog:<Name>` or `*` (Config commands cannot be restricted)."
+            )
+            return
+        await ctx.db.command_rules.set_rule(ctx.guild.id, canonical, target[0], target[1], allow)
+        verb = "allowed" if allow else "denied"
+        await ctx.send_success(f"`{canonical}` is now **{verb}** for {describe_target(*target)}.")
+
+    @config.group(
+        "rule",
+        description="Allow or deny a command, cog or `*` for a member, role, channel, category or the server.",
+        invoke_without_command=True,
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    async def rule(self, ctx: Context) -> None:
+        """Rules beat the enable/disable and permission checks: an allow overrides a disable and the default
+        permission gate (never the bot's own permissions), a deny blocks silently. The most specific subject
+        wins (command > parent group > `cog:<Name>` > `*`), then user > role > channel > category > server.
+        """
+        await ctx.send_help("config rule")
+
+    @rule.command(
+        "allow", description="Allow a command for a target.", guild_only=True, user_permissions=PermissionTemplate.manager
+    )
+    @describe(subject="A command, `cog:<Name>` or `*`.", target="A member, role, channel, category or `server`.")
+    async def rule_allow(self, ctx: Context, subject: str, target: Annotated[tuple[str, int], RuleTarget]) -> None:
+        """Allow `subject` for `target`; quote a multi-word command (`"config perms set"`)."""
+        await self._set_rule(ctx, subject, target, True)
+
+    @rule.command(
+        "deny", description="Deny a command for a target.", guild_only=True, user_permissions=PermissionTemplate.manager
+    )
+    @describe(subject="A command, `cog:<Name>` or `*`.", target="A member, role, channel, category or `server`.")
+    async def rule_deny(self, ctx: Context, subject: str, target: Annotated[tuple[str, int], RuleTarget]) -> None:
+        """Deny `subject` for `target`; quote a multi-word command (`"config perms set"`)."""
+        await self._set_rule(ctx, subject, target, False)
+
+    @rule.command(
+        "remove",
+        aliases=["reset", "clear"],
+        description="Remove a rule.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(subject="The rule's subject.", target="The rule's target.")
+    async def rule_remove(self, ctx: Context, subject: str, target: Annotated[tuple[str, int], RuleTarget]) -> None:
+        """Remove the rule for `subject` and `target`."""
+        canonical = normalize_rule_subject(self.bot, subject) or subject
+        if not await ctx.db.command_rules.remove_rule(ctx.guild.id, canonical, target[0], target[1]):
+            await ctx.send_error("There is no such rule.")
+            return
+        await ctx.send_success(f"Removed the rule for `{canonical}` on {describe_target(*target)}.")
+
+    @config.command(
+        "rules",
+        description="Lists the command rules, optionally for one subject.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(subject="Only show rules for this command, `cog:<Name>` or `*`.")
+    async def rules(self, ctx: Context, *, subject: str | None = None) -> None:
+        """Lists every command rule of this server."""
+        rules = await ctx.db.get_command_rules(ctx.guild.id)
+        if subject:
+            wanted = normalize_rule_subject(self.bot, subject) or subject
+            rules = tuple(r for r in rules if r.subject == wanted)
+        if not rules:
+            await ctx.send_info("No command rules are set.")
+            return
+        entries = [
+            f"{'allow' if r.allow else 'deny'} `{r.subject}` - {describe_target(r.target_type, r.target_id)}"
+            for r in rules
+        ]
+        embed = discord.Embed(title="Command Rules", timestamp=discord.utils.utcnow(), color=helpers.Colour.white())
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        await LinePaginator.start(ctx, entries=entries, per_page=15, embed=embed, location="description", numerate=True)
+
+    @config.command(
+        "explain",
+        description="Shows why a member can or cannot run a command, layer by layer.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(member="The member.", command="The command.", channel="The channel (default: this one).")
+    async def explain(
+        self,
+        ctx: Context,
+        member: discord.Member,
+        command: Annotated[str, CommandName],
+        channel: discord.TextChannel | discord.VoiceChannel | None = None,
+    ) -> None:
+        """Walks the ignore list, disable list, permission override and rules for `member` running `command`."""
+        channel = channel or ctx.channel
+        cmd = self.bot.get_command(command)
+        assert cmd is not None
+        guild = ctx.guild
+        lines: list[str] = []
+        verdict: str | None = None
+
+        if await self.bot.is_owner(member):
+            lines.append("**Bot owner:** bypasses every check.")
+            verdict = "allowed (bot owner)"
+
+        plonked = await self.is_plonked(guild.id, member.id, channel=channel, check_bypass=True)
+        lines.append(f"**Ignore list:** {'ignored here' if plonked else 'not ignored'}.")
+        if plonked and verdict is None:
+            verdict = "blocked by the ignore list (rules cannot override it)"
+
+        decision = await check_rules(self.bot.db, guild, member, channel, cmd.qualified_name, cmd.cog_name)
+        lines.append(f"**Rules:** {decision.reason}")
+        if decision.allowed is False and member.id == guild.owner_id:
+            lines.append("**Server owner:** bypasses denies.")
+        elif decision.allowed is False and verdict is None:
+            verdict = "blocked by a deny rule"
+
+        resolved = await self.get_commands_configuration(guild_id=guild.id)
+        blocked = resolved.is_command_blocked(cmd.qualified_name, channel.id)
+        bypass = member.guild_permissions.manage_guild
+        state = ("disabled here" + (" (Manage Server bypasses)" if bypass else "")) if blocked else "enabled"
+        lines.append(f"**Enable/disable:** {state}{' - overridden by an allow rule' if blocked and decision.allowed else ''}.")
+        if blocked and not bypass and not decision.allowed and verdict is None:
+            verdict = "blocked because the command is disabled here"
+
+        override = (await self.bot.db.get_command_overrides(guild.id)).get(cmd.qualified_name)
+        if override is None:
+            lines.append("**Permission override:** none (default gate).")
+        else:
+            lines.append(
+                "**Permission override:** "
+                + self._describe_override(cmd.qualified_name, override.permissions, override.allowed_roles)
+            )
+        gate = (
+            "bypassed by an allow rule (the bot's own permissions still apply)."
+            if decision.allowed
+            else "the command's own (or overridden) permission requirement applies."
+        )
+        lines.append(f"**Permission gate:** {gate}")
+
+        embed = discord.Embed(
+            title=f"{member.display_name} -> {cmd.qualified_name} in #{channel.name}",
+            description="\n".join(lines),
+            color=helpers.Colour.white(),
+        )
+        embed.add_field(name="Result", value=verdict.capitalize() if verdict else "Allowed by every layer above.")
+        await ctx.send(embed=embed)
 
     @config.group("global", description="Handles global bot configuration.", hidden=True)
     @commands.is_owner()

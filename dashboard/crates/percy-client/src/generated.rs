@@ -482,6 +482,19 @@ pub struct ComicSeriesSummary {
 pub struct ComicsResponse {
     pub feeds: ::std::vec::Vec<ComicFeedEntry>,
 }
+///`CommandRule`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandRule {
+    pub allow: bool,
+    pub subject: ::std::string::String,
+    pub target_id: ::std::string::String,
+    pub target_type: ::std::string::String,
+}
+///`CommandRulesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandRulesResponse {
+    pub rules: ::std::vec::Vec<CommandRule>,
+}
 ///`CommandUsage`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct CommandUsage {

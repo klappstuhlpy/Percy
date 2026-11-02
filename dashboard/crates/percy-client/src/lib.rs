@@ -2408,6 +2408,51 @@ impl PercyClient {
         .await
     }
 
+    /// The guild's command allow/deny rules.
+    pub async fn get_command_rules(&self, guild_id: u64) -> Result<CommandRulesResponse, PercyError> {
+        self.send_into(
+            self.client
+                .get(self.url(&format!("/api/v1/guilds/{}/command-rules", seg(&guild_id)))),
+        )
+        .await
+    }
+
+    /// Add or replace a rule. `subject` is a command, `cog:<Name>` or `*`; `target_type` is
+    /// `user|role|channel|category|guild` (`target_id` is the guild id for `guild`).
+    pub async fn put_command_rule(
+        &self,
+        guild_id: u64,
+        subject: &str,
+        target_type: &str,
+        target_id: &str,
+        allow: bool,
+    ) -> Result<CommandRulesResponse, PercyError> {
+        self.send_into(
+            self.client
+                .put(self.url(&format!("/api/v1/guilds/{}/command-rules", seg(&guild_id))))
+                .json(&serde_json::json!({
+                    "subject": subject, "target_type": target_type, "target_id": target_id, "allow": allow
+                })),
+        )
+        .await
+    }
+
+    /// Remove a rule.
+    pub async fn delete_command_rule(
+        &self,
+        guild_id: u64,
+        subject: &str,
+        target_type: &str,
+        target_id: &str,
+    ) -> Result<(), PercyError> {
+        self.send_unit(
+            self.client
+                .delete(self.url(&format!("/api/v1/guilds/{}/command-rules", seg(&guild_id))))
+                .query(&[("subject", subject), ("target_type", target_type), ("target_id", target_id)]),
+        )
+        .await
+    }
+
     /// Perform a bulk moderation action on multiple members.
     pub async fn bulk_member_action(
         &self,

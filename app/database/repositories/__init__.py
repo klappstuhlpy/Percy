@@ -1,4 +1,5 @@
 from app.database.repositories.base import BaseRepository
+from app.database.repositories.command_rules import CommandRulesRepository
 from app.database.repositories.community import (
     GiveawaysRepository,
     PollsRepository,
@@ -35,6 +36,7 @@ __all__ = (
     'BaseRepository',
     'CasesRepository',
     'ComicsRepository',
+    'CommandRulesRepository',
     'EconomyRepository',
     'EmojiStatsRepository',
     'EventWebhooksRepository',
