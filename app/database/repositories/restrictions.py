@@ -39,7 +39,7 @@ class RestrictionsRepository(BaseRepository):
         """
         await self.execute(query, guild_id, user_id, kind, channel_id, value, _naive(expires_at))
 
-    async def fetch(self, guild_id: int, user_id: int, kind: str, channel_id: int = 0) -> asyncpg.Record | None:
+    async def get(self, guild_id: int, user_id: int, kind: str, channel_id: int = 0) -> asyncpg.Record | None:
         query = """
             SELECT * FROM member_restrictions
             WHERE guild_id = $1 AND user_id = $2 AND kind = $3 AND channel_id = $4;

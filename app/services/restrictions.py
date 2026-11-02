@@ -1,7 +1,7 @@
 """Pure rules for member restrictions (voice ban, frozen nickname, channel mute). Discord-free.
 
 The SQL is :mod:`app.database.repositories.restrictions`; the Discord side is
-:mod:`app.cogs.moderation.restrictions`.
+:mod:`app.cogs.restrictions.actions`.
 """
 
 from __future__ import annotations

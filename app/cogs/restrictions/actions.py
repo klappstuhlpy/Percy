@@ -113,7 +113,7 @@ async def apply_voiceban(
 async def lift_voiceban(bot: Bot, guild: discord.Guild, member: discord.Member, reason: str | None) -> None:
     role = await voiceban_role(bot, guild, reason, create=False)
     held = role is not None and member.get_role(role.id) is not None
-    if not held and await bot.db.restrictions.fetch(guild.id, member.id, 'voiceban') is None:
+    if not held and await bot.db.restrictions.get(guild.id, member.id, 'voiceban') is None:
         raise MemberActionError(400, 'member is not voice banned')
     await bot.timers.delete_member_timer('voiceban', guild.id, member.id)
     if held:
@@ -187,7 +187,7 @@ async def lift_channelmute(
     reason: str | None,
 ) -> None:
     channel = _channel(guild, channel_id, moderator)
-    if await bot.db.restrictions.fetch(guild.id, member.id, 'channelmute', channel.id) is None:
+    if await bot.db.restrictions.get(guild.id, member.id, 'channelmute', channel.id) is None:
         raise MemberActionError(400, 'member is not muted in that channel')
     await set_channel_denial(channel, member, False, reason)
     await bot.db.restrictions.remove(guild.id, member.id, 'channelmute', channel.id)

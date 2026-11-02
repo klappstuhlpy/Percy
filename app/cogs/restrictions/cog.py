@@ -209,7 +209,7 @@ class Restrictions(Cog):
         """Reverts a frozen nickname."""
         if before.nick == after.nick:
             return
-        row = await self.bot.db.restrictions.fetch(after.guild.id, after.id, 'nickfreeze')
+        row = await self.bot.db.restrictions.get(after.guild.id, after.id, 'nickfreeze')
         if row is None or row['value'] == after.nick:
             return
         try:
@@ -240,7 +240,7 @@ class Restrictions(Cog):
     async def _expiry_target(self, timer: Timer, kind: str, channel_id: int = 0) -> discord.Guild | None:
         """The guild when ``timer`` still owns the stored restriction; ``None`` when there is nothing to do."""
         guild_id, _, member_id = timer.args[:3]
-        row = await self.bot.db.restrictions.fetch(guild_id, member_id, kind, channel_id)
+        row = await self.bot.db.restrictions.get(guild_id, member_id, kind, channel_id)
         # A retry timer was re-armed for later on purpose; only a first-time timer can be superseded.
         if row is None or (not timer.kwargs.get('attempt') and not is_current(row['expires_at'], timer.expires)):
             return None
@@ -287,7 +287,8 @@ class Restrictions(Cog):
         reason = f'Automatic channel unmute from timer made on {timer.created}.'
         if channel is not None:
             try:
-                await actions.set_channel_denial(channel, guild.get_member(member_id) or discord.Object(member_id), False, reason)
+                target = guild.get_member(member_id) or discord.Object(member_id)
+                await actions.set_channel_denial(channel, target, False, reason)
             except discord.HTTPException as exc:
                 if isinstance(exc, discord.Forbidden) and not timer.kwargs.get('attempt'):
                     await (await self.bot.db.get_guild_config(guild.id)).alert_missing_permission(
