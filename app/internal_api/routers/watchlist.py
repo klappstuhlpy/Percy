@@ -55,7 +55,7 @@ _SORTS = ('story', 'release')
 _STATUSES = ('watched', 'skipped')
 
 
-class ProgressEntry(BaseModel):
+class WatchProgressPutEntry(BaseModel):
     """One title's watch state, as the client last saw it."""
 
     title_id: int
@@ -63,10 +63,10 @@ class ProgressEntry(BaseModel):
     updated_at: datetime.datetime | None = None
 
 
-class ProgressBody(BaseModel):
+class WatchProgressPutBody(BaseModel):
     """A bulk progress merge: the client's full local set, or a single debounced toggle."""
 
-    entries: list[ProgressEntry] = Field(default_factory=list)
+    entries: list[WatchProgressPutEntry] = Field(default_factory=list)
 
 
 class PrefsBody(BaseModel):
@@ -285,7 +285,7 @@ async def get_progress(
 
 
 @router.put("/users/{discord_id}/progress")
-async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBody, Body()]) -> WatchProgressResponse:
+async def put_progress(bot: BotDep, discord_id: int, body: Annotated[WatchProgressPutBody, Body()]) -> WatchProgressResponse:
     """Merges a batch of progress entries, last-write-wins, and returns the merged set.
 
     The client sends its own ``updated_at`` per entry; the server keeps whichever side is

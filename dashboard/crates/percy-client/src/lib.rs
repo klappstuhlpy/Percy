@@ -18,105 +18,51 @@ use serde::de::DeserializeOwned;
 mod types;
 pub use types::*;
 
-// Generated from Percy's OpenAPI schema (see GENERATION.md). Only the domains already migrated
-// are re-exported, by name, so the hand-written `types` and the generated types never collide and
-// the dashboard keeps importing `percy_client::AnalyticsSummary` unchanged.
+// Generated from Percy's OpenAPI schema (see GENERATION.md): every response model, re-exported by
+// name so the dashboard imports `percy_client::AnalyticsSummary` as before. The list is exactly
+// the `pub struct`/`pub enum` names in generated.rs (none is also defined in `types`).
 #[rustfmt::skip]
 #[allow(dead_code)]
 pub mod generated;
-pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
-pub use generated::{
-    AiAskResponse, AiChannelOverride, AiConfig, AiFlags, AiSuggestion, Channel, ChannelRef, GuildFlags, GuildHealth,
-    GuildInfo, HealthFeature, IgnoredEntity, Role, RoleRef, SentinelInfo,
-}; // guild domain
-    HistoryAvatarEntry, HistoryNameEntry, HistoryPresenceEntry, PlaylistDetail, PlaylistSummary, PlaylistTrack, RankCard,
-    RankCardOption, Reminder, RemindersResponse, UserAvatar, UserGuild, UserHistory, UserSettings,
-}; // users domain
-pub use generated::{ActiveTempChannel, ComicFeedEntry, ComicsResponse, EmojiStatEntry, EmojiStatsResponse, GiveawayInfo, GiveawaysResponse, LockdownEntry, LockdownsResponse, PollInfo, PollsResponse, TagCreator, TagDetail, TagInfo, TagsResponse, TempChannelEntry, TempChannelsResponse}; // content domain
-    BalanceEntry, BalancesResponse, EconomyInfo, EconomySettings, InventoryChange, InventoryItem, LotteryInfo, MemberBalance,
-    MemberInventory, ShopItem,
-}; // economy domain
-pub use generated::{
-    CardOption, LeaderboardEntry, LeaderboardResponse, LevelingConfig, MemberLevel, TemplateVariable, XpHistoryPoint,
-    XpHistoryResponse,
-}; // leveling domain
-    ActionRequest, ActionRequestList, ActivityDay, ActivityResponse, AvatarEntry, AvatarHistoryResponse, BulkActionFailure,
-    BulkActionResponse, CaseActionResponse, CaseEntry, CaseDeleteResponse, CasesResponse, Member, MemberCase,
-    MemberCommandStats, MemberDetail, MemberEconomy, MemberLeveling, MemberMessage, MemberMessages, MemberNameHistory,
-    MemberRoleBadge, MemberSelf, MemberSelfLeveling, MemberTopCommand, MemberOwnedTag, MemberActionResult,
-    MemberRolesResult, MembersResponse, NameHistoryEntry, Notification, NotificationList, NotificationSummary,
-    NotificationsReadResult, RecentCasesResponse, RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings,
-    WarnPolicy, WarnThreshold,
-}; // members + moderation + notifications domains
-// stats / outbound webhooks / backup templates / role menus / starboard domain (`ChannelRef` stays
-// hand-written: it is shared with the channel lists).
 #[rustfmt::skip]
 pub use generated::{
-    BotStats, ChangelogEntry, ChangelogResponse, ChangelogSection, CommandUsage, GameOverviewEntry, GamePlayerEntry,
-    GamesStats, GuildOverview, GuildOverviewBot, GuildOverviewFeatures, GuildOverviewGuild, GuildOverviewStats,
-    GuildStats, RoleMenu, RoleMenuRole, RoleMenusResponse, StarboardInfo, StarboardTop, TemplateEntry,
-    TemplatesResponse, WebhookCreateResponse, WebhookDeliveriesResponse, WebhookDelivery, WebhookEventsResponse,
-    WebhookSubscription, WebhookSubscriptionsResponse, WebhookTestResponse,
-    // watchlist / releases / comics / news domains
-    CardSubject,
-    ComicBrowseFilters,
-    ComicBrowsePage,
-    ComicCharacter,
-    ComicCredit,
-    ComicDetail,
-    ComicDetailSeries,
-    ComicNameEntry,
-    ComicNamesResponse,
-    ComicRelease,
-    ComicSeriesList,
-    ComicSeriesPage,
-    ComicSeriesSummary,
-    NewsFilters,
-    NewsItem,
-    NewsItemSource,
-    NewsPage,
-    NewsRelated,
-    NewsSource,
-    NewsSourcesResponse,
-    NewsSubject,
-    OverviewWindow,
-    ProgressMark,
-    ProgressResponse,
-    ReleaseCard,
-    ReleaseProgressDeleted,
-    ReleasesOverview,
-    Subject,
-    SubjectsResponse,
-    Subscription,
-    SubscriptionDeleted,
-    SubscriptionsResponse,
-    WatchCredit,
-    WatchEra,
-    WatchPath,
-    WatchPeopleResponse,
-    WatchPerson,
-    WatchPersonCredit,
-    WatchPersonPage,
-    WatchPersonSummary,
-    WatchPrefs,
-    WatchProgressDeleted,
-    WatchProgressEntry,
-    WatchProgressResponse,
-    WatchProvider,
-    WatchStats,
-    WatchTitle,
-    WatchTitleDetail,
-    WatchTrailer,
-    WatchUniverse,
-    WatchUniversePage,
-    WatchUniverseSummary,
-    WatchUniversesResponse,
+    ActionRequest, ActionRequestList, ActiveTempChannel, ActivityDay, ActivityResponse, AiAskResponse,
+    AiChannelOverride, AiConfig, AiFlags, AiSuggestion, AlwaysOnState, AnalyticsMetric, AnalyticsPoint,
+    AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand, AvatarEntry, AvatarHistoryResponse, BalanceEntry,
+    BalancesResponse, BotStats, BulkActionFailure, BulkActionResponse, CardOption, CardSubject, CaseActionResponse,
+    CaseDeleteResponse, CaseEntry, CasesResponse, ChangelogEntry, ChangelogResponse, ChangelogSection, Channel,
+    ChannelRef, ComicBrowseFilters, ComicBrowsePage, ComicCharacter, ComicCredit, ComicDetail, ComicDetailSeries,
+    ComicFeedEntry, ComicNameEntry, ComicNamesResponse, ComicRelease, ComicSeriesList, ComicSeriesPage,
+    ComicSeriesSummary, ComicsResponse, CommandUsage, CustomBotAck, CustomBotProfile, EconomyInfo, EconomySettings,
+    EmojiStatEntry, EmojiStatsResponse, GalleryDeleteResult, GalleryImage, GalleryResponse, GalleryUploadResult,
+    GameOverviewEntry, GamePlayerEntry, GamesStats, GiveawayInfo, GiveawaysResponse, GuildFlags, GuildHealth,
+    GuildInfo, GuildOverview, GuildOverviewBot, GuildOverviewFeatures, GuildOverviewGuild, GuildOverviewStats,
+    GuildStats, HealthFeature, HistoryAvatarEntry, HistoryNameEntry, HistoryPresenceEntry, IgnoredEntity,
+    InventoryChange, InventoryItem, LeaderboardEntry, LeaderboardResponse, LevelingConfig, LockdownEntry,
+    LockdownsResponse, LotteryInfo, LyricLine, Member, MemberActionResult, MemberBalance, MemberCase,
+    MemberCommandStats, MemberDetail, MemberEconomy, MemberInventory, MemberLevel, MemberLeveling, MemberMessage,
+    MemberMessages, MemberNameHistory, MemberOwnedTag, MemberRoleBadge, MemberRolesResult, MemberSelf,
+    MemberSelfLeveling, MemberTopCommand, MembersResponse, MusicAck, MusicAlbum, MusicAlbumInfo,
+    MusicAlwaysOnApplied, MusicArtist, MusicArtistInfo, MusicAudio, MusicAudioApplied, MusicChannelRef,
+    MusicControlResult, MusicDjModeApplied, MusicEqualizer, MusicEqualizerApplied, MusicFiltersState, MusicHistory,
+    MusicHistoryItem, MusicInfo, MusicLyrics, MusicPlayResult, MusicRelease, MusicSearch, MusicSetup,
+    MusicSetupResponse, MusicTrackFull, MusicTrending, MusicViewer, NameHistoryEntry, NewsFilters, NewsItem,
+    NewsItemSource, NewsPage, NewsRelated, NewsSource, NewsSourcesResponse, NewsSubject, Notification,
+    NotificationList, NotificationSummary, NotificationsReadResult, NowPlaying, OverviewWindow, PlaylistDetail,
+    PlaylistSummary, PlaylistTrack, PollInfo, PollsResponse, ProgressMark, ProgressResponse, QueueTrack, RankCard,
+    RecentCasesResponse, ReleaseCard, ReleaseProgressDeleted, ReleasesOverview, Reminder, RemindersResponse,
+    RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings, Role, RoleMenu, RoleMenuCreated,
+    RoleMenuNotice, RoleMenuRole, RoleMenusResponse, RoleRef, SentinelInfo, ShopItem, StarboardInfo, StarboardSaved,
+    StarboardTop, Subject, SubjectsResponse, Subscription, SubscriptionDeleted, SubscriptionsResponse, TagCreator,
+    TagDetail, TagInfo, TagsResponse, TempChannelEntry, TempChannelsResponse, TemplateEntry, TemplateVariable,
+    TemplatesResponse, TrackLink, TrackRequester, TrendingTrack, UserAvatar, UserGuild, UserHistory, UserSettings,
+    WarnPolicy, WarnThreshold, WatchCredit, WatchEra, WatchPath, WatchPeopleResponse, WatchPerson,
+    WatchPersonCredit, WatchPersonPage, WatchPersonSummary, WatchPrefs, WatchProgressDeleted, WatchProgressEntry,
+    WatchProgressResponse, WatchProvider, WatchStats, WatchTitle, WatchTitleDetail, WatchTrailer, WatchUniverse,
+    WatchUniversePage, WatchUniverseSummary, WatchUniversesResponse, WebhookCreateResponse,
+    WebhookDeliveriesResponse, WebhookDelivery, WebhookEventsResponse, WebhookSubscription,
+    WebhookSubscriptionsResponse, WebhookTestResponse, XpHistoryPoint, XpHistoryResponse
 };
-    AlwaysOnState, CustomBotProfile, GalleryImage, GalleryResponse, GalleryUploadResult, LyricLine, MusicAlbum,
-    MusicAlbumInfo, MusicArtist, MusicArtistInfo, MusicAudio, MusicChannelRef, MusicEqualizer, MusicFiltersState,
-    MusicHistory, MusicHistoryItem, MusicInfo, MusicLyrics, MusicPlayResult, MusicRelease, MusicSearch, MusicSetup,
-    MusicSetupResponse, MusicTrending, MusicViewer, NowPlaying, QueueTrack, TrackLink, TrackRequester, TrendingTrack,
-}; // music + profile + gallery domain
 
 /// A track as Percy's `_serialize_track` sends it; the live queue uses the same shape.
 pub type MusicTrack = QueueTrack;

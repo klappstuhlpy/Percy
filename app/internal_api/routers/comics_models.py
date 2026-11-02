@@ -87,7 +87,7 @@ class ComicSeriesSummary(BaseModel):
     """One series card in the ``GET /comics/series`` index."""
 
     series_slug: str
-    series_name: str
+    series_name: str | None
     brand: str
     issue_count: int
     latest: str | None
@@ -103,7 +103,7 @@ class ComicSeriesPage(BaseModel):
     """``GET /comics/series/{slug}``: one series and every issue in it."""
 
     series_slug: str
-    series_name: str
+    series_name: str | None
     brand: str
     publisher: str | None
     issue_count: int

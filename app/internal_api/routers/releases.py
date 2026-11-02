@@ -139,7 +139,7 @@ class SubscriptionPatchBody(BaseModel):
     delivery: Delivery | None = None
 
 
-class ProgressEntry(BaseModel):
+class ReleaseProgressEntry(BaseModel):
     """One item's read/watched/skipped state, as the client last saw it.
 
     ``release_key`` is the identity the delivery claim and the overview cards already use --
@@ -153,10 +153,10 @@ class ProgressEntry(BaseModel):
     updated_at: datetime.datetime | None = None
 
 
-class ProgressBody(BaseModel):
+class ReleaseProgressBody(BaseModel):
     """A bulk progress merge: the client's whole local set, or a single debounced toggle."""
 
-    entries: list[ProgressEntry] = Field(default_factory=list)
+    entries: list[ReleaseProgressEntry] = Field(default_factory=list)
 
 
 def _check_subject_type(media: str, subject_type: str) -> str:
@@ -324,7 +324,7 @@ async def list_progress(
 
 
 @router.put("/users/{discord_id}/progress")
-async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBody, Body()]) -> ProgressResponse:
+async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ReleaseProgressBody, Body()]) -> ProgressResponse:
     """Merges a batch of progress entries, last-write-wins, and returns the merged set.
 
     The same contract as ``PUT /watchlist/users/{id}/progress``: the client sends its own

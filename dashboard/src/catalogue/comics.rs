@@ -240,8 +240,8 @@ pub async fn comic_series_detail(
 
     ComicSeriesTemplate {
         account: viewer(&session),
+        series_name: page.series_name.unwrap_or_else(|| page.series_slug.clone()),
         series_slug: page.series_slug,
-        series_name: page.series_name,
         brand_label: brand_label(&page.brand).to_string(),
         accent: brand_accent(&page.brand).to_string(),
         publisher: page.publisher,
@@ -1206,7 +1206,7 @@ mod tests {
     fn series_summary(latest: Option<String>) -> percy_client::ComicSeriesSummary {
         percy_client::ComicSeriesSummary {
             series_slug: "amazing-spider-man".into(),
-            series_name: "Amazing Spider-Man".into(),
+            series_name: Some("Amazing Spider-Man".into()),
             brand: "MARVEL".into(),
             issue_count: 12,
             latest,

@@ -30,7 +30,7 @@ pub(crate) struct CardField {
     pub(crate) current: String,
     /// Text of the empty option, e.g. "Server default (Ink)".
     pub(crate) default_label: String,
-    pub(crate) options: Vec<percy_client::RankCardOption>,
+    pub(crate) options: Vec<percy_client::CardOption>,
 }
 
 pub(crate) const CARD_FIELDS: [(&str, &str); 4] = [
@@ -51,24 +51,13 @@ impl CardField {
 
     /// The pickers for a server's default card style (empty choice = built-in look).
     pub(crate) fn for_server(config: &percy_client::LevelingConfig) -> Vec<CardField> {
-        let options = config
-            .card_options
-            .iter()
-            .map(|(k, v)| {
-                let v = v
-                    .iter()
-                    .map(|o| percy_client::RankCardOption { value: o.value.clone(), label: o.label.clone() })
-                    .collect();
-                (k.clone(), v)
-            })
-            .collect();
-        Self::build(&config.card_style, &HashMap::new(), &options, "Built-in")
+        Self::build(&config.card_style, &HashMap::new(), &config.card_options, "Built-in")
     }
 
     fn build(
         style: &HashMap<String, String>,
         fallback: &HashMap<String, String>,
-        options: &HashMap<String, Vec<percy_client::RankCardOption>>,
+        options: &HashMap<String, Vec<percy_client::CardOption>>,
         default_word: &'static str,
     ) -> Vec<CardField> {
         CARD_FIELDS

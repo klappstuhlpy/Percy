@@ -1,14 +1,13 @@
 //! Typed response models for Percy's internal API.
 
-use serde::{Deserialize, Serialize};
-use crate::generated::{CardOption, LevelingConfig};
-use std::collections::HashMap;
-use crate::generated::{AiChannelOverride, AiConfig, ChannelRef, RoleRef}; // guild domain
-use crate::generated::{PlaylistSummary, PlaylistTrack};
+use crate::generated::LevelingConfig;
 #[cfg(test)]
 use crate::generated::PlaylistDetail;
+use crate::generated::{AiChannelOverride, AiConfig, ChannelRef}; // guild domain
 use crate::generated::{MemberDetail, MemberRoleBadge, MemberSelf};
+use crate::generated::{PlaylistSummary, PlaylistTrack};
 use crate::MusicHistoryItem;
+use serde::{Deserialize, Serialize};
 
 /// One controlled feature in an override's summary (for the dashboard table).
 pub struct AiFeatureState {
@@ -45,7 +44,6 @@ impl AiConfig {
     }
 }
 
-
 // -- Leveling types ----------------------------------------------------------
 
 /// `{ok, message}` answer of an action that reports what it did in words.
@@ -56,7 +54,6 @@ pub struct ActionMessage {
     #[serde(default)]
     pub message: String,
 }
-
 
 // -- Member detail (user lookup) ---------------------------------------------
 
@@ -89,10 +86,6 @@ impl LevelingConfig {
     pub fn unconfigured() -> Self {
         serde_json::from_value(serde_json::json!({ "enabled": false })).unwrap_or_default()
     }
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[derive(Debug, Serialize)]
@@ -283,7 +276,6 @@ pub struct SentinelSaved {
 
 // -- Economy types -----------------------------------------------------------
 
-
 // -- Music types -------------------------------------------------------------
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -301,7 +293,6 @@ pub struct TopTrack {
     #[serde(default)]
     pub plays: u64,
 }
-
 
 /// A track to save: what the dashboard knows about it at the moment it is liked or added.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -342,8 +333,7 @@ mod music_app_tests {
 
     #[test]
     fn generated_music_types_keep_the_js_keys() {
-        let f: MusicFiltersState =
-            serde_json::from_str(r#"{"nightcore":false,"8d":true,"lowpass":null}"#).unwrap();
+        let f: MusicFiltersState = serde_json::from_str(r#"{"nightcore":false,"8d":true,"lowpass":null}"#).unwrap();
         let v = serde_json::to_value(&f).unwrap();
         assert_eq!(v["8d"], true);
         assert!(v["lowpass"].is_null());
@@ -577,7 +567,9 @@ pub struct NewsQuery<'a> {
 
 #[cfg(test)]
 mod notification_tests {
-    use crate::generated::{ActionRequestList, NotificationList, NotificationSummary, RequestDecision, RequestSettings};
+    use crate::generated::{
+        ActionRequestList, NotificationList, NotificationSummary, RequestDecision, RequestSettings,
+    };
 
     #[test]
     fn notification_list_reads_integer_ids() {

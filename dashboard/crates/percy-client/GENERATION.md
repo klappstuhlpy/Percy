@@ -22,7 +22,7 @@ pydantic models --(scripts/export_openapi.py)--> openapi.json --(cargo run -p pe
   typify and friends are never dependencies of `percy-client` or the dashboard binary.
 - **Which schemas are generated is automatic:** every component schema reachable from a 2xx JSON
   response. Request-body models are not generated yet (the client sends `serde_json::Value`).
-- **The migrated domains are re-exported by name** in `lib.rs`
+- **Generated types are re-exported by name** in `lib.rs`
   (`pub use generated::{...}`) so the dashboard's `percy_client::X` imports do not change. An
   explicit `use` shadows the `types::*` glob, so a half-migrated state compiles.
 - openapi.json is exported with `sort_keys=True`: properties (and so generated struct fields) are
@@ -50,13 +50,20 @@ pydantic models --(scripts/export_openapi.py)--> openapi.json --(cargo run -p pe
 
 ## Pitfalls found in the pilot
 
-- **Almost nothing was typed.** All 217 routes return `-> dict`; zero use `response_model`. The Python
-  modelling is the actual work; the Rust side is mechanical afterwards.
+- **The Python modelling is the actual work;** the Rust side is mechanical afterwards.
 - **Required vs `serde(default)`.** A pydantic field with no default is required in the schema
   and becomes a plain Rust field with no `#[serde(default)]`: a missing key is a hard
   deserialize error. Today's hand-written structs are lenient (`#[serde(default)]` everywhere)
   to survive an old Percy behind a new dashboard. In the monorepo they deploy together, so
   strict is fine; where a key really can be absent, give the pydantic field a default.
+- **Nullable columns must be `X | None`.** A required `str` fed by a nullable column makes the
+  dashboard fail to deserialize the whole response on the first NULL row (this bit
+  `ComicSeriesSummary.series_name`: `MIN(series_name)` over a NULL-able column). Check the
+  migration, not the sample payload.
+- **Wire names survive renames.** Keys that are not Rust identifiers (`8d`, `loop`, `type`,
+  `global`) are generated as `x8d`/`loop_`/`type_` with `#[serde(rename = "...")]`, so the JSON the
+  dashboard re-serializes to browser JS keeps the original key. Python side: `Field(alias='8d')`
+  (FastAPI serializes by alias).
 - **`X | None` without a default** = required nullable: generates `Option<X>` with
   `deserialize_with = Option::deserialize` (key must be present, may be null) and serializes as
   `null`. **`X | None = None`** (not required) additionally gets
@@ -86,15 +93,14 @@ pydantic models --(scripts/export_openapi.py)--> openapi.json --(cargo run -p pe
   names, `release_key`) must be `dict[str, T]` with a typed `T`, not nested bare `dict`, or the
   generated type is no better than `Value`.
 - **FastAPI shares schema names.** Two routers with identically named models collide
-  (`app__internal_api__routers__x__ProgressBody` in the schema today); give response models unique
-  names.
+  (`app__internal_api__routers__x__ProgressBody` was one); give models unique names.
 - Request bodies are intentionally out of scope here: they stay `serde_json::Value`/hand-built.
   Extending `response_schemas()` in `percy-codegen` to include request schemas is the next step.
 - Windows: the checkout is CRLF. `export_openapi.py` writes LF bytes; its `--check` and
   `percy-codegen --check` normalise CRLF so they pass locally and on Linux CI.
 - `generated.rs` is marked `#[rustfmt::skip]` in `lib.rs`; do not hand-edit it.
 
-## Verification block (per domain)
+## Verification block
 
 ```bash
 poetry run pytest -q -x -p no:warnings && poetry run ruff check . && poetry run pyright
@@ -106,36 +112,32 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-## Remaining domains (217 routes; 2 migrated)
+## State (all domains migrated)
 
-Counts are routes returning a bare `-> dict` / `list` today (all of them). Order is a suggestion:
-small and self-contained first.
+131 of 218 operations return a typed response model; every generated type is re-exported by name
+from `lib.rs` (one `pub use generated::{...}` list, exactly the `pub struct`/`pub enum` names in
+`generated.rs`; none is also defined in `types.rs`). `types.rs` keeps only request builders,
+query structs, helper `impl`s on generated types and a few shapes the schema cannot express.
 
-| Router file | Routes | Notes |
-|---|---:|---|
-| `analytics.py` | 2 | **done (pilot)** |
-| `starboard.py` | 2 | small, easy |
-| `profile.py` | 3 | **done** |
-| `gallery.py` | 3 | **done** |
-| `news.py` | 3 | pure payload builders in `app/services/news/payload.py` |
-| `webhooks.py` (vote webhooks) | 2 | no dashboard consumer; skip unless wanted |
-| `rolemenus.py` | 6 | **done** (ok-only DELETE/PATCH left as `dict`) |
-| `backup.py` | 6 | **done**: only `GET /templates` typed; export/import/apply stay `dict` |
-| `notifications.py` | 7 | |
-| `members.py` | 7 | |
-| `subscriptions.py` (outbound webhooks) | 7 | |
-| `comics.py` | 5 | **done** (typed; shaping in `app/services/comics/payload.py`) |
-| `stats.py` | 9 | mixed scope |
-| `releases.py` | 9 | **done** (typed; `progress` map: `dict[str, dict[str, Row]]`) |
-| `watchlist.py` | 11 | **done** (typed; large nested payloads) |
-| `moderation.py` | 12 | 1 route has no JSON body |
-| `leveling.py` | 12 | |
-| `economy.py` | 15 | |
-| `music.py` | 18 | **done** (models in `music_models.py`; `MusicHistoryItem` shared with users.py) |
-| `guild.py` | 20 | biggest config surface; `Option` leniency matters most here |
-| `users.py` | 21 | includes PNG-preview and data-export routes (leave non-JSON alone) |
-| `content.py` | 37 | **partly done**: polls, giveaways, tags list+detail, comics feeds, temp-channels, lockdowns, emoji-stats GETs typed (`content_models.py`). Left: `/commands` (`CommandInfo` is shared with `/commands/public`), `/status-feed` (`ChannelRef`), tag export/import, `{ok}` mutations |
+**Shared models have one definition.** `ChannelRef`/`RoleRef`/`Role`/`Channel`/`IgnoredEntity` live
+in `routers/guild_models.py` and are imported by every other router; `CardOption` (leveling.py) is
+the rank card preset everywhere; `MusicHistoryItem` is in `music_models.py`. After adding a model
+check `components.schemas` for `app__internal_api__...` or numbered names - that means two classes
+share a name.
 
-Routes can be migrated in any order and in parallel: the only shared files are `types.rs`/`lib.rs`
-(delete a block, extend the `pub use generated::{...}` list - expect trivial merge conflicts on that
-one line) and the regenerated `openapi.json`/`generated.rs`, which is simply re-generated after a merge.
+## Deliberately untyped (87 operations)
+
+- **`{ok: true}`-style acknowledgements** - the majority of `POST`/`PATCH`/`DELETE` mutations
+  (comics, polls, giveaways, tags, economy, leveling, rolemenus, sentinel, setup, temp-channels,
+  templates, webhooks, lockdowns, user reminders/liked/playlist tracks, ...). The client uses
+  `send_unit` or the shared hand-written `ActionMessage`.
+- **File/binary/open-ended bodies** - `GET .../backup/export`, `POST .../backup/import`,
+  `GET .../tags/export`, `POST .../tags/import`, `GET /users/{id}/data-export`,
+  `POST /users/{id}/rank-card/preview` (PNG), `GET .../events` (SSE).
+- **Still `-> dict` reads** the dashboard consumes as `serde_json::Value`: `GET .../commands`,
+  `.../commands/permissions`, `.../status-feed`, `GET /bot/metrics`, `GET /commands/public`,
+  `/feature-flags`, `GET /users/{id}/music`.
+- **Vote webhooks** (`/api/webhooks/*`) - external callers, no dashboard consumer.
+
+Typing one of these later: add the model, delete nothing (there is no hand-written struct), add a
+typed `send_into::<Model>` method.

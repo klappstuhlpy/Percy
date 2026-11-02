@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_moderator
-from .starboard import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
+from .guild_models import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
     from app.cogs.rolemenu.cog import RoleMenus

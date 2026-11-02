@@ -18,6 +18,7 @@ from app.rendering.card_style import clean_style, resolve_style, style_options
 from app.services.lyrics import display_title
 
 from ..dependencies import BotDep, verify_token
+from .leveling import CardOption  # noqa: TC001 - pydantic resolves it at runtime
 from .music import serialize_play
 
 if TYPE_CHECKING:
@@ -99,17 +100,12 @@ class UserHistory(BaseModel):
     presence: list[HistoryPresenceEntry]
 
 
-class RankCardOption(BaseModel):
-    value: str
-    label: str
-
-
 class RankCard(BaseModel):
     style: dict[str, str]
     guild_default: dict[str, str]
     locked: bool
     effective: dict[str, str]
-    options: dict[str, list[RankCardOption]]
+    options: dict[str, list[CardOption]]
 
 
 class Reminder(BaseModel):

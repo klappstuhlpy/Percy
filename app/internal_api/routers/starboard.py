@@ -9,10 +9,11 @@ from typing import TYPE_CHECKING
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel
+from .guild_models import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
     from app.cogs.starboard.cog import Starboard
@@ -33,16 +34,6 @@ class PatchStarboardBody(BaseModel):
 
 
 # Response models: the source of truth for percy-client's generated types (GENERATION.md).
-
-
-class ChannelRef(BaseModel):
-    """A channel as ``resolve_channel`` shapes it (``type`` is the Discord channel type name)."""
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str
-    name: str
-    channel_type: str = Field(alias='type')
 
 
 class StarboardSettings(BaseModel):
