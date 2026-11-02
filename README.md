@@ -69,11 +69,12 @@ and the public release, news, watch-order and comic pages. There is no third-par
 | **Core moderation**      | `kick`, `ban`, `multiban`, `softban`, `unban`, `mute`/`unmute`, `tempban`, `tempmute`, `selfmute`, `purge` (with rich filters), `slowmode`.                                     |
 | **Mute role management** | Create, bind, sync and unbind a mute role; permission overwrites are applied across channels automatically (and kept in sync as channels are created).                          |
 | **Lockdowns**            | Lock down individual channels or the whole server (`lockdown` group), with automatic, timed un-locking via the timer system and lockout protection for the bot.                 |
+| **Member restrictions**  | `voicekick`, `voiceban`, `nick`, `nickfreeze`, `channelmute`, sticky roles, and member `report`s (command + message context menu) with moderator buttons. |
 | **Auto-moderation**      | Configurable automod rules linked to Discord's native AutoMod, mention-spam detection, and **raid protection** that auto-bans spammers.                                         |
 | **Sentinel**             | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
 | **Anti-spam**            | A global `SpamChecker` that throttles command abuse, flags mention spam, and detects rapid-join raids.                                                                          |
 | **Audit logging**        | Broadcast a configurable subset of server audit-log events to a channel/webhook.                                                                                                |
-| **Mod cases**            | `warn` and a queryable case log of every mod action, announced in a modlog channel; cases are editable from Discord or the dashboard. `warnpolicy` sets warn expiry and automatic punishments at N active warns; `pardon`/`clearwarns` keep the record.                                          |
+| **Mod cases**            | `warn` (point-weighted, with reason presets) and a queryable case log of every mod action, announced in a modlog channel; cases are editable from Discord or the dashboard. `warnpolicy` sets warn expiry and automatic punishments at N active warns; `pardon`/`clearwarns` keep the record.                                          |
 
 > Temporary bans, mutes and lockdowns are all backed by the persistent **timer system**, so they survive restarts and
 > fire exactly when due.
