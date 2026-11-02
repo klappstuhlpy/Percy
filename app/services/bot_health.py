@@ -45,8 +45,12 @@ class ConnectionState:
     is_closed: bool
 
     def is_questionable(self, current_generation: int) -> bool:
-        """A holder is questionable if it is in use or from an older pool generation."""
-        return self.in_use or self.generation != current_generation
+        """A holder is questionable if it is in use or from an older pool generation.
+
+        Closed holders are idle slots (never opened, or reaped by ``max_inactive_connection_lifetime``)
+        and hold no connection, so their stale/missing generation means nothing.
+        """
+        return not self.is_closed and (self.in_use or self.generation != current_generation)
 
 
 @dataclass(slots=True)

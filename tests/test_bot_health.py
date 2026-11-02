@@ -36,7 +36,7 @@ def test_in_use_or_stale_generation_connections_are_questionable() -> None:
         _healthy_conn(),
         ConnectionState(generation=GEN, in_use=True, is_closed=False),  # in use
         ConnectionState(generation=GEN - 1, in_use=False, is_closed=False),  # old generation
-        ConnectionState(generation=GEN - 1, in_use=True, is_closed=True),  # both
+        ConnectionState(generation=GEN - 1, in_use=True, is_closed=False),  # both
     ]
 
     report = _assess(connections)
@@ -49,6 +49,13 @@ def test_in_use_or_stale_generation_connections_are_questionable() -> None:
 
 def test_closed_state_alone_does_not_make_a_connection_questionable() -> None:
     report = _assess([ConnectionState(generation=GEN, in_use=False, is_closed=True)])
+
+    assert report.questionable_connections == 0
+
+
+def test_closed_idle_slot_with_stale_generation_is_not_questionable() -> None:
+    # asyncpg reports never-opened / reaped slots as closed with an old (or no) generation.
+    report = _assess([ConnectionState(generation=GEN - 1, in_use=False, is_closed=True)])
 
     assert report.questionable_connections == 0
 
