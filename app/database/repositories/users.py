@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from app.database.personal_data import DELETED
 from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
@@ -66,14 +67,13 @@ class UsersRepository(BaseRepository):
         self.invalidate_cache("user_config_changed", user_id)
 
     async def delete_personal_data(self, user_id: int) -> None:
-        """Removes a user's tracked history (presence, avatar and item) in one transaction."""
+        """Erases the user's data in every ``personal_data.DELETED`` table in one transaction."""
         async with self.acquire(timeout=300.0) as conn, conn.transaction():
-            # asyncpg runs parameterised statements through the extended protocol, which
-            # rejects multiple commands in one string — so issue each DELETE separately
-            # (still atomic within the surrounding transaction).
-            await conn.execute("DELETE FROM presence_history WHERE uuid = $1;", user_id)
-            await conn.execute("DELETE FROM avatar_history WHERE uuid = $1;", user_id)
-            await conn.execute("DELETE FROM item_history WHERE uuid = $1;", user_id)
+            # asyncpg's extended protocol rejects multiple commands per string, so one DELETE each
+            # (still atomic within the surrounding transaction). Names come from the constant registry.
+            for entry in DELETED:
+                table, column = entry.split('.')
+                await conn.execute(f"DELETE FROM {table} WHERE {column} = $1;", user_id)
 
     async def export_all_user_data(self, user_id: int) -> dict[str, object]:
         """Collects *all* personal data Percy stores about a user, for a data-access request.
