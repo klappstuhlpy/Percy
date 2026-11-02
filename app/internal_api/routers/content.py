@@ -12,6 +12,16 @@ from pydantic import BaseModel
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import invalidate_cog_cache, parse_id, resolve_channel
+from .content_models import (
+    ComicsResponse,
+    EmojiStatsResponse,
+    GiveawaysResponse,
+    LockdownsResponse,
+    PollsResponse,
+    TagDetail,
+    TagsResponse,
+    TempChannelsResponse,
+)
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Content"], dependencies=[Depends(verify_token)])
 
@@ -141,7 +151,7 @@ async def get_polls(
     bot: BotDep,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> dict:
+) -> PollsResponse:
     records = await bot.db.polls.get_for_guild(guild.id)
 
     polls = []
@@ -168,7 +178,7 @@ async def get_polls(
 
     total = len(polls)
     polls = polls[offset:offset + limit]
-    return {'polls': polls, 'total': total}
+    return PollsResponse.model_validate({'polls': polls, 'total': total})
 
 
 @router.post("/polls")
@@ -406,7 +416,7 @@ async def get_giveaways(
     bot: BotDep,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> dict:
+) -> GiveawaysResponse:
     records = await bot.db.giveaways.get_guild_giveaways(guild.id)
 
     giveaways = []
@@ -434,7 +444,7 @@ async def get_giveaways(
 
     total = len(giveaways)
     giveaways = giveaways[offset:offset + limit]
-    return {'giveaways': giveaways, 'total': total}
+    return GiveawaysResponse.model_validate({'giveaways': giveaways, 'total': total})
 
 
 @router.post("/giveaways")
@@ -531,7 +541,7 @@ async def delete_giveaway(guild: GuildDep, bot: BotDep, giveaway_id: int) -> dic
 
 
 @router.get("/tags")
-async def get_tags(guild: GuildDep, bot: BotDep) -> dict:
+async def get_tags(guild: GuildDep, bot: BotDep) -> TagsResponse:
     total = await bot.db.tags.count_tags(guild.id)
     # Full directory (every parent tag), used by the dashboard's searchable
     # table, export selection and per-tag preview. Owners are resolved from
@@ -565,12 +575,12 @@ async def get_tags(guild: GuildDep, bot: BotDep) -> dict:
             'count': record.get('count', 0),
         })
 
-    return {
+    return TagsResponse.model_validate({
         'total': total,
         'total_uses': total_uses,
         'tags': tags,
         'top_creators': creators,
-    }
+    })
 
 
 @router.get("/tags/export")
@@ -693,14 +703,14 @@ async def import_tags(guild: GuildDep, bot: BotDep, body: ImportTagsBody) -> dic
 
 
 @router.get("/tags/{tag_id}")
-async def get_tag_detail(guild: GuildDep, bot: BotDep, tag_id: int) -> dict:
+async def get_tag_detail(guild: GuildDep, bot: BotDep, tag_id: int) -> TagDetail:
     record = await bot.db.tags.get_tag_record(tag_id, location_id=guild.id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='tag not found')
 
     owner_id = record.get('owner_id')
     member = guild.get_member(owner_id) if owner_id else None
-    return {
+    return TagDetail.model_validate({
         'id': record['id'],
         'name': record['name'],
         'content': record['content'],
@@ -708,7 +718,7 @@ async def get_tag_detail(guild: GuildDep, bot: BotDep, tag_id: int) -> dict:
         'owner_name': member.display_name if member else None,
         'uses': record.get('uses', 0),
         'created_at': record['created_at'].isoformat() if record.get('created_at') else None,
-    }
+    })
 
 
 @router.delete("/tags/{tag_id}")
@@ -910,7 +920,7 @@ async def delete_command_permissions(guild: GuildDep, bot: BotDep, command: str)
 
 
 @router.get("/comics")
-async def get_comics(guild: GuildDep, bot: BotDep) -> dict:
+async def get_comics(guild: GuildDep, bot: BotDep) -> ComicsResponse:
     feeds = []
     for brand_name in ('MARVEL', 'DC', 'MANGA'):
         record = await bot.db.comics.get_config(guild.id, brand_name)
@@ -925,7 +935,7 @@ async def get_comics(guild: GuildDep, bot: BotDep) -> dict:
                 'pin': record.get('pin', False),
                 'next_pull': record['next_pull'].isoformat() if record.get('next_pull') else None,
             })
-    return {'feeds': feeds}
+    return ComicsResponse.model_validate({'feeds': feeds})
 
 
 @router.post("/comics")
@@ -1006,7 +1016,7 @@ async def push_comic(guild: GuildDep, bot: BotDep, brand: str) -> dict:
 
 
 @router.get("/temp-channels")
-async def get_temp_channels(guild: GuildDep, bot: BotDep) -> dict:
+async def get_temp_channels(guild: GuildDep, bot: BotDep) -> TempChannelsResponse:
     # Live spawned channels are tracked globally in ``bot.temp_channels``
     # ({channel_id: True}); there is no stored hub->spawned link, so we group
     # the currently-active ones by their category and attach them to the hub
@@ -1040,7 +1050,7 @@ async def get_temp_channels(guild: GuildDep, bot: BotDep) -> dict:
             'active_channels': active,
             'total_users': sum(a['user_count'] for a in active),
         })
-    return {'entries': entries}
+    return TempChannelsResponse.model_validate({'entries': entries})
 
 
 @router.post("/temp-channels")
@@ -1126,7 +1136,7 @@ async def delete_status_feed(guild: GuildDep, bot: BotDep) -> dict:
 
 
 @router.get("/lockdowns")
-async def get_lockdowns(guild: GuildDep, bot: BotDep) -> dict:
+async def get_lockdowns(guild: GuildDep, bot: BotDep) -> LockdownsResponse:
     records = await bot.db.moderation.get_lockdowns(guild.id)
     entries = []
     for r in records:
@@ -1135,7 +1145,7 @@ async def get_lockdowns(guild: GuildDep, bot: BotDep) -> dict:
             'channel_id': str(r['channel_id']),
             'channel_name': ch.name if ch else 'deleted-channel',
         })
-    return {'entries': entries}
+    return LockdownsResponse.model_validate({'entries': entries})
 
 
 def _channel_ids(raw: list[int | str]) -> list[int]:
@@ -1187,7 +1197,7 @@ async def get_emoji_stats(
     bot: BotDep,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> dict:
+) -> EmojiStatsResponse:
     summary = await bot.db.emoji_stats.get_guild_summary(guild.id)
     top = await bot.db.emoji_stats.get_top_guild_emojis(guild.id, limit=limit + offset)
 
@@ -1203,9 +1213,9 @@ async def get_emoji_stats(
 
     total = len(entries)
     entries = entries[offset:offset + limit]
-    return {
+    return EmojiStatsResponse.model_validate({
         'total_uses': summary['Count'] if summary else 0,
         'distinct_emojis': summary['Emoji'] if summary else 0,
         'entries': entries,
         'total': total,
-    }
+    })

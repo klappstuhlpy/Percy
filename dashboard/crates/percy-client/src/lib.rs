@@ -31,6 +31,7 @@ pub use generated::{
     HistoryAvatarEntry, HistoryNameEntry, HistoryPresenceEntry, PlaylistDetail, PlaylistSummary, PlaylistTrack, RankCard,
     RankCardOption, Reminder, RemindersResponse, UserAvatar, UserGuild, UserHistory, UserSettings,
 }; // users domain
+pub use generated::{ActiveTempChannel, ComicFeedEntry, ComicsResponse, EmojiStatEntry, EmojiStatsResponse, GiveawayInfo, GiveawaysResponse, LockdownEntry, LockdownsResponse, PollInfo, PollsResponse, TagCreator, TagDetail, TagInfo, TagsResponse, TempChannelEntry, TempChannelsResponse}; // content domain
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]
