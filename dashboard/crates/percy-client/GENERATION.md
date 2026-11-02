@@ -114,18 +114,18 @@ small and self-contained first.
 | Router file | Routes | Notes |
 |---|---:|---|
 | `analytics.py` | 2 | **done (pilot)** |
-| `starboard.py` | 2 | small, easy |
+| `starboard.py` | 2 | **done** |
 | `profile.py` | 3 | `{ok}` replies + one object |
 | `gallery.py` | 3 | `asdict(dataclass)` results: model the dataclass fields |
 | `news.py` | 3 | pure payload builders in `app/services/news/payload.py` |
 | `webhooks.py` (vote webhooks) | 2 | no dashboard consumer; skip unless wanted |
-| `rolemenus.py` | 6 | |
-| `backup.py` | 6 | export blob is intentionally free-form JSON: leave as `dict` |
-| `notifications.py` | 7 | **done** |
-| `members.py` | 7 | **done** |
-| `subscriptions.py` (outbound webhooks) | 7 | |
+| `rolemenus.py` | 6 | **done** (ok-only DELETE/PATCH left as `dict`) |
+| `backup.py` | 6 | **done**: only `GET /templates` typed; export/import/apply stay `dict` |
+| `notifications.py` | 7 | |
+| `members.py` | 7 | |
+| `subscriptions.py` (outbound webhooks) | 7 | **done** (ok-only DELETE left as `dict`) |
 | `comics.py` | 5 | shaping in `app/services/comics/payload.py` |
-| `stats.py` | 9 | mixed scope |
+| `stats.py` | 9 | **done** except `/bot/metrics`, `/feature-flags` (free-form), `/commands/public` (`CommandInfo` shared with content.py) |
 | `releases.py` | 9 | `progress` map: `dict[str, dict[str, Row]]` |
 | `watchlist.py` | 11 | large nested payloads |
 | `moderation.py` | 12 | **done** 1 route has no JSON body |

@@ -48,6 +48,16 @@ pub use generated::{
     NotificationsReadResult, RecentCasesResponse, RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings,
     WarnPolicy, WarnThreshold,
 }; // members + moderation + notifications domains
+// stats / outbound webhooks / backup templates / role menus / starboard domain (`ChannelRef` stays
+// hand-written: it is shared with the channel lists).
+#[rustfmt::skip]
+pub use generated::{
+    BotStats, ChangelogEntry, ChangelogResponse, ChangelogSection, CommandUsage, GameOverviewEntry, GamePlayerEntry,
+    GamesStats, GuildOverview, GuildOverviewBot, GuildOverviewFeatures, GuildOverviewGuild, GuildOverviewStats,
+    GuildStats, RoleMenu, RoleMenuRole, RoleMenusResponse, StarboardInfo, StarboardTop, TemplateEntry,
+    TemplatesResponse, WebhookCreateResponse, WebhookDeliveriesResponse, WebhookDelivery, WebhookEventsResponse,
+    WebhookSubscription, WebhookSubscriptionsResponse, WebhookTestResponse,
+};
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

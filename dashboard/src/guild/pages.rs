@@ -203,6 +203,7 @@ pub async fn guild_stats(State(app): State<AppState>, session: Session, Path(gui
         Err(_) => return Redirect::to(&format!("/dashboard/guild/{guild_id}")).into_response(),
     };
     let bot_stats = bot_stats.unwrap_or(BotStats {
+        ai: None,
         version: None,
         guild_count: 0,
         user_count: 0,

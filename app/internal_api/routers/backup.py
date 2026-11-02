@@ -49,6 +49,27 @@ class PublishTemplateBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response models: the source of truth for percy-client's generated types (GENERATION.md).
+# The export blob and import/apply reports are open-ended documents and stay untyped.
+# ---------------------------------------------------------------------------
+
+
+class TemplateEntry(BaseModel):
+    slug: str
+    name: str
+    description: str | None
+    downloads: int
+    created_at: str | None
+    #: Only present on the caller's own templates.
+    public: bool | None = None
+
+
+class TemplatesResponse(BaseModel):
+    public: list[TemplateEntry]
+    own: list[TemplateEntry]
+
+
+# ---------------------------------------------------------------------------
 # Section collection / application (shared by backup + templates)
 # ---------------------------------------------------------------------------
 
@@ -175,8 +196,9 @@ async def import_backup(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/templates")
-async def list_templates(guild: GuildDep, bot: BotDep, limit: int = Query(default=50, ge=1, le=100)) -> dict:
+# exclude_unset: the public gallery rows carry no ``public`` key, exactly as before typing.
+@router.get("/templates", response_model_exclude_unset=True)
+async def list_templates(guild: GuildDep, bot: BotDep, limit: int = Query(default=50, ge=1, le=100)) -> TemplatesResponse:
     """Public templates (the gallery) plus the ones this guild has published."""
     public = await bot.db.templates.list_public(limit=limit)
     own = await bot.db.templates.list_for_guild(guild.id)
@@ -187,13 +209,13 @@ async def list_templates(guild: GuildDep, bot: BotDep, limit: int = Query(defaul
             "downloads": r["downloads"], "created_at": r["created_at"].isoformat() if r["created_at"] else None,
         }
 
-    return {
+    return TemplatesResponse.model_validate({
         "public": [_pub(r) for r in public],
         "own": [
             {**_pub(r), "public": r["public"]}
             for r in own
         ],
-    }
+    })
 
 
 @router.post("/templates")
