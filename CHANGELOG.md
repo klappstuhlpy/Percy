@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Internal API: `GET /music/trending` also returns `charts`, Deezer's key-less worldwide chart (cached 1 h, empty when Deezer is unreachable).
+
 ## [2.27.0] - 2026-11-02
 
 ### Added
