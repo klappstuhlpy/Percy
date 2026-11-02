@@ -23,6 +23,7 @@ from discord.ext import commands
 from discord.ext.commands.view import StringView
 
 from app.cogs.config import parse_permission_names
+from app.cogs.custom_commands.ui import CustomCommandManager
 from app.core import Cog, Context, Flags, flag, store_true
 from app.core.errors import CommandDisabled
 from app.core.models import PermissionTemplate, describe, group
@@ -188,7 +189,7 @@ class CustomCommands(Cog):
             return
 
         uses = await self.bot.db.custom_commands.bump_uses(cc.id)
-        values |= self._context_values(ctx, raw, tokens, uses)
+        values |= self.context_values(ctx.author, ctx.channel, ctx.guild, raw, tokens, uses)
         content = render(random.choice(cc.responses), values)
         if content.strip():
             await ctx.send(content, allowed_mentions=self._allowed_mentions(ctx.guild, content))
@@ -206,9 +207,10 @@ class CustomCommands(Cog):
         return discord.AllowedMentions(everyone=False, users=True, roles=roles, replied_user=False)
 
     @staticmethod
-    def _context_values(ctx: Context, raw: str, tokens: list[str], uses: int) -> dict[str, str]:
-        author, channel, guild = ctx.author, ctx.channel, ctx.guild
-        assert guild is not None
+    def context_values(
+        author: discord.abc.User, channel: Any, guild: discord.Guild, raw: str, tokens: list[str], uses: int
+    ) -> dict[str, str]:
+        """The built-in placeholders (author/channel/guild/args/uses/0-9); shared with the manager's Test."""
         values = {
             'author': author.display_name, 'author.id': str(author.id), 'author.name': author.name,
             'author.mention': author.mention,
@@ -314,12 +316,28 @@ class CustomCommands(Cog):
             changes['delete_invocation'] = False
         return changes
 
-    async def _save(self, ctx: Context, merged: dict[str, Any], *, command_id: int | None) -> CustomCommand | None:
-        index = await self.bot.db.get_custom_command_index(ctx.guild.id)
+    async def save(
+        self, guild_id: int, author_id: int, merged: dict[str, Any], *, command_id: int | None
+    ) -> CustomCommand | None:
+        """Validate and store a command (``command_id=None`` creates). Raises :class:`ValueError` (user-facing).
+
+        Shared by the text commands and the interactive manager; ``None`` means the edited command is gone.
+        """
+        if command_id is None and await self.bot.db.custom_commands.count_commands(guild_id) >= MAX_COMMANDS:
+            raise ValueError(f'This server already has the maximum of {MAX_COMMANDS} custom commands.')
+        index = await self.bot.db.get_custom_command_index(guild_id)
         values = validate_command(merged, index, self._real_names(), command_id=command_id)
         if command_id is None:
-            return await self.bot.db.custom_commands.create_command(ctx.guild.id, ctx.author.id, **values)
-        return await self.bot.db.custom_commands.update_command(ctx.guild.id, command_id, **values)
+            return await self.bot.db.custom_commands.create_command(guild_id, author_id, **values)
+        return await self.bot.db.custom_commands.update_command(guild_id, command_id, **values)
+
+    async def alias_problem(self, guild_id: int, name: str, expansion: str) -> str | None:
+        """Why the alias cannot be saved (rules and the server cap), or ``None``. Shared with the manager."""
+        index = await self.bot.db.get_custom_command_index(guild_id)
+        problem = alias_problem(name, expansion, index, self._real_names())
+        if problem is None and name not in index.aliases and len(index.aliases) >= MAX_ALIASES:
+            problem = f'This server already has the maximum of {MAX_ALIASES} aliases.'
+        return problem
 
     @group(
         'customcommand',
@@ -336,8 +354,10 @@ class CustomCommands(Cog):
         `{choice:a|b|c}` and `{random:1-100}`. Signatures: `<name:type>` required, `[name:type]`
         optional, `[name:type=default]`, `[name:type...]` takes the rest, `--flag:type`, `--flag`.
         Types: str, int, number, bool, member, user, role, channel, duration.
+
+        Run it without a subcommand to open the interactive manager.
         """
-        await ctx.send_help('customcommand')
+        await CustomCommandManager.open(self, ctx)
 
     @customcommand.command(
         'create', aliases=['add'], description='Create a custom command.', guild_only=True,
@@ -346,12 +366,9 @@ class CustomCommands(Cog):
     @describe(name='The command name.', response='What it answers (placeholders allowed).')
     async def cc_create(self, ctx: Context, name: str, *, response: str, flags: CustomCommandFlags) -> None:
         """Create a custom command, e.g. `cc create hug {author} hugs {who}! --args "<who:member>"`."""
-        if await self.bot.db.custom_commands.count_commands(ctx.guild.id) >= MAX_COMMANDS:
-            await ctx.send_error(f'This server already has the maximum of {MAX_COMMANDS} custom commands.')
-            return
         try:
             merged = {'name': name.lower(), 'responses': [response]} | await self._flag_changes(ctx, flags)
-            cc = await self._save(ctx, merged, command_id=None)
+            cc = await self.save(ctx.guild.id, ctx.author.id, merged, command_id=None)
         except ValueError as exc:
             await ctx.send_error(str(exc))
             return
@@ -371,7 +388,7 @@ class CustomCommands(Cog):
             merged = cc.editable() | await self._flag_changes(ctx, flags)
             if response:
                 merged['responses'] = [response]
-            await self._save(ctx, merged, command_id=cc.id)
+            await self.save(ctx.guild.id, ctx.author.id, merged, command_id=cc.id)
         except ValueError as exc:
             await ctx.send_error(str(exc))
             return
@@ -387,7 +404,7 @@ class CustomCommands(Cog):
         if cc is None:
             return
         try:
-            await self._save(ctx, cc.editable() | {'responses': [*cc.responses, response]}, command_id=cc.id)
+            await self.save(ctx.guild.id, ctx.author.id, cc.editable() | {'responses': [*cc.responses, response]}, command_id=cc.id)
         except ValueError as exc:
             await ctx.send_error(str(exc))
             return
@@ -423,7 +440,7 @@ class CustomCommands(Cog):
         if cc is None:
             return
         try:
-            await self._save(ctx, cc.editable() | {'name': new_name.lower()}, command_id=cc.id)
+            await self.save(ctx.guild.id, ctx.author.id, cc.editable() | {'name': new_name.lower()}, command_id=cc.id)
         except ValueError as exc:
             await ctx.send_error(str(exc))
             return
@@ -506,11 +523,7 @@ class CustomCommands(Cog):
     @describe(name='The alias.', expansion='What it expands to, e.g. `ban {0} spamming`.')
     async def alias_add(self, ctx: Context, name: str, *, expansion: str) -> None:
         """Add an alias, e.g. `alias add spamban ban {0} spamming`."""
-        index = await self.bot.db.get_custom_command_index(ctx.guild.id)
-        problem = alias_problem(name.lower(), expansion, index, self._real_names())
-        if problem is None and name.lower() not in index.aliases and len(index.aliases) >= MAX_ALIASES:
-            problem = f'This server already has the maximum of {MAX_ALIASES} aliases.'
-        if problem:
+        if problem := await self.alias_problem(ctx.guild.id, name.lower(), expansion):
             await ctx.send_error(problem)
             return
         await self.bot.db.custom_commands.put_alias(ctx.guild.id, name.lower(), expansion.strip(), ctx.author.id)
