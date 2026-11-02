@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +13,19 @@ from fastapi import HTTPException
 
 from app.cogs.music.player import Player
 from app.internal_api.routers import music as api
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
+_TRACK = {
+    'title': 't', 'author': 'a', 'uri': None, 'artwork': None, 'duration': 0, 'is_stream': False, 'source': None,
+    'requester': None, 'autoplay': False, 'artist_url': None, 'album': None,
+}
+
+
+def _d(model: BaseModel) -> dict[str, Any]:
+    """Response models dump to the JSON the dashboard sees."""
+    return model.model_dump(mode='json', by_alias=True)
 
 
 def _voice(channel_id: int | None) -> SimpleNamespace | None:
@@ -64,7 +78,7 @@ def _player(queued: int = 0) -> MagicMock:
 
 
 async def test_viewer_shapes_listener() -> None:
-    out = await api.get_music_viewer(_guild(member_vc=10, bot_vc=10), _bot(0), 5)
+    out = _d(await api.get_music_viewer(_guild(member_vc=10, bot_vc=10), _bot(0), 5))
     assert out['role'] == 'listener'
     assert out['can_control'] and not out['is_manager']
     assert out['voice_channel'] == {'id': '10', 'name': 'vc10'}
@@ -85,11 +99,11 @@ async def test_play_enqueues_when_connected() -> None:
     track.extras = SimpleNamespace()
     with (
         patch.object(api, '_get_guild_player', return_value=(guild, player)),
-        patch.object(api, '_serialize_track', return_value={'title': 't'}),
+        patch.object(api, '_serialize_track', return_value=_TRACK),
         patch('app.cogs.music.player.Player.search', AsyncMock(return_value=track)),
     ):
-        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x'))
-    assert out == {'queued': [{'title': 't'}], 'started': False}
+        out = _d(await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x')))
+    assert out == {'queued': [_TRACK], 'started': False}
     assert len(player.queue._items) == 2
     assert track.extras.requester_id == 5
 
@@ -99,7 +113,7 @@ async def test_history_paginates() -> None:
     row = {'title': 'a', 'author': 'b', 'uri': 'u', 'artwork': None, 'length_ms': 9, 'user_id': 5,
            'played_at': datetime.datetime(2026, 1, 1, 12, 0)}
     bot.db.music_plays.guild_history = AsyncMock(return_value=[row])
-    out = await api.get_music_history(MagicMock(id=1), bot, 10, '2026-01-01T14:00:00+02:00')
+    out = _d(await api.get_music_history(MagicMock(id=1), bot, 10, '2026-01-01T14:00:00+02:00'))
     bot.db.music_plays.guild_history.assert_awaited_once_with(1, limit=10, before=datetime.datetime(2026, 1, 1, 12, 0))
     assert out['items'][0]['user_id'] == '5'
     assert out['items'][0]['played_at'] == '2026-01-01T12:00:00'
@@ -138,12 +152,12 @@ async def test_play_limit_queues_distinct_mix() -> None:
     guild, player = _guild(member_vc=10, bot_vc=10), _player(queued=0)
     with (
         patch.object(api, '_get_guild_player', return_value=(guild, player)),
-        patch.object(api, '_serialize_track', return_value={'title': 't'}),
+        patch.object(api, '_serialize_track', return_value=_TRACK),
         patch('app.cogs.music.player.Player.search', AsyncMock(return_value=_tracks(20))),
     ):
-        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x', limit=15))
+        out = _d(await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x', limit=15)))
         assert len(out['queued']) == 15 and len(player.queue._items) == 15
-        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x', limit=25))
+        out = _d(await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x', limit=25)))
         assert len(out['queued']) == 18  # deduped by uri
 
 
@@ -151,10 +165,10 @@ async def test_play_default_limit_queues_one_of_list() -> None:
     guild, player = _guild(member_vc=10, bot_vc=10), _player(queued=0)
     with (
         patch.object(api, '_get_guild_player', return_value=(guild, player)),
-        patch.object(api, '_serialize_track', return_value={'title': 't'}),
+        patch.object(api, '_serialize_track', return_value=_TRACK),
         patch('app.cogs.music.player.Player.search', AsyncMock(return_value=_tracks(1)[0])),
     ):
-        out = await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x'))
+        out = _d(await api.post_music_play(guild, _bot(), api.PlayBody(user_id=5, query='x')))
     assert len(out['queued']) == 1
 
 
@@ -167,9 +181,9 @@ def test_play_limit_bounds(n: int) -> None:
 async def test_search_is_cached() -> None:
     api._search_cache.clear()
     node = AsyncMock(return_value=_tracks(3))
-    with patch.object(api, '_serialize_track', return_value={'title': 't'}), patch('app.cogs.music.player.Player.search', node):
-        a = await api.get_music_search(MagicMock(), ' Lofi ', 10)
-        b = await api.get_music_search(MagicMock(), 'lofi', 10)
+    with patch.object(api, '_serialize_track', return_value=_TRACK), patch('app.cogs.music.player.Player.search', node):
+        a = _d(await api.get_music_search(MagicMock(), ' Lofi ', 10))
+        b = _d(await api.get_music_search(MagicMock(), 'lofi', 10))
     assert a == b and node.await_count == 1
     node.return_value = []
     with patch('app.cogs.music.player.Player.search', node):
@@ -191,7 +205,7 @@ async def test_play_now_keeps_queue_and_skips() -> None:
     x = _tracks(1)[0]
     with (
         patch.object(api, '_get_guild_player', return_value=(guild, player)),
-        patch.object(api, '_serialize_track', return_value={'title': 'x'}),
+        patch.object(api, '_serialize_track', return_value=_TRACK),
         patch('app.cogs.music.player.Player.search', AsyncMock(return_value=x)),
     ):
         await api.post_music_play(guild, _bot(0), api.PlayBody(user_id=5, query='x', play_now=True))
@@ -216,7 +230,7 @@ def _fx_player() -> MagicMock:
 
 async def test_audio_state_defaults_without_player() -> None:
     with patch.object(api, '_get_guild_player', return_value=(None, None)):
-        out = await api.get_music_audio(_guild(member_vc=10, bot_vc=10), _bot())
+        out = _d(await api.get_music_audio(_guild(member_vc=10, bot_vc=10), _bot()))
     assert out['active'] is False
     assert out['equalizer'] == {'preset': 'flat', 'bands': [0.0] * 15}
     assert out['filters']['timescale']['speed'] == 1.0
@@ -227,11 +241,11 @@ async def test_audio_state_defaults_without_player() -> None:
 async def test_audio_effect_preset_applies_and_reports() -> None:
     guild, player = _guild(member_vc=10, bot_vc=10), _fx_player()
     with patch.object(api, '_get_guild_player', return_value=(guild, player)):
-        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='nightcore'))
+        out = _d(await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='nightcore')))
         assert out['effects'] == ['nightcore'] and out['filters']['timescale']['speed'] == 1.25
-        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='mono'))
+        out = _d(await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='mono')))
         assert out['filters']['channel_mix']['preset'] == 'mono'
-        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='nightcore', enabled=False))
+        out = _d(await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, effect='nightcore', enabled=False)))
         assert 'nightcore' not in out['effects']
     assert player.set_filters.await_count == 3
 
@@ -240,11 +254,11 @@ async def test_audio_fine_values_and_reset() -> None:
     guild, player = _guild(member_vc=10, bot_vc=10), _fx_player()
     body = api.AudioBody(user_id=5, speed=1.5, rotation=0.4, low_pass=10, tremolo={'frequency': 3, 'depth': 0.4})
     with patch.object(api, '_get_guild_player', return_value=(guild, player)):
-        out = await api.post_music_audio(guild, _bot(0), body)
+        out = _d(await api.post_music_audio(guild, _bot(0), body))
         f = out['filters']
         assert f['timescale']['speed'] == 1.5 and f['rotation']['rotation_hz'] == 0.4
         assert f['low_pass']['smoothing'] == 10 and f['tremolo']['depth'] == 0.4
-        out = await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, reset=True))
+        out = _d(await api.post_music_audio(guild, _bot(0), api.AudioBody(user_id=5, reset=True)))
     assert out['effects'] == [] and out['filters']['timescale']['speed'] == 1.0
 
 
@@ -274,7 +288,7 @@ async def test_audio_requires_voice_presence() -> None:
 async def test_equalizer_preset_with_user() -> None:
     guild, player = _guild(member_vc=10, bot_vc=10), _fx_player()
     with patch.object(api, '_get_guild_player', return_value=(guild, player)):
-        out = await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset='rock', user_id=5))
+        out = _d(await api.post_music_equalizer(guild, _bot(0), api.EqualizerBody(preset='rock', user_id=5)))
     assert out['equalizer'] == api.EQ_PRESETS['rock']
 
 
@@ -315,9 +329,9 @@ async def test_artist_groups_releases_and_caches() -> None:
               _t('Else', 'Someone Else', 'Other'), _t('Bare', 'Nova Quill', None)]
     node = AsyncMock(return_value=tracks)
     with patch('app.cogs.music.player.Player.search', node):
-        out = await api.get_music_artist(MagicMock(), 'Nova Quill', None)
-        again = await api.get_music_artist(MagicMock(), 'Nova Quill', None)
-    assert node.await_count == 1 and again is out
+        out = _d(await api.get_music_artist(MagicMock(), 'Nova Quill', None))
+        again = _d(await api.get_music_artist(MagicMock(), 'Nova Quill', None))
+    assert node.await_count == 1 and again == out
     assert [t['title'] for t in out['top_tracks']] == ['One', 'Two', 'Solo', 'Bare']
     assert out['top_tracks'][3]['album'] is None  # missing album: no link, still listed
     assert [(r['title'], r['kind']) for r in out['releases']] == [('Glass Tides', 'album'), ('Solo', 'single')]
@@ -328,7 +342,7 @@ async def test_artist_url_uses_top_track_playlist() -> None:
     api._detail_cache.clear()
     pl = _playlist([_t('One', 'Nova Quill', 'Glass Tides')], name="Nova Quill's Top Tracks")
     with patch('app.cogs.music.player.Player.search', AsyncMock(return_value=pl)) as node:
-        out = await api.get_music_artist(MagicMock(), 'Nova Quill', 'https://x.test/artist/1')
+        out = _d(await api.get_music_artist(MagicMock(), 'Nova Quill', 'https://x.test/artist/1'))
     node.assert_awaited_once_with('https://x.test/artist/1')
     assert out['artist']['artwork'] == 'cover.png'
 
@@ -349,7 +363,7 @@ async def test_album_loads_playlist_and_caches() -> None:
     pl = _playlist([_t('One', 'Nova Quill, Guest', 'Glass Tides', ms=60_000), _t('Two', 'Nova Quill', 'Glass Tides', ms=30_000)])
     node = AsyncMock(return_value=pl)
     with patch('app.cogs.music.player.Player.search', node):
-        out = await api.get_music_album(MagicMock(), 'https://x.test/album/1')
+        out = _d(await api.get_music_album(MagicMock(), 'https://x.test/album/1'))
         await api.get_music_album(MagicMock(), 'https://x.test/album/1')
     assert node.await_count == 1
     assert out['album'] == {'title': 'Glass Tides', 'kind': 'album', 'year': None, 'artists': ['Nova Quill'],

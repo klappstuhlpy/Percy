@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::MusicHistoryItem;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct UserGuild {
     pub id: String,
@@ -1208,330 +1210,6 @@ pub struct BalancesResponse {
 
 // -- Music types -------------------------------------------------------------
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TrackLink {
-    pub name: String,
-    #[serde(default)]
-    pub url: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TrackRequester {
-    pub id: String,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub avatar: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct NowPlaying {
-    pub title: String,
-    pub author: String,
-    pub duration: u64,
-    pub position: u64,
-    #[serde(default)]
-    pub uri: Option<String>,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub is_stream: bool,
-    #[serde(default)]
-    pub paused: bool,
-    #[serde(default)]
-    pub volume: u32,
-    /// 0 = off, 1 = loop track, 2 = loop queue.
-    /// Percy sends/expects the JSON key `loop`; rename so it both deserialises
-    /// from Percy and re-serialises as `loop` for the dashboard player JS.
-    #[serde(default, rename = "loop")]
-    pub loop_mode: u8,
-    #[serde(default)]
-    pub shuffle: bool,
-    #[serde(default)]
-    pub recommended: bool,
-    #[serde(default)]
-    pub album: Option<TrackLink>,
-    #[serde(default)]
-    pub playlist: Option<TrackLink>,
-    #[serde(default)]
-    pub artist_url: Option<String>,
-    #[serde(default)]
-    pub requester: Option<TrackRequester>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct QueueTrack {
-    pub title: String,
-    pub author: String,
-    #[serde(default)]
-    pub uri: Option<String>,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub duration: u64,
-    #[serde(default)]
-    pub is_stream: bool,
-    #[serde(default)]
-    pub requester: Option<TrackRequester>,
-    /// True for wavelink autoplay recommendations queued after the manual queue.
-    #[serde(default)]
-    pub autoplay: bool,
-    /// Link to the (first) artist's page at the source; None for sources without one.
-    #[serde(default)]
-    pub artist_url: Option<String>,
-    /// The track's album, None when the source (e.g. YouTube) has none.
-    #[serde(default)]
-    pub album: Option<TrackLink>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct LyricLine {
-    pub time: u64,
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicLyrics {
-    #[serde(default)]
-    pub has_synced: bool,
-    #[serde(default)]
-    pub title: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub lines: Vec<LyricLine>,
-    #[serde(default)]
-    pub plain: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MusicFiltersState {
-    #[serde(default)]
-    pub nightcore: bool,
-    #[serde(rename = "8d", default)]
-    pub eight_d: bool,
-    #[serde(default)]
-    pub lowpass: Option<f64>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MusicSetup {
-    /// The dedicated panel channel, if one is configured. `None` means the panel
-    /// (when enabled) is created temporarily where playback starts.
-    #[serde(default)]
-    pub channel_id: Option<String>,
-    pub message_id: Option<String>,
-    pub use_panel: bool,
-    #[serde(default)]
-    pub dj_mode: u8,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct AlwaysOnState {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default)]
-    pub mode: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MusicInfo {
-    pub active: bool,
-    pub equalizer: Vec<f64>,
-    pub filters: MusicFiltersState,
-    pub presets: Vec<String>,
-    #[serde(default)]
-    pub now_playing: Option<NowPlaying>,
-    #[serde(default)]
-    pub queue: Vec<QueueTrack>,
-    /// Recently played tracks (most-recent-first) for the History tab.
-    #[serde(default)]
-    pub history: Vec<QueueTrack>,
-    #[serde(default)]
-    pub channel: Option<String>,
-    #[serde(default)]
-    pub channel_name: Option<String>,
-    #[serde(default)]
-    pub setup: Option<MusicSetup>,
-    #[serde(default)]
-    pub always_on: AlwaysOnState,
-    /// Discord IDs of the (non-bot) members currently sharing the bot's voice
-    /// channel. The public overview uses this to decide whether a viewer may
-    /// control playback; Percy re-verifies on every control request.
-    #[serde(default)]
-    pub listeners: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MusicSetupResponse {
-    pub ok: bool,
-    pub channel_id: String,
-    pub channel_name: String,
-}
-
-/// A track as Percy's `_serialize_track` sends it; the live queue uses the same shape.
-pub type MusicTrack = QueueTrack;
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicChannelRef {
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-}
-
-/// Equalizer + filters (`GET`/`POST /music/audio`). `filters` stays free-form JSON: the panel reads it directly.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicAudio {
-    #[serde(default)]
-    pub active: bool,
-    #[serde(default)]
-    pub equalizer: MusicEqualizer,
-    #[serde(default)]
-    pub filters: serde_json::Value,
-    #[serde(default)]
-    pub effects: Vec<String>,
-    #[serde(default)]
-    pub presets: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicEqualizer {
-    #[serde(default)]
-    pub preset: Option<String>,
-    #[serde(default)]
-    pub bands: Vec<f64>,
-}
-
-/// What one viewer may do with a guild's player (`GET /music/viewer`).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicViewer {
-    #[serde(default)]
-    pub role: String,
-    #[serde(default)]
-    pub can_start: bool,
-    #[serde(default)]
-    pub can_control: bool,
-    #[serde(default)]
-    pub can_destroy: bool,
-    #[serde(default)]
-    pub is_manager: bool,
-    #[serde(default)]
-    pub dj_mode: u8,
-    #[serde(default)]
-    pub voice_channel: Option<MusicChannelRef>,
-    #[serde(default)]
-    pub bot_channel: Option<MusicChannelRef>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicSearch {
-    #[serde(default)]
-    pub results: Vec<MusicTrack>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicArtistInfo {
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub url: Option<String>,
-}
-
-/// An album or single in an artist's releases; `year`/`track_count` are None when Lavalink gives none.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicRelease {
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub kind: String,
-    #[serde(default)]
-    pub year: Option<u32>,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub url: Option<String>,
-    #[serde(default)]
-    pub track_count: Option<u32>,
-}
-
-/// `GET /music/artist`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicArtist {
-    #[serde(default)]
-    pub artist: MusicArtistInfo,
-    #[serde(default)]
-    pub top_tracks: Vec<MusicTrack>,
-    #[serde(default)]
-    pub releases: Vec<MusicRelease>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicAlbumInfo {
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub kind: String,
-    #[serde(default)]
-    pub year: Option<u32>,
-    #[serde(default)]
-    pub artists: Vec<String>,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub url: Option<String>,
-    #[serde(default)]
-    pub total_ms: u64,
-}
-
-/// `GET /music/album`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicAlbum {
-    #[serde(default)]
-    pub album: MusicAlbumInfo,
-    #[serde(default)]
-    pub tracks: Vec<MusicTrack>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicPlayResult {
-    #[serde(default)]
-    pub queued: Vec<MusicTrack>,
-    #[serde(default)]
-    pub started: bool,
-}
-
-/// One `music_plays` row (guild history and a user's recent plays).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicHistoryItem {
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub author: Option<String>,
-    #[serde(default)]
-    pub uri: Option<String>,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub length_ms: Option<u64>,
-    #[serde(default)]
-    pub user_id: Option<String>,
-    #[serde(default)]
-    pub played_at: String,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicHistory {
-    #[serde(default)]
-    pub items: Vec<MusicHistoryItem>,
-}
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TopTrack {
     #[serde(default)]
@@ -1591,34 +1269,6 @@ pub struct PlaylistDetail {
     pub tracks: Vec<PlaylistTrack>,
 }
 
-/// One chart entry: a track and how many different people picked it (and how often).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct TrendingTrack {
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub author: Option<String>,
-    #[serde(default)]
-    pub uri: Option<String>,
-    #[serde(default)]
-    pub artwork: Option<String>,
-    #[serde(default)]
-    pub length_ms: Option<u64>,
-    #[serde(default)]
-    pub listeners: u32,
-    #[serde(default)]
-    pub plays: u32,
-}
-
-/// `GET .../music/trending`: this guild's chart and the one across every guild.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct MusicTrending {
-    #[serde(default)]
-    pub server: Vec<TrendingTrack>,
-    #[serde(default)]
-    pub global: Vec<TrendingTrack>,
-}
-
 /// A track to save: what the dashboard knows about it at the moment it is liked or added.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SaveTrack {
@@ -1654,61 +1304,24 @@ pub struct UserMusicLibrary {
 #[cfg(test)]
 mod music_app_tests {
     use super::*;
+    use crate::{MusicFiltersState, NowPlaying};
 
     #[test]
-    fn audio_parses_and_defaults() {
-        let a: MusicAudio = serde_json::from_str(r#"{"active":true,"equalizer":{"preset":"pop","bands":[0.1,0.2]},"filters":{"timescale":{"speed":1.25}},"effects":["nightcore"],"presets":{"equalizer":["flat"],"filters":["8d"]}}"#).unwrap();
-        assert!(a.active && a.equalizer.preset.as_deref() == Some("pop") && a.effects == ["nightcore"]);
-        let d: MusicAudio = serde_json::from_str("{}").unwrap();
-        assert!(!d.active && d.equalizer.bands.is_empty() && d.effects.is_empty());
-    }
-
-    #[test]
-    fn viewer_parses_and_defaults() {
-        let v: MusicViewer = serde_json::from_str(r#"{"role":"dj","can_start":true,"can_control":true,"can_destroy":false,"is_manager":false,"dj_mode":1,"voice_channel":{"id":"5","name":"Music"},"bot_channel":null}"#).unwrap();
-        assert!(v.can_start && v.voice_channel.unwrap().name == "Music" && v.bot_channel.is_none());
-        let d: MusicViewer = serde_json::from_str("{}").unwrap();
-        assert!(!d.can_control && d.role.is_empty());
-    }
-
-    #[test]
-    fn search_play_history_parse() {
-        let t = r#"{"title":"T","author":"A","uri":"u","artwork":null,"duration":1000,"is_stream":false,"source":"youtube","requester":null,"autoplay":false}"#;
-        let s: MusicSearch = serde_json::from_str(&format!(r#"{{"results":[{t}]}}"#)).unwrap();
-        assert_eq!(s.results[0].title, "T");
-        let p: MusicPlayResult = serde_json::from_str(&format!(r#"{{"queued":[{t}],"started":true}}"#)).unwrap();
-        assert!(p.started && p.queued.len() == 1);
-        let h: MusicHistory = serde_json::from_str(r#"{"items":[{"title":"T","author":"A","uri":null,"artwork":null,"length_ms":5,"user_id":"9","played_at":"2026-10-25T10:00:00"}]}"#).unwrap();
-        assert_eq!(h.items[0].user_id.as_deref(), Some("9"));
-        assert!(serde_json::from_str::<MusicSearch>("{}").unwrap().results.is_empty());
-        assert!(!serde_json::from_str::<MusicPlayResult>("{}").unwrap().started);
-        assert!(serde_json::from_str::<MusicHistory>("{}").unwrap().items.is_empty());
-    }
-
-    #[test]
-    fn artist_and_album_parse() {
-        let t = r#"{"title":"T","author":"A","artist_url":"https://x.test/a","album":{"name":"Al","url":null}}"#;
-        let a: MusicArtist = serde_json::from_str(&format!(
-            r#"{{"artist":{{"name":"A","artwork":null,"url":null}},"top_tracks":[{t}],"releases":[{{"title":"Al","kind":"single","year":null,"artwork":"a","url":"u","track_count":null}}]}}"#
-        ))
+    fn generated_music_types_keep_the_js_keys() {
+        let f: MusicFiltersState =
+            serde_json::from_str(r#"{"nightcore":false,"8d":true,"lowpass":null}"#).unwrap();
+        let v = serde_json::to_value(&f).unwrap();
+        assert_eq!(v["8d"], true);
+        assert!(v["lowpass"].is_null());
+        let n: NowPlaying = serde_json::from_str(
+            r#"{"title":"T","author":"A","uri":null,"artwork":null,"duration":1,"is_stream":false,"source":null,"requester":null,"artist_url":null,"album":null,"autoplay":0,"playlist":null,"recommended":false,"isrc":null,"position":0,"paused":false,"volume":70,"loop":2,"shuffle":false}"#,
+        )
         .unwrap();
-        assert_eq!(a.top_tracks[0].album.as_ref().unwrap().name, "Al");
-        assert_eq!(a.top_tracks[0].artist_url.as_deref(), Some("https://x.test/a"));
-        assert_eq!(a.releases[0].kind, "single");
-        let b: MusicAlbum = serde_json::from_str(&format!(
-            r#"{{"album":{{"title":"Al","artists":["A"],"total_ms":5}},"tracks":[{t}]}}"#
-        ))
-        .unwrap();
-        assert_eq!(b.album.total_ms, 5);
-        assert!(serde_json::from_str::<MusicArtist>("{}").unwrap().releases.is_empty());
-        assert!(serde_json::from_str::<MusicAlbum>("{}").unwrap().tracks.is_empty());
+        assert_eq!(serde_json::to_value(&n).unwrap()["loop"], 2);
     }
 
     #[test]
     fn null_author_and_length_tolerated() {
-        let h: MusicHistory =
-            serde_json::from_str(r#"{"items":[{"title":"T","author":null,"length_ms":null}]}"#).unwrap();
-        assert!(h.items[0].author.is_none() && h.items[0].length_ms.is_none());
         let l: UserMusicLibrary =
             serde_json::from_str(r#"{"top_tracks":[{"title":"T","author":null,"length_ms":null,"plays":1}]}"#).unwrap();
         assert!(l.top_tracks[0].author.is_none() && l.top_tracks[0].length_ms.is_none());
@@ -1882,71 +1495,7 @@ pub struct BulkActionResponse {
 
 // -- Guild image gallery types -----------------------------------------------
 
-/// A single image in a guild's shared gallery (metadata only; the bytes live at
-/// `url` / `raw_url` on the klappstuhl.me hoster).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct GalleryImage {
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub ext: String,
-    #[serde(default)]
-    pub mimetype: String,
-    #[serde(default)]
-    pub size: i64,
-    #[serde(default)]
-    pub original_name: Option<String>,
-    #[serde(default)]
-    pub uploaded_at: String,
-    /// Canonical landing-page URL.
-    #[serde(default)]
-    pub url: String,
-    /// Raw-bytes URL (used for `<img>` thumbnails).
-    #[serde(default)]
-    pub raw_url: String,
-}
-
-/// The listing of a guild's gallery.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct GalleryResponse {
-    #[serde(default)]
-    pub images: Vec<GalleryImage>,
-    #[serde(default)]
-    pub total: usize,
-}
-
-/// The result of a gallery upload (mirrors the hoster's `UploadResult`).
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct GalleryUploadResult {
-    #[serde(default)]
-    pub total: usize,
-    #[serde(default)]
-    pub errors: usize,
-    #[serde(default)]
-    pub skipped: usize,
-    #[serde(default)]
-    pub infected: usize,
-    #[serde(default)]
-    pub links: Vec<String>,
-    #[serde(default)]
-    pub raw_links: Vec<String>,
-}
-
 // -- Custom Bot Profile types ------------------------------------------------
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct CustomBotProfile {
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub avatar_url: Option<String>,
-    #[serde(default)]
-    pub banner_url: Option<String>,
-    #[serde(default)]
-    pub about_me: Option<String>,
-    #[serde(default)]
-    pub accent_color: Option<String>,
-}
 
 // -- Outbound webhook (event subscription) types -----------------------------
 

@@ -18,6 +18,27 @@ from app.services.music_audio import EFFECTS, EQ_PRESETS, audio_state
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id
+from .music_models import (
+    MusicAck,
+    MusicAlbum,
+    MusicAlwaysOnApplied,
+    MusicArtist,
+    MusicAudio,
+    MusicAudioApplied,
+    MusicControlResult,
+    MusicDjModeApplied,
+    MusicEqualizerApplied,
+    MusicHistory,
+    MusicInfo,
+    MusicLyrics,
+    MusicPlayResult,
+    MusicSearch,
+    MusicSetupResponse,
+    MusicTrending,
+)
+from .music_models import (
+    MusicViewer as MusicViewerOut,
+)
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -238,7 +259,7 @@ def _now_playing_payload(guild: discord.Guild, player: wavelink.Player) -> dict 
 
 
 @router.get("/music")
-async def get_music(guild: GuildDep, bot: BotDep) -> dict:
+async def get_music(guild: GuildDep, bot: BotDep) -> MusicInfo:
     """Live player snapshot: now playing, queue, history, equalizer, filters, 24/7 state."""
     _, player = _get_guild_player(bot, guild.id)
 
@@ -268,15 +289,20 @@ async def get_music(guild: GuildDep, bot: BotDep) -> dict:
             }
 
     if player is None:
-        return {
+        return MusicInfo.model_validate({
             'active': False,
             'equalizer': [0.0] * 15,
             'filters': {'nightcore': False, '8d': False, 'lowpass': None},
             'presets': list(PRESETS.keys()),
+            'now_playing': None,
+            'queue': [],
+            'history': [],
+            'channel': None,
+            'channel_name': None,
             'setup': setup,
             'always_on': always_on,
             'listeners': [],
-        }
+        })
 
     eq_payload = player.filters.equalizer.payload
     gains = [eq_payload[i]['gain'] if i in eq_payload else 0.0 for i in range(15)]
@@ -311,7 +337,7 @@ async def get_music(guild: GuildDep, bot: BotDep) -> dict:
     if player.channel:
         listeners = [str(m.id) for m in player.channel.members if not m.bot]
 
-    return {
+    return MusicInfo.model_validate({
         'active': True,
         'equalizer': gains,
         'filters': filters_state,
@@ -324,11 +350,11 @@ async def get_music(guild: GuildDep, bot: BotDep) -> dict:
         'setup': setup,
         'always_on': always_on,
         'listeners': listeners,
-    }
+    })
 
 
 @router.post("/music/setup")
-async def post_music_setup(guild: GuildDep, bot: BotDep, body: SetupBody) -> dict:
+async def post_music_setup(guild: GuildDep, bot: BotDep, body: SetupBody) -> MusicSetupResponse:
     """Create or use a channel and send the music panel message."""
     config = await bot.db.get_guild_config(guild.id)
     if config.music_panel_channel_id:
@@ -375,15 +401,11 @@ async def post_music_setup(guild: GuildDep, bot: BotDep, body: SetupBody) -> dic
         use_music_panel=True,
     )
 
-    return {
-        'ok': True,
-        'channel_id': str(channel.id),
-        'channel_name': channel.name,
-    }
+    return MusicSetupResponse(ok=True, channel_id=str(channel.id), channel_name=channel.name)
 
 
 @router.post("/music/reset")
-async def post_music_reset(guild: GuildDep, bot: BotDep) -> dict:
+async def post_music_reset(guild: GuildDep, bot: BotDep) -> MusicAck:
     """Delete the dedicated panel channel and clear the config references."""
     config = await bot.db.get_guild_config(guild.id)
     if not config.music_panel_channel_id:
@@ -398,11 +420,11 @@ async def post_music_reset(guild: GuildDep, bot: BotDep) -> dict:
         except discord.HTTPException:
             pass
 
-    return {'ok': True}
+    return MusicAck(ok=True)
 
 
 @router.post("/music/equalizer")
-async def post_music_equalizer(guild: GuildDep, bot: BotDep, body: EqualizerBody) -> dict:
+async def post_music_equalizer(guild: GuildDep, bot: BotDep, body: EqualizerBody) -> MusicEqualizerApplied:
     """Apply an EQ preset or custom 15-band gains to the live player."""
     _, player = _get_guild_player(bot, guild.id)
     if player is None:
@@ -431,7 +453,7 @@ async def post_music_equalizer(guild: GuildDep, bot: BotDep, body: EqualizerBody
     filters.equalizer.set(bands=[{'band': i, 'gain': g} for i, g in enumerate(gains)])
     await player.set_filters(filters)
 
-    return {'ok': True, 'equalizer': gains}
+    return MusicEqualizerApplied(ok=True, equalizer=gains)
 
 
 async def _require_audio_access(bot: Bot, guild: discord.Guild, user_id: int | str) -> None:
@@ -461,14 +483,14 @@ def _audio_payload(player: wavelink.Player | None) -> dict:
 
 
 @router.get("/music/audio")
-async def get_music_audio(guild: GuildDep, bot: BotDep) -> dict:
+async def get_music_audio(guild: GuildDep, bot: BotDep) -> MusicAudio:
     """Equalizer + every Lavalink filter as the sound panel shows them; defaults when no player is active."""
     _, player = _get_guild_player(bot, guild.id)
-    return _audio_payload(player)
+    return MusicAudio.model_validate(_audio_payload(player))
 
 
 @router.post("/music/audio")
-async def post_music_audio(guild: GuildDep, bot: BotDep, body: AudioBody) -> dict:
+async def post_music_audio(guild: GuildDep, bot: BotDep, body: AudioBody) -> MusicAudioApplied:
     """Apply a named effect (``enabled`` false removes it), fine values, or ``reset`` all filters."""
     _, player = _get_guild_player(bot, guild.id)
     if player is None:
@@ -506,11 +528,11 @@ async def post_music_audio(guild: GuildDep, bot: BotDep, body: AudioBody) -> dic
         filters.vibrato.set(frequency=body.vibrato.frequency, depth=body.vibrato.depth)
 
     await player.set_filters(filters)
-    return {'ok': True, **_audio_payload(player)}
+    return MusicAudioApplied.model_validate({'ok': True, **_audio_payload(player)})
 
 
 @router.post("/music/filters")
-async def post_music_filters(guild: GuildDep, bot: BotDep, body: FiltersBody) -> dict:
+async def post_music_filters(guild: GuildDep, bot: BotDep, body: FiltersBody) -> MusicAck:
     """Toggle nightcore/8d/lowpass or reset all filters."""
     _, player = _get_guild_player(bot, guild.id)
     if player is None:
@@ -541,11 +563,11 @@ async def post_music_filters(guild: GuildDep, bot: BotDep, body: FiltersBody) ->
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='unknown action')
 
     await player.set_filters(filters)
-    return {'ok': True}
+    return MusicAck(ok=True)
 
 
 @router.post("/music/247")
-async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> dict:
+async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> MusicAlwaysOnApplied:
     """Enable or disable the 24/7 always-on player."""
     cog = bot.get_cog('Music')
     if cog is None:
@@ -553,7 +575,7 @@ async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> di
 
     if not body.enabled:
         await cog.disable_always_on(guild)  # type: ignore[attr-defined]
-        return {'ok': True, 'always_on': {'enabled': False, 'mode': None, 'source': None}}
+        return MusicAlwaysOnApplied.model_validate({'ok': True, 'always_on': {'enabled': False, 'mode': None, 'source': None}})
 
     source = (body.source or '').strip()
     # Autoplay needs only a seed, and the song already playing is the obvious one.
@@ -598,11 +620,11 @@ async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> di
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='could not resolve that source')
 
     await cog.enable_always_on(guild, channel, None, body.mode, source)  # type: ignore[attr-defined]
-    return {'ok': True, 'always_on': {'enabled': True, 'mode': body.mode, 'source': source}}
+    return MusicAlwaysOnApplied.model_validate({'ok': True, 'always_on': {'enabled': True, 'mode': body.mode, 'source': source}})
 
 
 @router.patch("/music/dj-mode")
-async def patch_music_dj_mode(guild: GuildDep, bot: BotDep, body: DJModeBody) -> dict:
+async def patch_music_dj_mode(guild: GuildDep, bot: BotDep, body: DJModeBody) -> MusicDjModeApplied:
     """Set the DJ mode (0=everyone, 1=dj_only, 2=hybrid)."""
     if body.dj_mode not in (0, 1, 2):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='dj_mode must be 0, 1, or 2')
@@ -610,7 +632,7 @@ async def patch_music_dj_mode(guild: GuildDep, bot: BotDep, body: DJModeBody) ->
     config = await bot.db.get_guild_config(guild.id)
     await config.update(music_dj_mode=body.dj_mode)
 
-    return {'ok': True, 'dj_mode': body.dj_mode}
+    return MusicDjModeApplied(ok=True, dj_mode=body.dj_mode)
 
 
 def _channel_ref(channel: discord.abc.GuildChannel | None) -> dict | None:
@@ -618,10 +640,10 @@ def _channel_ref(channel: discord.abc.GuildChannel | None) -> dict | None:
 
 
 @router.get("/music/viewer")
-async def get_music_viewer(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+async def get_music_viewer(guild: GuildDep, bot: BotDep, user_id: int) -> MusicViewerOut:
     """What ``user_id`` may do with this guild's player, plus the voice channels involved."""
     member, viewer, dj_mode = await _viewer_for(bot, guild, user_id)
-    return {
+    return MusicViewerOut.model_validate({
         'role': viewer.role,
         'can_start': viewer.can_start,
         'can_control': viewer.can_control,
@@ -630,7 +652,7 @@ async def get_music_viewer(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
         'dj_mode': int(dj_mode),
         'voice_channel': _channel_ref(member.voice.channel if member.voice else None),
         'bot_channel': _channel_ref(guild.me.voice.channel if guild.me.voice else None),
-    }
+    })
 
 
 def _flatten(result: Any) -> list[wavelink.Playable]:
@@ -715,7 +737,7 @@ def _releases(tracks: list[wavelink.Playable]) -> list[dict]:
 @router.get("/music/artist")
 async def get_music_artist(
     guild: GuildDep, name: str = Query('', max_length=120), url: str | None = Query(None, max_length=500)
-) -> dict:
+) -> MusicArtist:
     """An artist page built from what Lavalink offers (see ``app.cogs.music.lookups.artist_tracks``).
 
     Releases are the albums those tracks belong to; there is no discography endpoint in Lavalink.
@@ -727,7 +749,7 @@ async def get_music_artist(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='name or url required')
     key = ('artist', name.casefold(), url or '')
     if (hit := _detail_get(key)) is not None:
-        return hit
+        return MusicArtist.model_validate(hit)
 
     tracks, artwork = await artist_tracks(name, url)
     if not tracks:
@@ -744,18 +766,18 @@ async def get_music_artist(
         'releases': _releases(tracks),
     }
     _detail_put(key, out)
-    return out
+    return MusicArtist.model_validate(out)
 
 
 @router.get("/music/album")
-async def get_music_album(guild: GuildDep, url: str = Query(..., max_length=500)) -> dict:
+async def get_music_album(guild: GuildDep, url: str = Query(..., max_length=500)) -> MusicAlbum:
     """An album/single/playlist link loaded as a track list (LavaSrc or any source Lavalink resolves)."""
     from app.cogs.music.lookups import album
 
     url = _http_url(url) or ''
     key = ('album', '', url)
     if (hit := _detail_get(key)) is not None:
-        return hit
+        return MusicAlbum.model_validate(hit)
     result = await album(url)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Could not load that album.')
@@ -774,17 +796,17 @@ async def get_music_album(guild: GuildDep, url: str = Query(..., max_length=500)
         'tracks': [_serialize_track(guild, t, full=True) for t in tracks],
     }
     _detail_put(key, out)
-    return out
+    return MusicAlbum.model_validate(out)
 
 
 @router.get("/music/search")
-async def get_music_search(guild: GuildDep, q: str, limit: int = Query(10, ge=1, le=25)) -> dict:
+async def get_music_search(guild: GuildDep, q: str, limit: int = Query(10, ge=1, le=25)) -> MusicSearch:
     """Search tracks (needs a Lavalink node, not a player)."""
-    return {'results': [_serialize_track(guild, t) for t in await _cached_search(q, limit)]}
+    return MusicSearch.model_validate({'results': [_serialize_track(guild, t) for t in await _cached_search(q, limit)]})
 
 
 @router.post("/music/play")
-async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
+async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> MusicPlayResult:
     """Queue ``query`` for ``user_id``; starts a player in their voice channel when none is running."""
     from app.cogs.music.player import Player
 
@@ -830,7 +852,7 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
         # Same as the cog's `play --force`: front of the queue, then skip to it; the rest stays in order.
         player.queue.put_at(0, tracks[0])
         await player.skip()
-        return {'queued': [_serialize_track(guild, tracks[0])], 'started': False}
+        return MusicPlayResult.model_validate({'queued': [_serialize_track(guild, tracks[0])], 'started': False})
     for item in [result] if isinstance(result, wavelink.Playlist) else tracks:
         await player.queue.put_wait(item)
     started = not player.playing
@@ -838,7 +860,7 @@ async def post_music_play(guild: GuildDep, bot: BotDep, body: PlayBody) -> dict:
         await player.play(player.queue.get(), volume=70)
     elif player.connected:
         await player.refresh_panel()
-    return {'queued': [_serialize_track(guild, t) for t in tracks], 'started': started}
+    return MusicPlayResult.model_validate({'queued': [_serialize_track(guild, t) for t in tracks], 'started': started})
 
 
 def serialize_play(r: Any) -> dict:
@@ -855,7 +877,7 @@ def serialize_play(r: Any) -> dict:
 @router.get("/music/history")
 async def get_music_history(
     guild: GuildDep, bot: BotDep, limit: int = Query(50, ge=1, le=100), before: str | None = None
-) -> dict:
+) -> MusicHistory:
     """Recently played tracks in this guild, newest first; pass the last ``played_at`` as ``before`` to page."""
     cursor = None
     if before:
@@ -866,7 +888,7 @@ async def get_music_history(
         if cursor.tzinfo is not None:
             cursor = cursor.astimezone(datetime.UTC).replace(tzinfo=None)  # the column is naive UTC
     rows = await bot.db.music_plays.guild_history(guild.id, limit=limit, before=cursor)
-    return {'items': [serialize_play(r) for r in rows]}
+    return MusicHistory.model_validate({'items': [serialize_play(r) for r in rows]})
 
 
 # Charts change slowly and are the same for every viewer; they are cheap to keep a while.
@@ -893,13 +915,13 @@ async def _trending(bot: Any, guild_id: int | None) -> list[dict]:
 
 
 @router.get("/music/trending")
-async def get_music_trending(guild: GuildDep, bot: BotDep) -> dict:
+async def get_music_trending(guild: GuildDep, bot: BotDep) -> MusicTrending:
     """The week's most-picked tracks in this guild (``server``) and across every guild (``global``)."""
-    return {'server': await _trending(bot, guild.id), 'global': await _trending(bot, None)}
+    return MusicTrending.model_validate({'server': await _trending(bot, guild.id), 'global': await _trending(bot, None)})
 
 
 @router.post("/music/control")
-async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) -> dict:
+async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) -> MusicControlResult:
     """Control playback from the dashboard (pause/resume/skip/back/volume/seek/loop/shuffle/jump/move/stop).
 
     Enforces voice-channel presence and DJ-mode permissions, mirroring the
@@ -1031,15 +1053,15 @@ async def post_music_control(guild: GuildDep, bot: BotDep, body: ControlBody) ->
     if refresh_panel and player.connected:
         await player.refresh_panel()
 
-    return {'ok': True, 'action': action, 'paused': player.paused if player.connected else False}
+    return MusicControlResult(ok=True, action=action, paused=player.paused if player.connected else False)
 
 
 @router.get("/music/lyrics")
-async def get_music_lyrics(guild: GuildDep, bot: BotDep) -> dict:
+async def get_music_lyrics(guild: GuildDep, bot: BotDep) -> MusicLyrics:
     """Resolve time-synced lyrics for the current track."""
     _, player = _get_guild_player(bot, guild.id)
 
-    empty = {'ok': True, 'has_synced': False, 'title': None, 'source': None, 'lines': [], 'plain': None}
+    empty = MusicLyrics(ok=True, has_synced=False, title=None, source=None, lines=[], plain=None)
     if player is None or player.current is None:
         return empty
 
@@ -1058,11 +1080,11 @@ async def get_music_lyrics(guild: GuildDep, bot: BotDep) -> dict:
     if result.has_synced and result.synced is not None:
         lines = [{'time': line.timestamp, 'text': line.text} for line in result.synced.lines]
 
-    return {
+    return MusicLyrics.model_validate({
         'ok': True,
         'has_synced': result.has_synced,
         'title': result.title,
         'source': result.source,
         'lines': lines,
         'plain': result.plain,
-    }
+    })

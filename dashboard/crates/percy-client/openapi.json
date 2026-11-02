@@ -128,6 +128,43 @@
         "title": "AlwaysOnBody",
         "type": "object"
       },
+      "AlwaysOnState": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "enabled",
+          "mode",
+          "source"
+        ],
+        "title": "AlwaysOnState",
+        "type": "object"
+      },
       "AnalyticsMetric": {
         "description": "A headline number paired with its delta vs the preceding equal window.",
         "properties": {
@@ -1195,6 +1232,88 @@
         "title": "CreateTempChannelBody",
         "type": "object"
       },
+      "CustomBotAck": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "CustomBotAck",
+        "type": "object"
+      },
+      "CustomBotProfile": {
+        "description": "The bot's live Discord profile in the guild.",
+        "properties": {
+          "about_me": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About Me"
+          },
+          "accent_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accent Color"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "banner_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Url"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "name",
+          "avatar_url",
+          "banner_url",
+          "accent_color",
+          "about_me"
+        ],
+        "title": "CustomBotProfile",
+        "type": "object"
+      },
       "DJModeBody": {
         "properties": {
           "dj_mode": {
@@ -1345,6 +1464,146 @@
         "title": "FiltersBody",
         "type": "object"
       },
+      "GalleryDeleteResult": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "boolean"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "failed"
+        ],
+        "title": "GalleryDeleteResult",
+        "type": "object"
+      },
+      "GalleryImage": {
+        "description": "One image in a guild's gallery (metadata; the bytes live at ``raw_url`` on the hoster).",
+        "properties": {
+          "ext": {
+            "title": "Ext",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mimetype": {
+            "title": "Mimetype",
+            "type": "string"
+          },
+          "original_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Name"
+          },
+          "raw_url": {
+            "title": "Raw Url",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "title": "Uploaded At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ext",
+          "mimetype",
+          "size",
+          "original_name",
+          "uploaded_at",
+          "url",
+          "raw_url"
+        ],
+        "title": "GalleryImage",
+        "type": "object"
+      },
+      "GalleryResponse": {
+        "properties": {
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/GalleryImage"
+            },
+            "title": "Images",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "images",
+          "total"
+        ],
+        "title": "GalleryResponse",
+        "type": "object"
+      },
+      "GalleryUploadResult": {
+        "description": "Mirrors the hoster's ``UploadResult``.",
+        "properties": {
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "infected": {
+            "title": "Infected",
+            "type": "integer"
+          },
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "raw_links": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Raw Links",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "errors",
+          "skipped",
+          "infected",
+          "links",
+          "raw_links"
+        ],
+        "title": "GalleryUploadResult",
+        "type": "object"
+      },
       "GiveItemBody": {
         "properties": {
           "item_id": {
@@ -1473,6 +1732,24 @@
           "channel_ids"
         ],
         "title": "LockChannelsBody",
+        "type": "object"
+      },
+      "LyricLine": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "text"
+        ],
+        "title": "LyricLine",
         "type": "object"
       },
       "ManagePlonkBody": {
@@ -1636,6 +1913,1212 @@
           "entity_id"
         ],
         "title": "ModerationIgnoreBody",
+        "type": "object"
+      },
+      "MusicAck": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "MusicAck",
+        "type": "object"
+      },
+      "MusicAlbum": {
+        "properties": {
+          "album": {
+            "$ref": "#/components/schemas/MusicAlbumInfo"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/MusicTrackFull"
+            },
+            "title": "Tracks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "album",
+          "tracks"
+        ],
+        "title": "MusicAlbum",
+        "type": "object"
+      },
+      "MusicAlbumInfo": {
+        "properties": {
+          "artists": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artists",
+            "type": "array"
+          },
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "total_ms": {
+            "title": "Total Ms",
+            "type": "integer"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "title",
+          "kind",
+          "year",
+          "artists",
+          "artwork",
+          "url",
+          "total_ms"
+        ],
+        "title": "MusicAlbumInfo",
+        "type": "object"
+      },
+      "MusicAlwaysOnApplied": {
+        "properties": {
+          "always_on": {
+            "$ref": "#/components/schemas/AlwaysOnState"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "always_on"
+        ],
+        "title": "MusicAlwaysOnApplied",
+        "type": "object"
+      },
+      "MusicArtist": {
+        "properties": {
+          "artist": {
+            "$ref": "#/components/schemas/MusicArtistInfo"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/MusicRelease"
+            },
+            "title": "Releases",
+            "type": "array"
+          },
+          "top_tracks": {
+            "items": {
+              "$ref": "#/components/schemas/MusicTrackFull"
+            },
+            "title": "Top Tracks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "artist",
+          "top_tracks",
+          "releases"
+        ],
+        "title": "MusicArtist",
+        "type": "object"
+      },
+      "MusicArtistInfo": {
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "artwork",
+          "url"
+        ],
+        "title": "MusicArtistInfo",
+        "type": "object"
+      },
+      "MusicAudio": {
+        "description": "Equalizer + filters. ``filters``/``presets`` stay free-form: the sound panel reads them directly.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Effects",
+            "type": "array"
+          },
+          "equalizer": {
+            "$ref": "#/components/schemas/MusicEqualizer"
+          },
+          "filters": {
+            "additionalProperties": true,
+            "title": "Filters",
+            "type": "object"
+          },
+          "presets": {
+            "additionalProperties": true,
+            "title": "Presets",
+            "type": "object"
+          }
+        },
+        "required": [
+          "active",
+          "equalizer",
+          "filters",
+          "effects",
+          "presets"
+        ],
+        "title": "MusicAudio",
+        "type": "object"
+      },
+      "MusicAudioApplied": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Effects",
+            "type": "array"
+          },
+          "equalizer": {
+            "$ref": "#/components/schemas/MusicEqualizer"
+          },
+          "filters": {
+            "additionalProperties": true,
+            "title": "Filters",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "presets": {
+            "additionalProperties": true,
+            "title": "Presets",
+            "type": "object"
+          }
+        },
+        "required": [
+          "active",
+          "equalizer",
+          "filters",
+          "effects",
+          "presets",
+          "ok"
+        ],
+        "title": "MusicAudioApplied",
+        "type": "object"
+      },
+      "MusicChannelRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "MusicChannelRef",
+        "type": "object"
+      },
+      "MusicControlResult": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "action",
+          "paused"
+        ],
+        "title": "MusicControlResult",
+        "type": "object"
+      },
+      "MusicDjModeApplied": {
+        "properties": {
+          "dj_mode": {
+            "title": "Dj Mode",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "dj_mode"
+        ],
+        "title": "MusicDjModeApplied",
+        "type": "object"
+      },
+      "MusicEqualizer": {
+        "properties": {
+          "bands": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Bands",
+            "type": "array"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          }
+        },
+        "required": [
+          "preset",
+          "bands"
+        ],
+        "title": "MusicEqualizer",
+        "type": "object"
+      },
+      "MusicEqualizerApplied": {
+        "properties": {
+          "equalizer": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Equalizer",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "equalizer"
+        ],
+        "title": "MusicEqualizerApplied",
+        "type": "object"
+      },
+      "MusicFiltersState": {
+        "properties": {
+          "8d": {
+            "title": "8D",
+            "type": "boolean"
+          },
+          "lowpass": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lowpass"
+          },
+          "nightcore": {
+            "title": "Nightcore",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "nightcore",
+          "8d",
+          "lowpass"
+        ],
+        "title": "MusicFiltersState",
+        "type": "object"
+      },
+      "MusicHistory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MusicHistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MusicHistory",
+        "type": "object"
+      },
+      "MusicHistoryItem": {
+        "description": "One ``music_plays`` row (guild history and a user's recent plays).",
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "played_at": {
+            "title": "Played At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "uri",
+          "artwork",
+          "length_ms",
+          "user_id",
+          "played_at"
+        ],
+        "title": "MusicHistoryItem",
+        "type": "object"
+      },
+      "MusicInfo": {
+        "description": "``GET /music``: the live player snapshot (inactive guilds get empty queue/history).",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "always_on": {
+            "$ref": "#/components/schemas/AlwaysOnState"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "channel_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Name"
+          },
+          "equalizer": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Equalizer",
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/MusicFiltersState"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/QueueTrack"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "listeners": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listeners",
+            "type": "array"
+          },
+          "now_playing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NowPlaying"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "presets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "queue": {
+            "items": {
+              "$ref": "#/components/schemas/QueueTrack"
+            },
+            "title": "Queue",
+            "type": "array"
+          },
+          "setup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicSetup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "active",
+          "equalizer",
+          "filters",
+          "presets",
+          "now_playing",
+          "queue",
+          "history",
+          "channel",
+          "channel_name",
+          "setup",
+          "always_on",
+          "listeners"
+        ],
+        "title": "MusicInfo",
+        "type": "object"
+      },
+      "MusicLyrics": {
+        "properties": {
+          "has_synced": {
+            "title": "Has Synced",
+            "type": "boolean"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LyricLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "plain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plain"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "ok",
+          "has_synced",
+          "title",
+          "source",
+          "lines",
+          "plain"
+        ],
+        "title": "MusicLyrics",
+        "type": "object"
+      },
+      "MusicPlayResult": {
+        "properties": {
+          "queued": {
+            "items": {
+              "$ref": "#/components/schemas/QueueTrack"
+            },
+            "title": "Queued",
+            "type": "array"
+          },
+          "started": {
+            "title": "Started",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued",
+          "started"
+        ],
+        "title": "MusicPlayResult",
+        "type": "object"
+      },
+      "MusicRelease": {
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Count"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "title",
+          "kind",
+          "year",
+          "artwork",
+          "url",
+          "track_count"
+        ],
+        "title": "MusicRelease",
+        "type": "object"
+      },
+      "MusicSearch": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/QueueTrack"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "MusicSearch",
+        "type": "object"
+      },
+      "MusicSetup": {
+        "properties": {
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "dj_mode": {
+            "title": "Dj Mode",
+            "type": "integer"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "use_panel": {
+            "title": "Use Panel",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel_id",
+          "message_id",
+          "use_panel",
+          "dj_mode"
+        ],
+        "title": "MusicSetup",
+        "type": "object"
+      },
+      "MusicSetupResponse": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "title": "Channel Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "channel_id",
+          "channel_name"
+        ],
+        "title": "MusicSetupResponse",
+        "type": "object"
+      },
+      "MusicTrackFull": {
+        "description": "``_serialize_track(full=True)`` for artist/album pages.",
+        "properties": {
+          "album": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artist_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist Url"
+          },
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "autoplay": {
+            "title": "Autoplay",
+            "type": "boolean"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "integer"
+          },
+          "is_stream": {
+            "title": "Is Stream",
+            "type": "boolean"
+          },
+          "isrc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isrc"
+          },
+          "playlist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommended": {
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackRequester"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "uri",
+          "artwork",
+          "duration",
+          "is_stream",
+          "source",
+          "requester",
+          "artist_url",
+          "album",
+          "autoplay",
+          "playlist",
+          "recommended",
+          "isrc"
+        ],
+        "title": "MusicTrackFull",
+        "type": "object"
+      },
+      "MusicTrending": {
+        "properties": {
+          "global": {
+            "items": {
+              "$ref": "#/components/schemas/TrendingTrack"
+            },
+            "title": "Global",
+            "type": "array"
+          },
+          "server": {
+            "items": {
+              "$ref": "#/components/schemas/TrendingTrack"
+            },
+            "title": "Server",
+            "type": "array"
+          }
+        },
+        "required": [
+          "server",
+          "global"
+        ],
+        "title": "MusicTrending",
+        "type": "object"
+      },
+      "MusicViewer": {
+        "properties": {
+          "bot_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_control": {
+            "title": "Can Control",
+            "type": "boolean"
+          },
+          "can_destroy": {
+            "title": "Can Destroy",
+            "type": "boolean"
+          },
+          "can_start": {
+            "title": "Can Start",
+            "type": "boolean"
+          },
+          "dj_mode": {
+            "title": "Dj Mode",
+            "type": "integer"
+          },
+          "is_manager": {
+            "title": "Is Manager",
+            "type": "boolean"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "voice_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "role",
+          "can_start",
+          "can_control",
+          "can_destroy",
+          "is_manager",
+          "dj_mode",
+          "voice_channel",
+          "bot_channel"
+        ],
+        "title": "MusicViewer",
+        "type": "object"
+      },
+      "NowPlaying": {
+        "description": "The live player's current track: the full track plus transport state.",
+        "properties": {
+          "album": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artist_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist Url"
+          },
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "autoplay": {
+            "title": "Autoplay",
+            "type": "integer"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "integer"
+          },
+          "is_stream": {
+            "title": "Is Stream",
+            "type": "boolean"
+          },
+          "isrc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isrc"
+          },
+          "loop": {
+            "title": "Loop",
+            "type": "integer"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "playlist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "recommended": {
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackRequester"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shuffle": {
+            "title": "Shuffle",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "uri",
+          "artwork",
+          "duration",
+          "is_stream",
+          "source",
+          "requester",
+          "artist_url",
+          "album",
+          "autoplay",
+          "playlist",
+          "recommended",
+          "isrc",
+          "position",
+          "paused",
+          "volume",
+          "loop",
+          "shuffle"
+        ],
+        "title": "NowPlaying",
         "type": "object"
       },
       "PardonBody": {
@@ -3223,6 +4706,110 @@
         "title": "PutAIOverrideBody",
         "type": "object"
       },
+      "QueueTrack": {
+        "description": "A track in the queue / history / search results (``_serialize_track``).",
+        "properties": {
+          "album": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artist_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist Url"
+          },
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "autoplay": {
+            "title": "Autoplay",
+            "type": "boolean"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "integer"
+          },
+          "is_stream": {
+            "title": "Is Stream",
+            "type": "boolean"
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackRequester"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "uri",
+          "artwork",
+          "duration",
+          "is_stream",
+          "source",
+          "requester",
+          "artist_url",
+          "album",
+          "autoplay"
+        ],
+        "title": "QueueTrack",
+        "type": "object"
+      },
       "RankCardBody": {
         "properties": {
           "style": {
@@ -3706,6 +5293,139 @@
           "url"
         ],
         "title": "TrackBody",
+        "type": "object"
+      },
+      "TrackLink": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "TrackLink",
+        "type": "object"
+      },
+      "TrackRequester": {
+        "properties": {
+          "avatar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "avatar"
+        ],
+        "title": "TrackRequester",
+        "type": "object"
+      },
+      "TrendingTrack": {
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "listeners": {
+            "title": "Listeners",
+            "type": "integer"
+          },
+          "plays": {
+            "title": "Plays",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "uri",
+          "artwork",
+          "length_ms",
+          "listeners",
+          "plays"
+        ],
+        "title": "TrendingTrack",
         "type": "object"
       },
       "UnlockChannelsBody": {
@@ -8277,9 +9997,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Custom Bot Api V1 Guilds  Guild Id  Custom Bot Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CustomBotProfile"
                 }
               }
             },
@@ -8376,9 +10094,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Custom Bot Api V1 Guilds  Guild Id  Custom Bot Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CustomBotAck"
                 }
               }
             },
@@ -8467,9 +10183,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Reset Custom Bot Api V1 Guilds  Guild Id  Custom Bot Reset Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CustomBotAck"
                 }
               }
             },
@@ -10333,9 +12047,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Gallery Api V1 Guilds  Guild Id  Gallery Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GalleryResponse"
                 }
               }
             },
@@ -10432,9 +12144,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Upload Gallery Api V1 Guilds  Guild Id  Gallery Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GalleryUploadResult"
                 }
               }
             },
@@ -10532,9 +12242,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Gallery Image Api V1 Guilds  Guild Id  Gallery  Image Id  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GalleryDeleteResult"
                 }
               }
             },
@@ -13690,9 +15398,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Api V1 Guilds  Guild Id  Music Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicInfo"
                 }
               }
             },
@@ -13791,9 +15497,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music 247 Api V1 Guilds  Guild Id  Music 247 Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicAlwaysOnApplied"
                 }
               }
             },
@@ -13892,9 +15596,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Album Api V1 Guilds  Guild Id  Music Album Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicAlbum"
                 }
               }
             },
@@ -14011,9 +15713,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Artist Api V1 Guilds  Guild Id  Music Artist Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicArtist"
                 }
               }
             },
@@ -14102,9 +15802,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Audio Api V1 Guilds  Guild Id  Music Audio Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicAudio"
                 }
               }
             },
@@ -14201,9 +15899,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Audio Api V1 Guilds  Guild Id  Music Audio Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicAudioApplied"
                 }
               }
             },
@@ -14302,9 +15998,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Control Api V1 Guilds  Guild Id  Music Control Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicControlResult"
                 }
               }
             },
@@ -14403,9 +16097,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Music Dj Mode Api V1 Guilds  Guild Id  Music Dj Mode Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicDjModeApplied"
                 }
               }
             },
@@ -14504,9 +16196,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Equalizer Api V1 Guilds  Guild Id  Music Equalizer Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicEqualizerApplied"
                 }
               }
             },
@@ -14605,9 +16295,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Filters Api V1 Guilds  Guild Id  Music Filters Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicAck"
                 }
               }
             },
@@ -14724,9 +16412,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music History Api V1 Guilds  Guild Id  Music History Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicHistory"
                 }
               }
             },
@@ -14815,9 +16501,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Lyrics Api V1 Guilds  Guild Id  Music Lyrics Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicLyrics"
                 }
               }
             },
@@ -14916,9 +16600,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Play Api V1 Guilds  Guild Id  Music Play Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicPlayResult"
                 }
               }
             },
@@ -15007,9 +16689,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Reset Api V1 Guilds  Guild Id  Music Reset Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicAck"
                 }
               }
             },
@@ -15119,9 +16799,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Search Api V1 Guilds  Guild Id  Music Search Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicSearch"
                 }
               }
             },
@@ -15220,9 +16898,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Post Music Setup Api V1 Guilds  Guild Id  Music Setup Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicSetupResponse"
                 }
               }
             },
@@ -15311,9 +16987,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Trending Api V1 Guilds  Guild Id  Music Trending Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicTrending"
                 }
               }
             },
@@ -15411,9 +17085,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Music Viewer Api V1 Guilds  Guild Id  Music Viewer Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MusicViewer"
                 }
               }
             },

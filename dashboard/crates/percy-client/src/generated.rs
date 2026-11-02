@@ -2,6 +2,15 @@
 // Regenerate after any API change: `poetry run python scripts/export_openapi.py && cargo run -p percy-codegen`.
 // See GENERATION.md.
 
+///`AlwaysOnState`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AlwaysOnState {
+    pub enabled: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub mode: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub source: ::std::option::Option<::std::string::String>,
+}
 ///A headline number paired with its delta vs the preceding equal window.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct AnalyticsMetric {
@@ -38,6 +47,399 @@ pub struct AnalyticsSummary {
 pub struct AnalyticsTopCommand {
     pub command: ::std::string::String,
     pub uses: i64,
+}
+///`CustomBotAck`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CustomBotAck {
+    pub ok: bool,
+}
+///The bot's live Discord profile in the guild.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CustomBotProfile {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub about_me: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub accent_color: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub avatar_url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub banner_url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub name: ::std::option::Option<::std::string::String>,
+}
+///`GalleryDeleteResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GalleryDeleteResult {
+    pub failed: bool,
+    pub file: ::std::string::String,
+}
+///One image in a guild's gallery (metadata; the bytes live at ``raw_url`` on the hoster).
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GalleryImage {
+    pub ext: ::std::string::String,
+    pub id: ::std::string::String,
+    pub mimetype: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub original_name: ::std::option::Option<::std::string::String>,
+    pub raw_url: ::std::string::String,
+    pub size: i64,
+    pub uploaded_at: ::std::string::String,
+    pub url: ::std::string::String,
+}
+///`GalleryResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GalleryResponse {
+    pub images: ::std::vec::Vec<GalleryImage>,
+    pub total: i64,
+}
+///Mirrors the hoster's ``UploadResult``.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GalleryUploadResult {
+    pub errors: i64,
+    pub infected: i64,
+    pub links: ::std::vec::Vec<::std::string::String>,
+    pub raw_links: ::std::vec::Vec<::std::string::String>,
+    pub skipped: i64,
+    pub total: i64,
+}
+///`LyricLine`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct LyricLine {
+    pub text: ::std::string::String,
+    pub time: i64,
+}
+///`MusicAck`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicAck {
+    pub ok: bool,
+}
+///`MusicAlbum`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicAlbum {
+    pub album: MusicAlbumInfo,
+    pub tracks: ::std::vec::Vec<MusicTrackFull>,
+}
+///`MusicAlbumInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicAlbumInfo {
+    pub artists: ::std::vec::Vec<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    pub kind: ::std::string::String,
+    pub title: ::std::string::String,
+    pub total_ms: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub year: ::std::option::Option<i64>,
+}
+///`MusicAlwaysOnApplied`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicAlwaysOnApplied {
+    pub always_on: AlwaysOnState,
+    pub ok: bool,
+}
+///`MusicArtist`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicArtist {
+    pub artist: MusicArtistInfo,
+    pub releases: ::std::vec::Vec<MusicRelease>,
+    pub top_tracks: ::std::vec::Vec<MusicTrackFull>,
+}
+///`MusicArtistInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicArtistInfo {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub url: ::std::option::Option<::std::string::String>,
+}
+///Equalizer + filters. ``filters``/``presets`` stay free-form: the sound panel reads them directly.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicAudio {
+    pub active: bool,
+    pub effects: ::std::vec::Vec<::std::string::String>,
+    pub equalizer: MusicEqualizer,
+    pub filters: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    pub presets: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+}
+///`MusicAudioApplied`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicAudioApplied {
+    pub active: bool,
+    pub effects: ::std::vec::Vec<::std::string::String>,
+    pub equalizer: MusicEqualizer,
+    pub filters: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    pub ok: bool,
+    pub presets: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+}
+///`MusicChannelRef`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicChannelRef {
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+}
+///`MusicControlResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicControlResult {
+    pub action: ::std::string::String,
+    pub ok: bool,
+    pub paused: bool,
+}
+///`MusicDjModeApplied`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicDjModeApplied {
+    pub dj_mode: i64,
+    pub ok: bool,
+}
+///`MusicEqualizer`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicEqualizer {
+    pub bands: ::std::vec::Vec<f64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub preset: ::std::option::Option<::std::string::String>,
+}
+///`MusicEqualizerApplied`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicEqualizerApplied {
+    pub equalizer: ::std::vec::Vec<f64>,
+    pub ok: bool,
+}
+///`MusicFiltersState`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicFiltersState {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub lowpass: ::std::option::Option<f64>,
+    pub nightcore: bool,
+    #[serde(rename = "8d")]
+    pub x8d: bool,
+}
+///`MusicHistory`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicHistory {
+    pub items: ::std::vec::Vec<MusicHistoryItem>,
+}
+///One ``music_plays`` row (guild history and a user's recent plays).
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicHistoryItem {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub author: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub length_ms: ::std::option::Option<i64>,
+    pub played_at: ::std::string::String,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub uri: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub user_id: ::std::option::Option<::std::string::String>,
+}
+///``GET /music``: the live player snapshot (inactive guilds get empty queue/history).
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicInfo {
+    pub active: bool,
+    pub always_on: AlwaysOnState,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel_name: ::std::option::Option<::std::string::String>,
+    pub equalizer: ::std::vec::Vec<f64>,
+    pub filters: MusicFiltersState,
+    pub history: ::std::vec::Vec<QueueTrack>,
+    pub listeners: ::std::vec::Vec<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub now_playing: ::std::option::Option<NowPlaying>,
+    pub presets: ::std::vec::Vec<::std::string::String>,
+    pub queue: ::std::vec::Vec<QueueTrack>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub setup: ::std::option::Option<MusicSetup>,
+}
+///`MusicLyrics`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicLyrics {
+    pub has_synced: bool,
+    pub lines: ::std::vec::Vec<LyricLine>,
+    pub ok: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub plain: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub source: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub title: ::std::option::Option<::std::string::String>,
+}
+///`MusicPlayResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicPlayResult {
+    pub queued: ::std::vec::Vec<QueueTrack>,
+    pub started: bool,
+}
+///`MusicRelease`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicRelease {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    pub kind: ::std::string::String,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub track_count: ::std::option::Option<i64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub year: ::std::option::Option<i64>,
+}
+///`MusicSearch`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicSearch {
+    pub results: ::std::vec::Vec<QueueTrack>,
+}
+///`MusicSetup`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicSetup {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel_id: ::std::option::Option<::std::string::String>,
+    pub dj_mode: i64,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub message_id: ::std::option::Option<::std::string::String>,
+    pub use_panel: bool,
+}
+///`MusicSetupResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicSetupResponse {
+    pub channel_id: ::std::string::String,
+    pub channel_name: ::std::string::String,
+    pub ok: bool,
+}
+///``_serialize_track(full=True)`` for artist/album pages.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicTrackFull {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub album: ::std::option::Option<TrackLink>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artist_url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    pub author: ::std::string::String,
+    pub autoplay: bool,
+    pub duration: i64,
+    pub is_stream: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub isrc: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub playlist: ::std::option::Option<TrackLink>,
+    pub recommended: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub requester: ::std::option::Option<TrackRequester>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub source: ::std::option::Option<::std::string::String>,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub uri: ::std::option::Option<::std::string::String>,
+}
+///`MusicTrending`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicTrending {
+    pub global: ::std::vec::Vec<TrendingTrack>,
+    pub server: ::std::vec::Vec<TrendingTrack>,
+}
+///`MusicViewer`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct MusicViewer {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub bot_channel: ::std::option::Option<MusicChannelRef>,
+    pub can_control: bool,
+    pub can_destroy: bool,
+    pub can_start: bool,
+    pub dj_mode: i64,
+    pub is_manager: bool,
+    pub role: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub voice_channel: ::std::option::Option<MusicChannelRef>,
+}
+///The live player's current track: the full track plus transport state.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct NowPlaying {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub album: ::std::option::Option<TrackLink>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artist_url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    pub author: ::std::string::String,
+    pub autoplay: i64,
+    pub duration: i64,
+    pub is_stream: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub isrc: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "loop")]
+    pub loop_: i64,
+    pub paused: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub playlist: ::std::option::Option<TrackLink>,
+    pub position: i64,
+    pub recommended: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub requester: ::std::option::Option<TrackRequester>,
+    pub shuffle: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub source: ::std::option::Option<::std::string::String>,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub uri: ::std::option::Option<::std::string::String>,
+    pub volume: i64,
+}
+///A track in the queue / history / search results (``_serialize_track``).
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct QueueTrack {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub album: ::std::option::Option<TrackLink>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artist_url: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    pub author: ::std::string::String,
+    pub autoplay: bool,
+    pub duration: i64,
+    pub is_stream: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub requester: ::std::option::Option<TrackRequester>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub source: ::std::option::Option<::std::string::String>,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub uri: ::std::option::Option<::std::string::String>,
+}
+///`TrackLink`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TrackLink {
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub url: ::std::option::Option<::std::string::String>,
+}
+///`TrackRequester`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TrackRequester {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub avatar: ::std::option::Option<::std::string::String>,
+    pub id: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub name: ::std::option::Option<::std::string::String>,
+}
+///`TrendingTrack`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct TrendingTrack {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub artwork: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub author: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub length_ms: ::std::option::Option<i64>,
+    pub listeners: i64,
+    pub plays: i64,
+    pub title: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub uri: ::std::option::Option<::std::string::String>,
 }
 /// Error types.
 pub mod error {

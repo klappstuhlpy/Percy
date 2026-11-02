@@ -26,29 +26,48 @@ class PatchCustomBotBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response models (percy-client's generated types; names are the Rust type names)
+# ---------------------------------------------------------------------------
+
+
+class CustomBotProfile(BaseModel):
+    """The bot's live Discord profile in the guild."""
+
+    name: str | None
+    avatar_url: str | None
+    banner_url: str | None
+    accent_color: str | None
+    about_me: str | None
+
+
+class CustomBotAck(BaseModel):
+    ok: bool
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.get("/custom-bot")
-async def get_custom_bot(bot: BotDep, guild: GuildDep) -> dict:
+async def get_custom_bot(bot: BotDep, guild: GuildDep) -> CustomBotProfile:
     """Bot's live Discord profile in the guild (nick, avatar, banner, accent_color)."""
     await bot.wait_until_ready()
 
     me = guild.me
     bot_user = await bot.fetch_user(bot.user.id)
 
-    return {
+    return CustomBotProfile.model_validate({
         'name': me.nick or (me.display_name if me else None),
         'avatar_url': str(me.display_avatar.url) if me else bot_user.display_avatar.url,
         'banner_url': str(me.banner.url) if me and me.banner else bot_user.banner.url if bot_user.banner else None,
         'accent_color': str(me.accent_color) if me else None,
         'about_me': None,  # not supported by Discord API
-    }
+    })
 
 
 @router.patch("/custom-bot")
-async def patch_custom_bot(bot: BotDep, guild: GuildDep, body: PatchCustomBotBody) -> dict:
+async def patch_custom_bot(bot: BotDep, guild: GuildDep, body: PatchCustomBotBody) -> CustomBotAck:
     """Edit the bot's profile in the guild (nickname, avatar, banner, bio)."""
     await bot.wait_until_ready()
 
@@ -74,14 +93,14 @@ async def patch_custom_bot(bot: BotDep, guild: GuildDep, body: PatchCustomBotBod
         bio = body.about_me.strip()[:190] or None
         await me.edit(bio=bio)
 
-    return {'ok': True}
+    return CustomBotAck(ok=True)
 
 
 @router.post("/custom-bot/reset")
-async def reset_custom_bot(bot: BotDep, guild: GuildDep) -> dict:
+async def reset_custom_bot(bot: BotDep, guild: GuildDep) -> CustomBotAck:
     """Clear all bot profile customizations in the guild."""
     await bot.wait_until_ready()
 
     me = guild.me
     await me.edit(nick=None, avatar=None, banner=None, bio=None)
-    return {'ok': True}
+    return CustomBotAck(ok=True)
