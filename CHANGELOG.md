@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.27.0] - 2026-11-02
+
+### Added
+- Moderation: warnings are point-weighted (`warn --points`) and can use reason presets; the warn policy thresholds act on the point total.
+- Moderation: `voicekick`, `voiceban`/`voiceunban`, `nick`, `nickfreeze`/`nickunfreeze` and per-channel `channelmute`/`channelunmute`, also available from the dashboard's member actions.
+- Moderation: sticky roles that are restored when a member rejoins, plus moderation settings: DM the member on an action, require a reason, re-invite on unban and a default ban message-delete window.
+- A custom reply for disabled commands, set per server.
+- Command permission rules: `config rule ...` allows or denies a command per role, channel or member, and `config explain` shows which rule decided the outcome. The dashboard's new **Rules & Custom** page manages them.
+- Custom commands and aliases: typed arguments, flags, permissions, cooldowns and random responses, created in Discord through an interactive Components V2 manager behind bare `cc` or on the dashboard's **Rules & Custom** page.
+- Member reports: `report` and a **Report Message** context menu send a report to the server's report channel with moderator action buttons. A report channel must be configured first.
+- Trivia: custom trivia lists (`trivialist`, imported from JSON) with free-text rounds and a leaderboard.
+- Music: playlists can be exported and imported.
+- Internal API: `/command-rules` and `/custom-commands` (including aliases) routers, the new member actions, and moderation-settings fields on the guild config.
+
+### Changed
+- **Breaking for self-hosters:** the 74 migration files are consolidated into 14 feature bundles (`V1`-`V14`). Existing databases cannot be upgraded in place: start from a fresh database (with the `pg_trgm` extension), run `poetry run python main.py db init`, and re-import any data you need to keep.
+- Banning without an explicit message-delete window now uses the server's default instead of a fixed 0 days.
+- Personal-data deletion (`settings remove-personal-data`) now covers every table that stores a user id, enforced by a CI contract test.
+
+### Fixed
+- Commands with optional text before flags no longer drop the flags (for example `warn --points 3`).
+- Rejoining members now get their restored restrictions re-applied.
+- A report whose action fails releases its claim so it can be retried.
+- Custom trivia: one custom round per channel, malformed deeply nested JSON is rejected, and played questions are not repeated.
+
 ## [2.26.0] - 2026-11-02
 
 ### Changed

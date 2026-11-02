@@ -2290,7 +2290,7 @@ pub struct WatchPrefs {
 pub struct WatchProgressDeleted {
     pub deleted: i64,
 }
-///One title's V39 watch state.
+///One title's V13 watch state.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct WatchProgressEntry {
     pub status: ::std::string::String,
