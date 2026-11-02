@@ -21,6 +21,7 @@ from app.database.repositories import (
     CasesRepository,
     ComicsRepository,
     CommandRulesRepository,
+    CustomCommandsRepository,
     EconomyRepository,
     EmojiStatsRepository,
     EventWebhooksRepository,
@@ -51,6 +52,7 @@ from app.database.repositories import (
     WatchlistRepository,
 )
 from app.database.sentinel_roles import SentinelRoleQueue
+from app.services.custom_commands.models import CustomCommandIndex
 from app.utils import BaseFlags, cache, flag_value
 from app.utils.query_tracker import QueryTracker
 from app.utils.signals import CacheSignalHub
@@ -348,6 +350,7 @@ class Database(_Database):
         self.notifications = NotificationsRepository(self)
         self.restrictions = RestrictionsRepository(self)
         self.command_rules = CommandRulesRepository(self)
+        self.custom_commands = CustomCommandsRepository(self)
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
@@ -363,6 +366,7 @@ class Database(_Database):
         s.register("ai_config_changed").connect(self.get_guild_ai_config, None)
         s.register("command_overrides_changed").connect(self.get_command_overrides, None)
         s.register("command_rules_changed").connect(self.get_command_rules, None)
+        s.register("custom_commands_changed").connect(self.get_custom_command_index, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -425,6 +429,17 @@ class Database(_Database):
         the ``command_rules_changed`` signal.
         """
         return await self.command_rules.list_rules(guild_id)
+
+    @cache.cache()
+    async def get_custom_command_index(self, guild_id: int) -> CustomCommandIndex:
+        """|coro| @cached
+
+        A guild's custom commands and aliases, keyed for dispatch; read on every prefix miss and
+        busted via the ``custom_commands_changed`` signal.
+        """
+        return CustomCommandIndex.build(
+            await self.custom_commands.list_commands(guild_id), await self.custom_commands.list_aliases(guild_id)
+        )
 
     @cache.cache()
     async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:

@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.core.permissions import normalize_rule_subject
+from app.core.permissions import custom_command_name, normalize_rule_subject
 from app.services.command_rules import TARGET_TYPES
 
 from ..dependencies import BotDep, GuildDep, verify_token
@@ -36,8 +36,10 @@ class PutCommandRuleBody(BaseModel):
     allow: bool
 
 
-def _target(bot, guild, subject: str, target_type: str, target_id: object, *, strict: bool = True) -> tuple[str, int]:
-    canonical = normalize_rule_subject(bot, subject)
+def _target(
+    bot, guild, subject: str, target_type: str, target_id: object, *, strict: bool = True, custom: str | None = None
+) -> tuple[str, int]:
+    canonical = normalize_rule_subject(bot, subject) or custom
     if canonical is None and not strict:
         canonical = subject  # a rule for a since-removed command must stay deletable
     if canonical is None:
@@ -64,7 +66,8 @@ async def list_command_rules(guild: GuildDep, bot: BotDep) -> CommandRulesRespon
 
 @router.put("/command-rules")
 async def put_command_rule(guild: GuildDep, bot: BotDep, body: PutCommandRuleBody) -> CommandRulesResponse:
-    subject, tid = _target(bot, guild, body.subject, body.target_type, body.target_id)
+    custom = None if normalize_rule_subject(bot, body.subject) else await custom_command_name(bot.db, guild, body.subject)
+    subject, tid = _target(bot, guild, body.subject, body.target_type, body.target_id, custom=custom)
     await bot.db.command_rules.set_rule(guild.id, subject, body.target_type, tid, body.allow)
     return await list_command_rules(guild, bot)
 

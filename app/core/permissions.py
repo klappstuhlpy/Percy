@@ -23,6 +23,7 @@ __all__ = (
     "PermissionTemplate",
     "check_rules",
     "command_permission_check",
+    "custom_command_name",
     "normalize_rule_subject",
 )
 
@@ -373,6 +374,17 @@ async def check_rules(
             category_id=getattr(parent, "category_id", None),
         ),
     )
+
+
+async def custom_command_name(db, guild: discord.Guild | None, name: str) -> str | None:
+    """The canonical name of ``guild``'s custom command called (or aliased) ``name``, if there is one.
+
+    Lets rules and ``config`` disables target custom commands, which have no :class:`commands.Command`.
+    """
+    if guild is None:
+        return None
+    cc = (await db.get_custom_command_index(guild.id)).lookup.get(name.lower())
+    return cc.name if cc else None
 
 
 def normalize_rule_subject(bot: Bot, subject: str) -> str | None:

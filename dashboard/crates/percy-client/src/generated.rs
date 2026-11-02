@@ -482,6 +482,20 @@ pub struct ComicSeriesSummary {
 pub struct ComicsResponse {
     pub feeds: ::std::vec::Vec<ComicFeedEntry>,
 }
+///`CommandAliasEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandAliasEntry {
+    pub alias: ::std::string::String,
+    pub expansion: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_id: ::std::option::Option<::std::string::String>,
+}
+///`CommandAliasesResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CommandAliasesResponse {
+    pub aliases: ::std::vec::Vec<CommandAliasEntry>,
+    pub max_aliases: i64,
+}
 ///`CommandRule`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct CommandRule {
@@ -519,6 +533,39 @@ pub struct CustomBotProfile {
     pub banner_url: ::std::option::Option<::std::string::String>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub name: ::std::option::Option<::std::string::String>,
+}
+///`CustomCommandEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CustomCommandEntry {
+    pub aliases: ::std::vec::Vec<::std::string::String>,
+    pub allowed_role_ids: ::std::vec::Vec<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub cooldown_per: ::std::option::Option<f64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub cooldown_rate: ::std::option::Option<i64>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub created_at: ::std::option::Option<::std::string::String>,
+    pub delete_invocation: bool,
+    pub id: i64,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub owner_id: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub required_permissions: ::std::option::Option<::std::string::String>,
+    pub responses: ::std::vec::Vec<::std::string::String>,
+    pub signature: ::std::string::String,
+    pub uses: i64,
+}
+///`CustomCommandsResponse`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct CustomCommandsResponse {
+    pub commands: ::std::vec::Vec<CustomCommandEntry>,
+    pub max_commands: i64,
+    pub placeholders: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::string::String,
+    >,
+    pub types: ::std::vec::Vec<::std::string::String>,
 }
 ///`EconomyInfo`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]

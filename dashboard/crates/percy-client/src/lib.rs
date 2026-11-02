@@ -2448,8 +2448,101 @@ impl PercyClient {
         self.send_unit(
             self.client
                 .delete(self.url(&format!("/api/v1/guilds/{}/command-rules", seg(&guild_id))))
-                .query(&[("subject", subject), ("target_type", target_type), ("target_id", target_id)]),
+                .query(&[
+                    ("subject", subject),
+                    ("target_type", target_type),
+                    ("target_id", target_id),
+                ]),
         )
+        .await
+    }
+
+    /// The guild's custom commands, plus the argument types and placeholders for the editor.
+    pub async fn get_custom_commands(&self, guild_id: u64) -> Result<CustomCommandsResponse, PercyError> {
+        self.send_into(
+            self.client
+                .get(self.url(&format!("/api/v1/guilds/{}/custom-commands", seg(&guild_id)))),
+        )
+        .await
+    }
+
+    /// Create a custom command. `body` is Percy's `CustomCommandBody` (`name`, `responses`, optional
+    /// `aliases`, `signature`, `required_permissions` (bitmask string), `allowed_role_ids`,
+    /// `cooldown_rate` + `cooldown_per`, `delete_invocation`, `owner_id`). A refusal is `Api` (400).
+    pub async fn create_custom_command(
+        &self,
+        guild_id: u64,
+        body: &serde_json::Value,
+    ) -> Result<CustomCommandEntry, PercyError> {
+        self.send_into(
+            self.client
+                .post(self.url(&format!("/api/v1/guilds/{}/custom-commands", seg(&guild_id))))
+                .json(body),
+        )
+        .await
+    }
+
+    /// Change some fields of a custom command (absent keys are kept).
+    pub async fn patch_custom_command(
+        &self,
+        guild_id: u64,
+        command_id: i64,
+        body: &serde_json::Value,
+    ) -> Result<CustomCommandEntry, PercyError> {
+        self.send_into(
+            self.client
+                .patch(self.url(&format!(
+                    "/api/v1/guilds/{}/custom-commands/{}",
+                    seg(&guild_id),
+                    seg(&command_id)
+                )))
+                .json(body),
+        )
+        .await
+    }
+
+    /// Delete a custom command.
+    pub async fn delete_custom_command(&self, guild_id: u64, command_id: i64) -> Result<(), PercyError> {
+        self.send_unit(self.client.delete(self.url(&format!(
+            "/api/v1/guilds/{}/custom-commands/{}",
+            seg(&guild_id),
+            seg(&command_id)
+        ))))
+        .await
+    }
+
+    /// The guild's command aliases.
+    pub async fn get_command_aliases(&self, guild_id: u64) -> Result<CommandAliasesResponse, PercyError> {
+        self.send_into(
+            self.client
+                .get(self.url(&format!("/api/v1/guilds/{}/aliases", seg(&guild_id)))),
+        )
+        .await
+    }
+
+    /// Add or replace an alias; returns every alias.
+    pub async fn put_command_alias(
+        &self,
+        guild_id: u64,
+        alias: &str,
+        expansion: &str,
+        owner_id: Option<&str>,
+    ) -> Result<CommandAliasesResponse, PercyError> {
+        self.send_into(
+            self.client
+                .put(self.url(&format!("/api/v1/guilds/{}/aliases/{}", seg(&guild_id), seg(&alias))))
+                .json(&serde_json::json!({ "expansion": expansion, "owner_id": owner_id })),
+        )
+        .await
+    }
+
+    /// Remove an alias.
+    pub async fn delete_command_alias(&self, guild_id: u64, alias: &str) -> Result<(), PercyError> {
+        self.send_unit(self.client.delete(self.url(&format!(
+            "/api/v1/guilds/{}/aliases/{}",
+            seg(&guild_id),
+            seg(&alias)
+        ))))
         .await
     }
 

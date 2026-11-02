@@ -12,6 +12,7 @@ from app.database.repositories.content import (
     StatCountersRepository,
     TempChannelsRepository,
 )
+from app.database.repositories.custom_commands import CustomCommandsRepository
 from app.database.repositories.economy import EconomyRepository, LevelingRepository
 from app.database.repositories.guilds import AdminRepository, GuildsRepository
 from app.database.repositories.integrations import EventWebhooksRepository, GuildTemplatesRepository
@@ -37,6 +38,7 @@ __all__ = (
     'CasesRepository',
     'ComicsRepository',
     'CommandRulesRepository',
+    'CustomCommandsRepository',
     'EconomyRepository',
     'EmojiStatsRepository',
     'EventWebhooksRepository',

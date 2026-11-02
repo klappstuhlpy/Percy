@@ -463,14 +463,27 @@ class Bot(commands.Bot):
         if ctx.command is None:
             # No command matched. discord.py only raises CommandNotFound from invoke(),
             # which we skip here. When the user used the prefix (ctx.invoked_with is set),
-            # first try a deterministic typo correction (e.g. "aks" -> "ask"); only if the
-            # word is not a near-miss of a real command do we fall back to AI intent routing
-            # (if enabled). Typos must win over AI guessing, or "b.aks <question>" gets
-            # mis-routed as natural language.
+            # a guild alias or custom command gets the word first (a real command always won
+            # already, by matching above); then a deterministic typo correction (e.g. "aks" ->
+            # "ask"); only if the word is not a near-miss of a real command do we fall back to
+            # AI intent routing (if enabled). Typos must win over AI guessing, or
+            # "b.aks <question>" gets mis-routed as natural language.
+            if ctx.invoked_with and await self._maybe_dispatch_custom(ctx):
+                return
             if ctx.invoked_with and not await self._maybe_suggest_command(ctx):
                 await self._maybe_route_with_ai(ctx)
             return
 
+        await self.invoke_matched(ctx, message)
+
+    async def _maybe_dispatch_custom(self, ctx: Context) -> bool:
+        """Hand a prefix miss to the CustomCommands cog (aliases, custom commands); whether it ran one."""
+        dispatch = getattr(self.get_cog('CustomCommands'), 'try_dispatch', None)
+        return ctx.guild is not None and dispatch is not None and await dispatch(ctx)
+
+    async def invoke_matched(self, ctx: Context, message: discord.Message) -> None:
+        """Run a context whose command matched: spam control, feature flags, invoke, metrics."""
+        assert ctx.command is not None
         if await self.spam_control.is_spam(ctx, message):
             return
 

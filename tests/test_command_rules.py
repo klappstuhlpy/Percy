@@ -88,6 +88,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from app.core.permissions import check_rules
 from app.internal_api.routers import command_rules as api
+from app.services.custom_commands.models import CustomCommandIndex
 
 
 def _member() -> tuple[MagicMock, MagicMock, MagicMock]:
@@ -121,6 +122,7 @@ async def test_api_roundtrip_and_validation() -> None:
     bot.db.command_rules.list_rules = AsyncMock(return_value=tuple(stored))
     bot.db.command_rules.set_rule = AsyncMock()
     bot.db.command_rules.remove_rule = AsyncMock(return_value=True)
+    bot.db.get_custom_command_index = AsyncMock(return_value=CustomCommandIndex())
 
     body = api.PutCommandRuleBody(subject='ping', target_type='role', target_id=str(R_HI), allow=False)
     out = (await api.put_command_rule(guild, bot, body)).model_dump(mode='json')

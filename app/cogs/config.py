@@ -13,7 +13,7 @@ from app.core import Cog, Context
 from app.core.errors import CommandDisabled
 from app.core.models import PermissionSpec, PermissionTemplate, cooldown, describe, group
 from app.core.pagination import LinePaginator
-from app.core.permissions import check_rules, normalize_rule_subject
+from app.core.permissions import check_rules, custom_command_name, normalize_rule_subject
 from app.services.command_rules import Decision
 from app.services.moderation_settings import DISABLED_MESSAGE_VARIABLES, check_disabled_message, render_disabled_message
 from app.utils import cache, get_asset_url, helpers
@@ -66,6 +66,19 @@ class CommandName(commands.Converter[str]):
             raise commands.BadArgument(f"Command {lowered!r} is not valid.")
 
         return lowered
+
+
+class CommandOrCustomName(CommandName):
+    """A command name, or this server's custom command (by name or alias; returns its name)."""
+
+    async def convert(self, ctx: Context, argument: str) -> str:
+        try:
+            return await super().convert(ctx, argument)
+        except commands.BadArgument:
+            name = await custom_command_name(ctx.bot.db, ctx.guild, argument)
+            if name is None:
+                raise
+            return name
 
 
 class RuleTarget(commands.Converter["tuple[str, int]"]):
@@ -508,7 +521,7 @@ class Config(Cog):
         user_permissions=PermissionTemplate.mod,
     )
     @describe(command="The command to disable.")
-    async def channel_disable(self, ctx: Context, *, command: Annotated[str, CommandName]) -> None:
+    async def channel_disable(self, ctx: Context, *, command: Annotated[str, CommandOrCustomName]) -> None:
         """Disables a command for this channel."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, ctx.channel.id, command, whitelist=False)
@@ -521,7 +534,7 @@ class Config(Cog):
         "enable", description="Enables a command for this channel.", guild_only=True, user_permissions=PermissionTemplate.mod
     )
     @describe(command="The command to enable.")
-    async def channel_enable(self, ctx: Context, *, command: Annotated[str, CommandName]) -> None:
+    async def channel_enable(self, ctx: Context, *, command: Annotated[str, CommandOrCustomName]) -> None:
         """Enables a command for this channel."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, ctx.channel.id, command, whitelist=True)
@@ -548,7 +561,7 @@ class Config(Cog):
         user_permissions=PermissionTemplate.mod,
     )
     @describe(command="The command to disable.")
-    async def server_disable(self, ctx: Context, *, command: Annotated[str, CommandName]) -> None:
+    async def server_disable(self, ctx: Context, *, command: Annotated[str, CommandOrCustomName]) -> None:
         """Disables a command for this server."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, None, command, whitelist=False)
@@ -561,7 +574,7 @@ class Config(Cog):
         "enable", description="Enables a command for this server.", guild_only=True, user_permissions=PermissionTemplate.mod
     )
     @describe(command="The command to enable.")
-    async def server_enable(self, ctx: Context, *, command: Annotated[str, CommandName]) -> None:
+    async def server_enable(self, ctx: Context, *, command: Annotated[str, CommandOrCustomName]) -> None:
         """Enables a command for this server."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, None, command, whitelist=True)
@@ -578,7 +591,7 @@ class Config(Cog):
     )
     @describe(channel="The channel to enable the command for.", command="The command to enable.")
     async def config_enable(
-        self, ctx: Context, channel: discord.TextChannel | None, *, command: Annotated[str, CommandName]
+        self, ctx: Context, channel: discord.TextChannel | None, *, command: Annotated[str, CommandOrCustomName]
     ) -> None:
         """Enables a command the server or a channel."""
         channel_id = channel.id if channel else None
@@ -598,7 +611,7 @@ class Config(Cog):
     )
     @describe(channel="The channel to disable the command for.", command="The command to disable.")
     async def config_disable(
-        self, ctx: Context, channel: discord.TextChannel | None, *, command: Annotated[str, CommandName]
+        self, ctx: Context, channel: discord.TextChannel | None, *, command: Annotated[str, CommandOrCustomName]
     ) -> None:
         """Disables a command for the server or a channel."""
         channel_id = channel.id if channel else None
@@ -818,7 +831,7 @@ class Config(Cog):
     # -- command rules ---------------------------------------------------
 
     async def _set_rule(self, ctx: Context, subject: str, target: tuple[str, int], allow: bool) -> None:
-        canonical = normalize_rule_subject(self.bot, subject)
+        canonical = normalize_rule_subject(self.bot, subject) or await custom_command_name(self.bot.db, ctx.guild, subject)
         if canonical is None:
             await ctx.send_error(
                 f"`{subject}` is not a command, `cog:<Name>` or `*` (Config commands cannot be restricted)."
@@ -909,13 +922,13 @@ class Config(Cog):
         self,
         ctx: Context,
         member: discord.Member,
-        command: Annotated[str, CommandName],
+        command: Annotated[str, CommandOrCustomName],
         channel: discord.TextChannel | discord.VoiceChannel | None = None,
     ) -> None:
         """Walks the ignore list, disable list, permission override and rules for `member` running `command`."""
         channel = channel or ctx.channel
         cmd = self.bot.get_command(command)
-        assert cmd is not None
+        name, cog_name = (cmd.qualified_name, cmd.cog_name) if cmd else (command, None)
         guild = ctx.guild
         lines: list[str] = []
         verdict: str | None = None
@@ -929,7 +942,7 @@ class Config(Cog):
         if plonked and verdict is None:
             verdict = "blocked by the ignore list (rules cannot override it)"
 
-        decision = await check_rules(self.bot.db, guild, member, channel, cmd.qualified_name, cmd.cog_name)
+        decision = await check_rules(self.bot.db, guild, member, channel, name, cog_name)
         lines.append(f"**Rules:** {decision.reason}")
         if decision.allowed is False and member.id == guild.owner_id:
             lines.append("**Server owner:** bypasses denies.")
@@ -937,20 +950,22 @@ class Config(Cog):
             verdict = "blocked by a deny rule"
 
         resolved = await self.get_commands_configuration(guild_id=guild.id)
-        blocked = resolved.is_command_blocked(cmd.qualified_name, channel.id)
+        blocked = resolved.is_command_blocked(name, channel.id)
         bypass = member.guild_permissions.manage_guild
         state = ("disabled here" + (" (Manage Server bypasses)" if bypass else "")) if blocked else "enabled"
         lines.append(f"**Enable/disable:** {state}{' - overridden by an allow rule' if blocked and decision.allowed else ''}.")
         if blocked and not bypass and not decision.allowed and verdict is None:
             verdict = "blocked because the command is disabled here"
 
-        override = (await self.bot.db.get_command_overrides(guild.id)).get(cmd.qualified_name)
-        if override is None:
+        override = (await self.bot.db.get_command_overrides(guild.id)).get(name)
+        if cmd is None:
+            lines.append("**Custom command:** its own permission/role gate applies (no permission override).")
+        elif override is None:
             lines.append("**Permission override:** none (default gate).")
         else:
             lines.append(
                 "**Permission override:** "
-                + self._describe_override(cmd.qualified_name, override.permissions, override.allowed_roles)
+                + self._describe_override(name, override.permissions, override.allowed_roles)
             )
         gate = (
             "bypassed by an allow rule (the bot's own permissions still apply)."
@@ -960,7 +975,7 @@ class Config(Cog):
         lines.append(f"**Permission gate:** {gate}")
 
         embed = discord.Embed(
-            title=f"{member.display_name} -> {cmd.qualified_name} in #{channel.name}",
+            title=f"{member.display_name} -> {name} in #{channel.name}",
             description="\n".join(lines),
             color=helpers.Colour.white(),
         )
