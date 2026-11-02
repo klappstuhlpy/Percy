@@ -20,6 +20,7 @@ from app.database.repositories.music_plays import MusicPlaysRepository
 from app.database.repositories.news import NewsRepository
 from app.database.repositories.notifications import NotificationsRepository
 from app.database.repositories.releases import ReleasesRepository
+from app.database.repositories.restrictions import RestrictionsRepository
 from app.database.repositories.stats import EmojiStatsRepository, GameStatsRepository, StatsRepository
 from app.database.repositories.timers import TimersRepository
 from app.database.repositories.users import (
@@ -51,6 +52,7 @@ __all__ = (
     'PlaylistsRepository',
     'PollsRepository',
     'ReleasesRepository',
+    'RestrictionsRepository',
     'RoleMenusRepository',
     'StarboardRepository',
     'StatCountersRepository',

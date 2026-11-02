@@ -121,6 +121,16 @@
                 <span class="config-description">Scans the most recently active channels for this member's messages. Discord cannot bulk-delete messages older than 14 days.</span>
             </div>
 
+            <div class="config-field mt-md" id="modal-nickname-field" hidden>
+                <label class="config-label" for="modal-nickname">Nickname</label>
+                <input type="text" id="modal-nickname" class="config-input" maxlength="32" placeholder="Leave blank to reset">
+            </div>
+
+            <div class="config-field mt-md" id="modal-channel-field" hidden>
+                <label class="config-label" for="modal-channel">Channel ID</label>
+                <input type="text" id="modal-channel" class="config-input" inputmode="numeric" placeholder="Right-click the channel, Copy Channel ID">
+            </div>
+
             <div class="config-field mt-md mb-md">
                 <label class="config-label" for="modal-reason">Reason (optional)</label>
                 <input type="text" id="modal-reason" class="config-input" placeholder="Moderation reason...">

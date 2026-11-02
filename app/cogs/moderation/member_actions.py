@@ -12,6 +12,7 @@ from contextlib import suppress
 
 import discord
 
+from app.services.restrictions import RESTRICTION_ACTIONS
 from app.utils.checks import hierarchy_error
 
 # Percy keeps no message archive (the gateway cache holds 10 messages), so both the message
@@ -32,7 +33,8 @@ MAX_MUTE_SECONDS = 365 * 24 * 60 * 60
 
 # Actions Discord only lets Percy perform on a member it outranks. Every action also requires the
 # moderator to outrank the member; a mute only needs the mute role below Percy, not the member.
-HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout', 'untimeout'})
+# A nickname change needs Percy above the member; voice bans and channel mutes only touch a role/overwrite.
+HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout', 'untimeout', 'nick', 'nickfreeze'})
 
 
 class MemberActionError(Exception):
@@ -176,13 +178,15 @@ async def apply_member_action(
     duration: int | None = None,
     delete_message_days: int = 0,
     limit: int = 100,
+    channel_id: int | None = None,
+    nickname: str | None = None,
 ) -> dict:
     """Apply one moderation action to a member on behalf of an already-resolved ``moderator``.
 
     Every action that changes a member's standing is recorded as a modlog case through the
     same ``mod_action`` dispatch the in-Discord commands use. Raises :class:`MemberActionError`.
     """
-    if action == 'mute':
+    if action in ('mute', 'voiceban', 'channelmute'):
         # Before the role goes on, so a bad duration never leaves a permanent mute behind.
         validate_mute_duration(duration)
 
@@ -199,6 +203,8 @@ async def apply_member_action(
         raise MemberActionError(403, error)
     if action == 'timeout' and member is not None and member.guild_permissions.administrator:
         raise MemberActionError(400, 'Discord does not allow timing out administrators')
+    if action == 'channelmute' and member is not None and member.guild_permissions.administrator:
+        raise MemberActionError(400, 'administrators ignore channel overwrites, so a channel mute would do nothing')
 
     delete_days = max(0, min(7, delete_message_days))
     extra: dict = {}
@@ -245,6 +251,29 @@ async def apply_member_action(
                     case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
             elif action == 'unmute':
                 await lift_mute(bot, guild, member, reason)
+            elif action in RESTRICTION_ACTIONS:
+                from app.cogs.restrictions import actions as restrict
+
+                if action == 'voicekick':
+                    await restrict.apply_voicekick(member, reason)
+                elif action == 'voiceban':
+                    await restrict.apply_voiceban(bot, guild, member, moderator, reason, duration)
+                    if duration is not None:
+                        case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
+                elif action == 'voiceunban':
+                    await restrict.lift_voiceban(bot, guild, member, reason)
+                elif action == 'nick':
+                    await restrict.apply_nick(member, nickname, reason)
+                elif action == 'nickfreeze':
+                    await restrict.apply_nickfreeze(bot, member, nickname, reason)
+                elif action == 'nickunfreeze':
+                    await restrict.lift_nickfreeze(bot, member)
+                elif action == 'channelmute':
+                    await restrict.apply_channelmute(bot, guild, member, moderator, channel_id, reason, duration)
+                    if duration is not None:
+                        case_expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
+                elif action == 'channelunmute':
+                    await restrict.lift_channelmute(bot, guild, member, moderator, channel_id, reason)
             elif action == 'warn':
                 if member.bot:
                     raise MemberActionError(400, 'cannot warn a bot')

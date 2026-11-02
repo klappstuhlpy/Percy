@@ -5165,6 +5165,20 @@
             "title": "Action",
             "type": "string"
           },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
           "delete_message_days": {
             "default": 0,
             "title": "Delete Message Days",
@@ -5199,6 +5213,17 @@
               }
             ],
             "title": "Moderator Id"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
           },
           "reason": {
             "anyOf": [

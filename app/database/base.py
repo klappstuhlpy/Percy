@@ -37,6 +37,7 @@ from app.database.repositories import (
     PlaylistsRepository,
     PollsRepository,
     ReleasesRepository,
+    RestrictionsRepository,
     RoleMenusRepository,
     StarboardRepository,
     StatCountersRepository,
@@ -343,6 +344,7 @@ class Database(_Database):
         self.releases = ReleasesRepository(self)
         self.news = NewsRepository(self)
         self.notifications = NotificationsRepository(self)
+        self.restrictions = RestrictionsRepository(self)
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
@@ -1020,6 +1022,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     safe_automod_entity_ids: set[int]
     muted_members: set[int]
     mute_role_id: int | None
+    voiceban_role_id: int | None
 
     request_channel_id: int | None
     request_role_ids: list[int]
@@ -1071,6 +1074,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         "safe_automod_entity_ids",
         "use_music_panel",
         "voice_log_channel_id",
+        "voiceban_role_id",
     )
 
     def _coerce(self) -> None:

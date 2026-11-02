@@ -30,6 +30,14 @@ class CaseType(enum.Enum):
     UNMUTE = 'unmute'
     TIMEOUT = 'timeout'
     UNTIMEOUT = 'untimeout'
+    VOICEKICK = 'voicekick'
+    VOICEBAN = 'voiceban'
+    VOICEUNBAN = 'voiceunban'
+    NICK = 'nick'
+    NICKFREEZE = 'nickfreeze'
+    NICKUNFREEZE = 'nickunfreeze'
+    CHANNELMUTE = 'channelmute'
+    CHANNELUNMUTE = 'channelunmute'
 
     @classmethod
     def from_action(cls, action: str) -> CaseType | None:
@@ -64,6 +72,14 @@ _LABELS: dict[CaseType, str] = {
     CaseType.UNMUTE: 'Unmute',
     CaseType.TIMEOUT: 'Timeout',
     CaseType.UNTIMEOUT: 'Untimeout',
+    CaseType.VOICEKICK: 'Voice Kick',
+    CaseType.VOICEBAN: 'Voice Ban',
+    CaseType.VOICEUNBAN: 'Voice Unban',
+    CaseType.NICK: 'Nickname',
+    CaseType.NICKFREEZE: 'Nickname Freeze',
+    CaseType.NICKUNFREEZE: 'Nickname Unfreeze',
+    CaseType.CHANNELMUTE: 'Channel Mute',
+    CaseType.CHANNELUNMUTE: 'Channel Unmute',
 }
 
 # Reds for removals, oranges for kicks, yellow for warns, greens for reversals, grey for mutes.
@@ -79,6 +95,14 @@ _COLOURS: dict[CaseType, int] = {
     CaseType.UNMUTE: 0x2ECC71,
     CaseType.TIMEOUT: 0x95A5A6,
     CaseType.UNTIMEOUT: 0x2ECC71,
+    CaseType.VOICEKICK: 0xE67E22,
+    CaseType.VOICEBAN: 0x95A5A6,
+    CaseType.VOICEUNBAN: 0x2ECC71,
+    CaseType.NICK: 0x3498DB,
+    CaseType.NICKFREEZE: 0x3498DB,
+    CaseType.NICKUNFREEZE: 0x2ECC71,
+    CaseType.CHANNELMUTE: 0x95A5A6,
+    CaseType.CHANNELUNMUTE: 0x2ECC71,
 }
 
 _EMOJIS: dict[CaseType, str] = {
@@ -93,6 +117,14 @@ _EMOJIS: dict[CaseType, str] = {
     CaseType.UNMUTE: '\N{SPEAKER}',
     CaseType.TIMEOUT: '\N{HOURGLASS WITH FLOWING SAND}',
     CaseType.UNTIMEOUT: '\N{SPEAKER}',
+    CaseType.VOICEKICK: '\N{WOMANS BOOTS}',
+    CaseType.VOICEBAN: '\N{SPEAKER WITH CANCELLATION STROKE}',
+    CaseType.VOICEUNBAN: '\N{SPEAKER}',
+    CaseType.NICK: '\N{MEMO}',
+    CaseType.NICKFREEZE: '\N{SNOWFLAKE}',
+    CaseType.NICKUNFREEZE: '\N{MEMO}',
+    CaseType.CHANNELMUTE: '\N{SPEAKER WITH CANCELLATION STROKE}',
+    CaseType.CHANNELUNMUTE: '\N{SPEAKER}',
 }
 
 
