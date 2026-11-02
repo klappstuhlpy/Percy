@@ -1,5 +1,6 @@
 pub(crate) mod actions;
 pub(crate) mod changes;
+pub(crate) mod command_rules;
 pub(crate) mod community;
 pub(crate) mod crud;
 pub(crate) mod forms;

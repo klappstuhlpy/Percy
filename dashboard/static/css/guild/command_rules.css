@@ -1,0 +1,26 @@
+/* Rules & custom commands. Reuses commands.css classes for the pickers. */
+
+.alias-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+.alias-form .config-input { flex: 1 1 12rem; }
+
+.cc-response {
+    max-width: 28rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cc-response-row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
+.cc-response-row textarea { flex: 1; min-height: 3rem; resize: vertical; }
+.cc-placeholders { margin-top: var(--space-2); }
+.cc-placeholders dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-3); margin: var(--space-2) 0 0; }
+.cc-placeholders dd { margin: 0; color: var(--text-muted); }
+.cc-cooldown { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.cc-cooldown .config-label { flex-basis: 100%; margin-bottom: 0; }
+.cc-cooldown .config-input { width: 8rem; }
+.cc-check { display: flex; align-items: center; gap: var(--space-2); }
+#cc-modal .modal-card { max-height: 90vh; overflow-y: auto; }

@@ -41,8 +41,8 @@ pub(crate) use account::{progress, subscriptions, userpages};
 pub(crate) use catalogue::{comics, news, releases, watchlist};
 pub(crate) use core::{auth, config, db, errors, migrations, scan, session, view};
 pub(crate) use guild::{
-    actions, changes, community, crud, forms, guilds, integrations, leaderboard, moderation, music_app, mutations,
-    notifications, pages,
+    actions, changes, command_rules, community, crud, forms, guilds, integrations, leaderboard, moderation, music_app,
+    mutations, notifications, pages,
 };
 
 /// Shared application state, threaded through every handler.

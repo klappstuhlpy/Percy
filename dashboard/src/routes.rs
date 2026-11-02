@@ -190,6 +190,25 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/analytics/summary",
             get(integrations::guild_analytics_summary),
         )
+        // Permission rules, custom commands and aliases.
+        .route(
+            "/dashboard/guild/:guild_id/command-rules",
+            get(command_rules::guild_command_rules)
+                .put(command_rules::guild_command_rule_put)
+                .delete(command_rules::guild_command_rule_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/custom-commands",
+            post(command_rules::guild_custom_command_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/custom-commands/:command_id",
+            patch(command_rules::guild_custom_command_patch).delete(command_rules::guild_custom_command_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/aliases/:alias",
+            put(command_rules::guild_alias_put).delete(command_rules::guild_alias_delete),
+        )
         // Outbound webhooks (event subscriptions): page + CRUD/test/deliveries.
         .route("/dashboard/guild/:guild_id/webhooks", get(pages::guild_webhooks))
         .route(

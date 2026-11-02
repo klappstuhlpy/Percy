@@ -1,0 +1,215 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Allow or deny commands per member, role or channel, and add your own commands and aliases.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/guild/commands.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/guild/command_rules.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p><strong>Permission rules</strong> decide who may run a command, <strong>custom commands</strong> reply with text you write, and <strong>aliases</strong> are shortcuts for existing commands.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>The most specific rule wins: member, then role, then channel, then category, then the whole server. At the same level a <strong>deny</strong> beats an allow</li>
+                <li>A rule's subject is a command, a whole category (<code>cog:Name</code>) or <code>*</code> for everything</li>
+                <li>Commands in the Config category can never be ruled, so nobody can lock themselves out</li>
+            </ul>
+        </div>
+    </div>
+
+    {# ─── Permission rules ─────────────────────────────────── #}
+    <section class="config-section">
+        <div class="config-section-head">
+            <div>
+                <h2>Permission rules</h2>
+                <p class="config-section-description">Explicit allows skip the command's usual permission check; denies make the command silently unavailable.</p>
+            </div>
+            <button class="button small" id="add-rule-btn">Add rule</button>
+        </div>
+        <div class="data-table-wrap" {% if rules.is_empty() %}hidden{% endif %}>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Subject</th><th>Target</th><th>Rule</th><th class="col-actions"></th></tr>
+                </thead>
+                <tbody id="rules-tbody">
+                    {% for row in rules %}
+                    <tr data-subject="{{ row.rule.subject }}" data-type="{{ row.rule.target_type }}" data-target="{{ row.rule.target_id }}">
+                        <td data-label="Subject"><code>{{ row.rule.subject }}</code></td>
+                        <td data-label="Target"><span class="pill pending">{{ row.rule.target_type }}</span> {{ row.target_name }}</td>
+                        <td data-label="Rule">{% if row.rule.allow %}<span class="cmd-state enabled">Allow</span>{% else %}<span class="cmd-state disabled">Deny</span>{% endif %}</td>
+                        <td class="col-actions"><button class="button small danger rule-remove">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if rules.is_empty() %}<p class="text-muted">No rules yet. Everyone follows each command's normal permissions.</p>{% endif %}
+    </section>
+
+    {# ─── Custom commands ──────────────────────────────────── #}
+    <section class="config-section">
+        <div class="config-section-head">
+            <div>
+                <h2>Custom commands</h2>
+                <p class="config-section-description">{{ custom_commands.len() }} of {{ max_commands }}. Members run them with the server prefix, like <code>!hug @someone</code>. A built-in command always wins over a custom one with the same name.</p>
+            </div>
+            <button class="button small" id="add-cc-btn">New command</button>
+        </div>
+        <div class="data-table-wrap" {% if custom_commands.is_empty() %}hidden{% endif %}>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Name</th><th>Arguments</th><th>Response</th><th>Uses</th><th class="col-actions"></th></tr>
+                </thead>
+                <tbody>
+                    {% for cc in custom_commands %}
+                    <tr data-idx="{{ loop.index0 }}">
+                        <td data-label="Name"><strong>{{ cc.name }}</strong>{% for a in cc.aliases %} <span class="pill pending">{{ a }}</span>{% endfor %}</td>
+                        <td data-label="Arguments">{% if cc.signature.is_empty() %}<span class="text-muted">none</span>{% else %}<code>{{ cc.signature }}</code>{% endif %}</td>
+                        <td data-label="Response" class="cc-response">{% match cc.responses.first() %}{% when Some with (r) %}{{ r }}{% when None %}{% endmatch %}{% if cc.responses.len() > 1 %} <span class="text-muted">(+{{ cc.responses.len() - 1 }} more)</span>{% endif %}</td>
+                        <td data-label="Uses">{{ cc.uses }}</td>
+                        <td class="col-actions">
+                            <button class="button small cc-edit">Edit</button>
+                            <button class="button small danger cc-delete">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if custom_commands.is_empty() %}<p class="text-muted">No custom commands yet.</p>{% endif %}
+    </section>
+
+    {# ─── Aliases ──────────────────────────────────────────── #}
+    <section class="config-section">
+        <div class="config-section-head">
+            <div>
+                <h2>Aliases</h2>
+                <p class="config-section-description">{{ aliases.len() }} of {{ max_aliases }}. An alias runs another command: <code>b</code> for <code>ban</code> means <code>!b @x spam</code> runs <code>!ban @x spam</code>.</p>
+            </div>
+        </div>
+        <form class="alias-form" id="alias-form" autocomplete="off">
+            <input type="text" class="config-input" id="alias-name" placeholder="alias" aria-label="Alias" maxlength="32" required>
+            <input type="text" class="config-input" id="alias-exp" placeholder="command it runs, e.g. ban" aria-label="Expansion" maxlength="200" required>
+            <button type="submit" class="button small primary">Add alias</button>
+        </form>
+        <div class="data-table-wrap" {% if aliases.is_empty() %}hidden{% endif %}>
+            <table class="data-table">
+                <thead><tr><th>Alias</th><th>Runs</th><th class="col-actions"></th></tr></thead>
+                <tbody>
+                    {% for a in aliases %}
+                    <tr data-alias="{{ a.alias }}">
+                        <td data-label="Alias"><code>{{ a.alias }}</code></td>
+                        <td data-label="Runs"><code>{{ a.expansion }}</code></td>
+                        <td class="col-actions"><button class="button small danger alias-remove">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    {# ─── Add rule modal ───────────────────────────────────── #}
+    <div class="modal-overlay" id="rule-modal" hidden>
+        <div class="modal-card w-md">
+            <h3>Add a rule</h3>
+            <label class="config-label" for="rule-subject">Command, category or everything</label>
+            <input type="text" id="rule-subject" class="config-input" list="rule-subjects" placeholder="e.g. ban, cog:Fun or *" autocomplete="off">
+            <datalist id="rule-subjects">
+                <option value="*">Every command</option>
+                {% for c in subject_cogs %}<option value="cog:{{ c }}">Whole category</option>{% endfor %}
+                {% for n in subject_commands %}<option value="{{ n }}"></option>{% endfor %}
+            </datalist>
+
+            <label class="config-label mt-md" for="rule-type">Applies to</label>
+            <select id="rule-type" class="config-input">
+                <option value="user">A member</option>
+                <option value="role">A role</option>
+                <option value="channel">A channel</option>
+                <option value="category">A category</option>
+                <option value="guild">The whole server</option>
+            </select>
+            <div id="rule-target-wrap">
+                <label class="config-label mt-md" for="rule-target" id="rule-target-label">Target</label>
+                <input type="text" id="rule-target" class="config-input" autocomplete="off">
+                <select id="rule-target-select" class="config-input" hidden></select>
+                <span class="config-description" id="rule-target-hint"></span>
+            </div>
+
+            <label class="config-label mt-md">Decision</label>
+            <div class="cmd-mode-select">
+                <button type="button" class="cmd-mode-btn active-enabled" data-allow="1">Allow</button>
+                <button type="button" class="cmd-mode-btn" data-allow="0">Deny</button>
+            </div>
+            <p class="text-error" id="rule-error" hidden></p>
+            <div class="modal-actions">
+                <button type="button" class="button small" id="rule-cancel">Cancel</button>
+                <button type="button" class="button primary small" id="rule-save">Add rule</button>
+            </div>
+        </div>
+    </div>
+
+    {# ─── Custom command modal ─────────────────────────────── #}
+    <div class="modal-overlay" id="cc-modal" hidden>
+        <div class="modal-card w-lg">
+            <h3 id="cc-title">New custom command</h3>
+            <label class="config-label" for="cc-name">Name</label>
+            <input type="text" id="cc-name" class="config-input" maxlength="32" autocomplete="off">
+
+            <label class="config-label mt-md" for="cc-sig">Arguments <span class="text-muted">(optional)</span></label>
+            <input type="text" id="cc-sig" class="config-input" placeholder="&lt;who:member&gt; [reason:str...]" autocomplete="off">
+            <span class="config-description">Required in <code>&lt;angle&gt;</code>, optional in <code>[square]</code>, as <code>name:type</code>. Types: {% for t in custom_types %}<code>{{ t }}</code>{% if !loop.last %}, {% endif %}{% endfor %}.</span>
+
+            <label class="config-label mt-md">Responses</label>
+            <span class="config-description">One is picked at random when there are several.</span>
+            <div id="cc-responses"></div>
+            <button type="button" class="button small" id="cc-add-response">Add a response</button>
+            <details class="cc-placeholders">
+                <summary>Placeholders</summary>
+                <dl>
+                    {% for p in placeholders %}<dt><code>{{ "{" }}{{ p.0 }}{{ "}" }}</code></dt><dd>{{ p.1 }}</dd>{% endfor %}
+                </dl>
+            </details>
+
+            <label class="config-label mt-md" for="cc-aliases">Aliases <span class="text-muted">(comma separated)</span></label>
+            <input type="text" id="cc-aliases" class="config-input" autocomplete="off">
+
+            <label class="config-label mt-md">Who can run it</label>
+            <span class="config-description">Leave everything empty to allow anyone. A member needs all of the checked permissions, or any one of the roles.</span>
+            <div class="cmd-perm-grid" id="cc-perm-grid"></div>
+            <div class="cmd-role-chips" id="cc-role-chips"></div>
+            <select class="config-input" id="cc-role-select">
+                <option value="">Add a role…</option>
+                {% for role in roles %}<option value="{{ role.id }}">{{ role.name }}</option>{% endfor %}
+            </select>
+
+            <div class="cc-cooldown">
+                <label class="config-label mt-md">Cooldown <span class="text-muted">(optional)</span></label>
+                <input type="number" id="cc-rate" class="config-input" min="1" placeholder="uses" aria-label="Uses per window">
+                <span>per</span>
+                <input type="number" id="cc-per" class="config-input" min="1" placeholder="seconds" aria-label="Window in seconds">
+            </div>
+            <label class="cc-check mt-md"><input type="checkbox" id="cc-delete"> Delete the message that invoked it</label>
+
+            <p class="text-error" id="cc-error" hidden></p>
+            <div class="modal-actions">
+                <button type="button" class="button small" id="cc-cancel">Cancel</button>
+                <button type="button" class="button primary small" id="cc-save">Save command</button>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+var GUILD_ID = '{{ guild_id }}';
+var CC_DATA = {{ custom_commands|json|safe }};
+var ROLES_DATA = {{ roles|json|safe }};
+var CHANNELS_DATA = {{ channels|json|safe }};
+</script>
+<script src="/static/js/guild/command_rules.js"></script>
+{% endblock %}
