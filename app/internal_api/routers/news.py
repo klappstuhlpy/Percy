@@ -35,6 +35,7 @@ from app.services.releases import COMIC_SUBJECT_TYPES, TITLE_SUBJECT_TYPES
 from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
+from .news_models import NewsPage, NewsRelated, NewsSourcesResponse
 
 if TYPE_CHECKING:
     import asyncpg
@@ -177,7 +178,7 @@ async def list_news(
     page: Annotated[int, Query(ge=1, description="1-based page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=MAX_PER_PAGE, description="Page size")] = DEFAULT_PER_PAGE,
     discord_id: Annotated[int | None, Query(description="Lead with what this user follows")] = None,
-) -> dict:
+) -> NewsPage:
     """The news stream, newest-first, filtered by any combination of the query params.
 
     With ``discord_id``, the stories matching that user's subscriptions come **first** and the
@@ -198,7 +199,7 @@ async def list_news(
     # The personalised head leads the *first* page only: prepended to page 2 it would repeat the
     # same dozen stories at the top of every page.
     followed = await _followed(bot, discord_id, MAX_FOLLOWED) if discord_id is not None and page == 1 else ()
-    return browse_payload(
+    return NewsPage.model_validate(browse_payload(
         items,
         total=total,
         page=page,
@@ -212,7 +213,7 @@ async def list_news(
             'search': search,
         },
         followed=followed,
-    )
+    ))
 
 
 @router.get("/related")
@@ -222,7 +223,7 @@ async def related_news(
     subject_type: Annotated[SubjectType, Query(description="The subject key's type")],
     subject_value: Annotated[str, Query(description="The subject key, as the picker gave it")],
     limit: Annotated[int, Query(ge=1, le=MAX_RELATED, description="How many stories")] = DEFAULT_RELATED,
-) -> dict:
+) -> NewsRelated:
     """The detail pages' related-news strip: the most recent stories tagged with one subject.
 
     An empty ``items`` list is the honest answer for a subject nothing has been written about --
@@ -230,14 +231,14 @@ async def related_news(
     decision to make from this, not a 404 to make here.
     """
     _check_subject_type(media, subject_type)
-    return {'items': await _related(bot, media, subject_type, subject_value, limit)}
+    return NewsRelated.model_validate({'items': await _related(bot, media, subject_type, subject_value, limit)})
 
 
 @router.get("/sources")
 async def list_sources(
     bot: BotDep,
     enabled_only: Annotated[bool, Query(description="Hide sources an operator switched off")] = False,
-) -> dict:
+) -> NewsSourcesResponse:
     """Every configured feed, with when it was last polled and what it answered.
 
     Deliberately **not** cached: ``last_status`` is the one column whose whole job is telling an
@@ -245,4 +246,4 @@ async def list_sources(
     is the wrong answer.
     """
     rows = await bot.db.news.list_sources(enabled_only=enabled_only)
-    return {'sources': [source_payload(row) for row in rows]}
+    return NewsSourcesResponse.model_validate({'sources': [source_payload(row) for row in rows]})

@@ -615,6 +615,802 @@
         "title": "BulkActionBody",
         "type": "object"
       },
+      "CardSubject": {
+        "description": "One subject chip on an overview card.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "subject_type": {
+            "title": "Subject Type",
+            "type": "string"
+          },
+          "subject_value": {
+            "title": "Subject Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_type",
+          "subject_value",
+          "label"
+        ],
+        "title": "CardSubject",
+        "type": "object"
+      },
+      "ComicBrowseFilters": {
+        "description": "Echoes the filters ``GET /comics`` applied.",
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "character": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character"
+          },
+          "creator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "brand",
+          "series",
+          "creator",
+          "character",
+          "since",
+          "until",
+          "search"
+        ],
+        "title": "ComicBrowseFilters",
+        "type": "object"
+      },
+      "ComicBrowsePage": {
+        "description": "``GET /comics``: one page of filtered releases.",
+        "properties": {
+          "filters": {
+            "$ref": "#/components/schemas/ComicBrowseFilters"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ComicRelease"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "per_page",
+          "total",
+          "total_pages",
+          "filters"
+        ],
+        "title": "ComicBrowsePage",
+        "type": "object"
+      },
+      "ComicCharacter": {
+        "description": "One character appearing in a release.",
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "ComicCharacter",
+        "type": "object"
+      },
+      "ComicCredit": {
+        "description": "One credited contributor on a release.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role"
+        ],
+        "title": "ComicCredit",
+        "type": "object"
+      },
+      "ComicDetail": {
+        "description": "``GET /comics/{brand}/{slug}``: the release's own fields plus its series neighbours.",
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/ComicCharacter"
+            },
+            "title": "Characters",
+            "type": "array"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "credits": {
+            "items": {
+              "$ref": "#/components/schemas/ComicCredit"
+            },
+            "title": "Credits",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "issue_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Number"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "series": {
+            "$ref": "#/components/schemas/ComicDetailSeries"
+          },
+          "series_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Name"
+          },
+          "series_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Slug"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "brand",
+          "slug",
+          "title",
+          "series_slug",
+          "series_name",
+          "issue_number",
+          "release_date",
+          "cover_url",
+          "description",
+          "price",
+          "page_count",
+          "format",
+          "publisher",
+          "url",
+          "first_seen",
+          "updated_at",
+          "credits",
+          "characters",
+          "series"
+        ],
+        "title": "ComicDetail",
+        "type": "object"
+      },
+      "ComicDetailSeries": {
+        "description": "Reading-order neighbours nested under ``series`` in a detail response.",
+        "properties": {
+          "more_from_series": {
+            "items": {
+              "$ref": "#/components/schemas/ComicRelease"
+            },
+            "title": "More From Series",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComicRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComicRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "previous",
+          "next",
+          "more_from_series"
+        ],
+        "title": "ComicDetailSeries",
+        "type": "object"
+      },
+      "ComicNameEntry": {
+        "description": "One creator/character name with its appearance count.",
+        "properties": {
+          "appearances": {
+            "title": "Appearances",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "appearances"
+        ],
+        "title": "ComicNameEntry",
+        "type": "object"
+      },
+      "ComicNamesResponse": {
+        "description": "``GET /comics/names``.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "names": {
+            "items": {
+              "$ref": "#/components/schemas/ComicNameEntry"
+            },
+            "title": "Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "names"
+        ],
+        "title": "ComicNamesResponse",
+        "type": "object"
+      },
+      "ComicRelease": {
+        "description": "One comic release; browse/series listings carry empty ``credits``/``characters``.",
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/ComicCharacter"
+            },
+            "title": "Characters",
+            "type": "array"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "credits": {
+            "items": {
+              "$ref": "#/components/schemas/ComicCredit"
+            },
+            "title": "Credits",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "issue_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Number"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "series_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Name"
+          },
+          "series_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Slug"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "brand",
+          "slug",
+          "title",
+          "series_slug",
+          "series_name",
+          "issue_number",
+          "release_date",
+          "cover_url",
+          "description",
+          "price",
+          "page_count",
+          "format",
+          "publisher",
+          "url",
+          "first_seen",
+          "updated_at",
+          "credits",
+          "characters"
+        ],
+        "title": "ComicRelease",
+        "type": "object"
+      },
+      "ComicSeriesList": {
+        "description": "``GET /comics/series``.",
+        "properties": {
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ComicSeriesSummary"
+            },
+            "title": "Series",
+            "type": "array"
+          }
+        },
+        "required": [
+          "series"
+        ],
+        "title": "ComicSeriesList",
+        "type": "object"
+      },
+      "ComicSeriesPage": {
+        "description": "``GET /comics/series/{slug}``: one series and every issue in it.",
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "issue_count": {
+            "title": "Issue Count",
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ComicRelease"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "series_name": {
+            "title": "Series Name",
+            "type": "string"
+          },
+          "series_slug": {
+            "title": "Series Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_slug",
+          "series_name",
+          "brand",
+          "publisher",
+          "issue_count",
+          "issues"
+        ],
+        "title": "ComicSeriesPage",
+        "type": "object"
+      },
+      "ComicSeriesSummary": {
+        "description": "One series card in the ``GET /comics/series`` index.",
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "issue_count": {
+            "title": "Issue Count",
+            "type": "integer"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest"
+          },
+          "series_name": {
+            "title": "Series Name",
+            "type": "string"
+          },
+          "series_slug": {
+            "title": "Series Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_slug",
+          "series_name",
+          "brand",
+          "issue_count",
+          "latest"
+        ],
+        "title": "ComicSeriesSummary",
+        "type": "object"
+      },
       "ControlBody": {
         "properties": {
           "action": {
@@ -1636,6 +2432,407 @@
           "entity_id"
         ],
         "title": "ModerationIgnoreBody",
+        "type": "object"
+      },
+      "NewsFilters": {
+        "description": "Echoes the filters ``GET /news`` applied.",
+        "properties": {
+          "media": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "subject_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Type"
+          },
+          "subject_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Value"
+          }
+        },
+        "required": [
+          "media",
+          "subject_type",
+          "subject_value",
+          "source",
+          "since",
+          "search"
+        ],
+        "title": "NewsFilters",
+        "type": "object"
+      },
+      "NewsItem": {
+        "description": "One story. ``image_url``/``author`` are stored, not necessarily rendered (plan §9).",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "source": {
+            "$ref": "#/components/schemas/NewsItemSource"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/NewsSubject"
+            },
+            "title": "Subjects",
+            "type": "array"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "headline",
+          "excerpt",
+          "image_url",
+          "author",
+          "published_at",
+          "fetched_at",
+          "source",
+          "subjects"
+        ],
+        "title": "NewsItem",
+        "type": "object"
+      },
+      "NewsItemSource": {
+        "description": "Where a story came from; carried on the item so attribution is structural.",
+        "properties": {
+          "homepage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "homepage"
+        ],
+        "title": "NewsItemSource",
+        "type": "object"
+      },
+      "NewsPage": {
+        "description": "``GET /news``: one page of the stream.",
+        "properties": {
+          "filters": {
+            "$ref": "#/components/schemas/NewsFilters"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NewsItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "personalised": {
+            "title": "Personalised",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "personalised",
+          "page",
+          "per_page",
+          "total",
+          "total_pages",
+          "filters"
+        ],
+        "title": "NewsPage",
+        "type": "object"
+      },
+      "NewsRelated": {
+        "description": "``GET /news/related``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NewsItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "NewsRelated",
+        "type": "object"
+      },
+      "NewsSource": {
+        "description": "One configured feed, for the operator view.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "feed_url": {
+            "title": "Feed Url",
+            "type": "string"
+          },
+          "homepage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage"
+          },
+          "last_fetched": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "media": {
+            "title": "Media",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "homepage",
+          "feed_url",
+          "media",
+          "enabled",
+          "last_fetched",
+          "last_status"
+        ],
+        "title": "NewsSource",
+        "type": "object"
+      },
+      "NewsSourcesResponse": {
+        "description": "``GET /news/sources``.",
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/NewsSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "NewsSourcesResponse",
+        "type": "object"
+      },
+      "NewsSubject": {
+        "description": "One tag on a story, in the key shape a subscription is expressed in.",
+        "properties": {
+          "media": {
+            "title": "Media",
+            "type": "string"
+          },
+          "subject_type": {
+            "title": "Subject Type",
+            "type": "string"
+          },
+          "subject_value": {
+            "title": "Subject Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media",
+          "subject_type",
+          "subject_value"
+        ],
+        "title": "NewsSubject",
+        "type": "object"
+      },
+      "OverviewWindow": {
+        "description": "The ISO date span the overview covers.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "OverviewWindow",
         "type": "object"
       },
       "PardonBody": {
@@ -3155,6 +4352,57 @@
         "title": "PrefsBody",
         "type": "object"
       },
+      "ProgressMark": {
+        "description": "One item's mark: ``read``/``skipped`` for a comic, ``watched``/``skipped`` for a title.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "status",
+          "updated_at"
+        ],
+        "title": "ProgressMark",
+        "type": "object"
+      },
+      "ProgressResponse": {
+        "description": "``GET``/``PUT /releases/users/{id}/progress``; ``merged`` is 0 on a GET.",
+        "properties": {
+          "entries": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/ProgressMark"
+              },
+              "type": "object"
+            },
+            "title": "Entries",
+            "type": "object"
+          },
+          "merged": {
+            "default": 0,
+            "title": "Merged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "ProgressResponse",
+        "type": "object"
+      },
       "PublishTemplateBody": {
         "properties": {
           "data": {
@@ -3254,6 +4502,148 @@
           "guild_id"
         ],
         "title": "RankCardPreviewBody",
+        "type": "object"
+      },
+      "ReleaseCard": {
+        "description": "One release on the overview, in the shape both media share.",
+        "properties": {
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "media": {
+            "title": "Media",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/CardSubject"
+            },
+            "title": "Subjects",
+            "type": "array"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "media",
+          "key",
+          "name",
+          "subtitle",
+          "release_date",
+          "cover_url",
+          "url",
+          "subjects"
+        ],
+        "title": "ReleaseCard",
+        "type": "object"
+      },
+      "ReleaseProgressDeleted": {
+        "description": "``DELETE /releases/users/{id}/progress``: how many rows were removed.",
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "ReleaseProgressDeleted",
+        "type": "object"
+      },
+      "ReleasesOverview": {
+        "description": "``GET /releases/overview``; ``progress`` is ``{media: {release_key: mark}}`` beside the cards.",
+        "properties": {
+          "comics": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseCard"
+            },
+            "title": "Comics",
+            "type": "array"
+          },
+          "followed": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseCard"
+            },
+            "title": "Followed",
+            "type": "array"
+          },
+          "progress": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/ProgressMark"
+              },
+              "type": "object"
+            },
+            "title": "Progress",
+            "type": "object"
+          },
+          "titles": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseCard"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "window": {
+            "$ref": "#/components/schemas/OverviewWindow"
+          }
+        },
+        "required": [
+          "window",
+          "comics",
+          "titles",
+          "followed",
+          "progress"
+        ],
+        "title": "ReleasesOverview",
         "type": "object"
       },
       "RequestSettingsBody": {
@@ -3464,6 +4854,57 @@
         "title": "SetupSentinelBody",
         "type": "object"
       },
+      "Subject": {
+        "description": "One row of the subject picker.",
+        "properties": {
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "media": {
+            "title": "Media",
+            "type": "string"
+          },
+          "subject_type": {
+            "title": "Subject Type",
+            "type": "string"
+          },
+          "subject_value": {
+            "title": "Subject Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media",
+          "subject_type",
+          "subject_value",
+          "label",
+          "hint"
+        ],
+        "title": "Subject",
+        "type": "object"
+      },
+      "SubjectsResponse": {
+        "description": "``GET /releases/subjects``.",
+        "properties": {
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/Subject"
+            },
+            "title": "Subjects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subjects"
+        ],
+        "title": "SubjectsResponse",
+        "type": "object"
+      },
       "SubscribeBody": {
         "description": "A follow, as the picker or a Discord command submits it.",
         "properties": {
@@ -3542,6 +4983,90 @@
         "title": "SubscribeBody",
         "type": "object"
       },
+      "Subscription": {
+        "description": "One thing a user follows; ``subject_value`` is an opaque key, ``guild_id`` a string snowflake.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "delivery": {
+            "title": "Delivery",
+            "type": "string"
+          },
+          "guild_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guild Id"
+          },
+          "media": {
+            "title": "Media",
+            "type": "string"
+          },
+          "streams": {
+            "title": "Streams",
+            "type": "string"
+          },
+          "subject_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Label"
+          },
+          "subject_type": {
+            "title": "Subject Type",
+            "type": "string"
+          },
+          "subject_value": {
+            "title": "Subject Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media",
+          "subject_type",
+          "subject_value",
+          "subject_label",
+          "streams",
+          "delivery",
+          "guild_id",
+          "created_at"
+        ],
+        "title": "Subscription",
+        "type": "object"
+      },
+      "SubscriptionDeleted": {
+        "description": "``DELETE /releases/users/{id}/subscriptions``: false when there was nothing to remove.",
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "SubscriptionDeleted",
+        "type": "object"
+      },
       "SubscriptionPatchBody": {
         "description": "The identifying triple plus whichever of the two mutable fields is changing.",
         "properties": {
@@ -3608,6 +5133,23 @@
           "subject_value"
         ],
         "title": "SubscriptionPatchBody",
+        "type": "object"
+      },
+      "SubscriptionsResponse": {
+        "description": "``GET /releases/users/{id}/subscriptions``.",
+        "properties": {
+          "subscriptions": {
+            "items": {
+              "$ref": "#/components/schemas/Subscription"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscriptions"
+        ],
+        "title": "SubscriptionsResponse",
         "type": "object"
       },
       "TestMessageBody": {
@@ -3810,6 +5352,1242 @@
           "action"
         ],
         "title": "WarnThresholdBody",
+        "type": "object"
+      },
+      "WatchCredit": {
+        "description": "A cast/crew credit on a title.",
+        "properties": {
+          "billing_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Order"
+          },
+          "character_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Name"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Path"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "tmdb_person_id": {
+            "title": "Tmdb Person Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tmdb_person_id",
+          "name",
+          "slug",
+          "profile_path",
+          "role",
+          "character_name",
+          "billing_order"
+        ],
+        "title": "WatchCredit",
+        "type": "object"
+      },
+      "WatchEra": {
+        "description": "An era heading derived from the titles.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "title_count": {
+            "title": "Title Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "order",
+          "title_count"
+        ],
+        "title": "WatchEra",
+        "type": "object"
+      },
+      "WatchPath": {
+        "description": "A curated path through a universe.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "is_default",
+          "sort_order"
+        ],
+        "title": "WatchPath",
+        "type": "object"
+      },
+      "WatchPeopleResponse": {
+        "description": "``GET /watchlist/people``.",
+        "properties": {
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/WatchPersonSummary"
+            },
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "required": [
+          "people"
+        ],
+        "title": "WatchPeopleResponse",
+        "type": "object"
+      },
+      "WatchPerson": {
+        "description": "A person on a person page.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Path"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "tmdb_person_id": {
+            "title": "Tmdb Person Id",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "tmdb_person_id",
+          "name",
+          "slug",
+          "profile_path",
+          "updated_at"
+        ],
+        "title": "WatchPerson",
+        "type": "object"
+      },
+      "WatchPersonCredit": {
+        "description": "One credit on a person page, nesting the full title.",
+        "properties": {
+          "billing_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Order"
+          },
+          "character_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Name"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "title": {
+            "$ref": "#/components/schemas/WatchTitle"
+          },
+          "universe_accent": {
+            "title": "Universe Accent",
+            "type": "string"
+          },
+          "universe_name": {
+            "title": "Universe Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "character_name",
+          "billing_order",
+          "universe_name",
+          "universe_accent",
+          "title"
+        ],
+        "title": "WatchPersonCredit",
+        "type": "object"
+      },
+      "WatchPersonPage": {
+        "description": "``GET /watchlist/people/{slug}``.",
+        "properties": {
+          "credits": {
+            "items": {
+              "$ref": "#/components/schemas/WatchPersonCredit"
+            },
+            "title": "Credits",
+            "type": "array"
+          },
+          "person": {
+            "$ref": "#/components/schemas/WatchPerson"
+          }
+        },
+        "required": [
+          "person",
+          "credits"
+        ],
+        "title": "WatchPersonPage",
+        "type": "object"
+      },
+      "WatchPersonSummary": {
+        "description": "One autocomplete entry from ``GET /watchlist/people``.",
+        "properties": {
+          "credit_count": {
+            "title": "Credit Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Path"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "tmdb_person_id": {
+            "title": "Tmdb Person Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tmdb_person_id",
+          "name",
+          "slug",
+          "profile_path",
+          "credit_count"
+        ],
+        "title": "WatchPersonSummary",
+        "type": "object"
+      },
+      "WatchPrefs": {
+        "description": "A user's watchlist preferences (defaults when none saved).",
+        "properties": {
+          "hide_sub": {
+            "title": "Hide Sub",
+            "type": "boolean"
+          },
+          "path_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Slug"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "show_spoiler": {
+            "title": "Show Spoiler",
+            "type": "boolean"
+          },
+          "sort_mode": {
+            "title": "Sort Mode",
+            "type": "string"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "weekly_hours": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weekly Hours"
+          },
+          "with_credits": {
+            "title": "With Credits",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "region",
+          "path_slug",
+          "sort_mode",
+          "show_spoiler",
+          "with_credits",
+          "hide_sub",
+          "weekly_hours",
+          "target_date"
+        ],
+        "title": "WatchPrefs",
+        "type": "object"
+      },
+      "WatchProgressDeleted": {
+        "description": "``DELETE /watchlist/users/{id}/progress``.",
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "WatchProgressDeleted",
+        "type": "object"
+      },
+      "WatchProgressEntry": {
+        "description": "One title's V39 watch state.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "updated_at"
+        ],
+        "title": "WatchProgressEntry",
+        "type": "object"
+      },
+      "WatchProgressResponse": {
+        "description": "``GET``/``PUT /watchlist/users/{id}/progress``: ``{title_id: entry}``.",
+        "properties": {
+          "entries": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WatchProgressEntry"
+            },
+            "title": "Entries",
+            "type": "object"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "WatchProgressResponse",
+        "type": "object"
+      },
+      "WatchProvider": {
+        "description": "A streaming provider offer for a title in a region.",
+        "properties": {
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "logo_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Path"
+          },
+          "offer": {
+            "title": "Offer",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "integer"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "provider_name",
+          "logo_path",
+          "offer",
+          "link"
+        ],
+        "title": "WatchProvider",
+        "type": "object"
+      },
+      "WatchStats": {
+        "description": "``GET /watchlist/universes/{slug}/stats``.",
+        "properties": {
+          "essential": {
+            "title": "Essential",
+            "type": "integer"
+          },
+          "hours": {
+            "title": "Hours",
+            "type": "number"
+          },
+          "movies": {
+            "title": "Movies",
+            "type": "integer"
+          },
+          "optional": {
+            "title": "Optional",
+            "type": "integer"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "recommended": {
+            "title": "Recommended",
+            "type": "integer"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "integer"
+          },
+          "shows": {
+            "title": "Shows",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "universe": {
+            "title": "Universe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe",
+          "path",
+          "total",
+          "movies",
+          "shows",
+          "runtime",
+          "hours",
+          "essential",
+          "recommended",
+          "optional"
+        ],
+        "title": "WatchStats",
+        "type": "object"
+      },
+      "WatchTitle": {
+        "description": "One title on a watch order.",
+        "properties": {
+          "backdrop_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backdrop Path"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "credits_of": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credits Of"
+          },
+          "episodes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episodes"
+          },
+          "era": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Era"
+          },
+          "era_order": {
+            "title": "Era Order",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "instruction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "milestone": {
+            "title": "Milestone",
+            "type": "boolean"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "poster_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Path"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/WatchProvider"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "release_order": {
+            "title": "Release Order",
+            "type": "integer"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "integer"
+          },
+          "season_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season Name"
+          },
+          "season_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season Number"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "spoiler": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spoiler"
+          },
+          "story_order": {
+            "title": "Story Order",
+            "type": "integer"
+          },
+          "sub_universe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Universe"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tmdb_id": {
+            "title": "Tmdb Id",
+            "type": "integer"
+          },
+          "tmdb_rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb Rating"
+          },
+          "tmdb_type": {
+            "title": "Tmdb Type",
+            "type": "string"
+          },
+          "tmdb_votes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb Votes"
+          },
+          "trailer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchTrailer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "universe": {
+            "title": "Universe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "universe",
+          "tmdb_type",
+          "tmdb_id",
+          "slug",
+          "title",
+          "kind",
+          "runtime",
+          "episodes",
+          "release_date",
+          "poster_path",
+          "backdrop_path",
+          "overview",
+          "tmdb_rating",
+          "tmdb_votes",
+          "era",
+          "era_order",
+          "story_order",
+          "release_order",
+          "milestone",
+          "instruction",
+          "context",
+          "spoiler",
+          "credits_of",
+          "sub_universe",
+          "importance",
+          "providers",
+          "trailer",
+          "season_number",
+          "season_name",
+          "parent_id"
+        ],
+        "title": "WatchTitle",
+        "type": "object"
+      },
+      "WatchTitleDetail": {
+        "description": "``GET /watchlist/titles/{universe}/{slug}``.",
+        "properties": {
+          "credits": {
+            "items": {
+              "$ref": "#/components/schemas/WatchCredit"
+            },
+            "title": "Credits",
+            "type": "array"
+          },
+          "credits_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seasons": {
+            "items": {
+              "$ref": "#/components/schemas/WatchTitle"
+            },
+            "title": "Seasons",
+            "type": "array"
+          },
+          "sort": {
+            "title": "Sort",
+            "type": "string"
+          },
+          "title": {
+            "$ref": "#/components/schemas/WatchTitle"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/WatchUniverse"
+          }
+        },
+        "required": [
+          "title",
+          "credits_of",
+          "parent",
+          "seasons",
+          "credits",
+          "previous",
+          "next",
+          "position",
+          "total",
+          "path",
+          "sort",
+          "universe"
+        ],
+        "title": "WatchTitleDetail",
+        "type": "object"
+      },
+      "WatchTrailer": {
+        "description": "The one trailer Percy selected for a title.",
+        "properties": {
+          "embed_url": {
+            "title": "Embed Url",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "site": {
+            "title": "Site",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site",
+          "key",
+          "name",
+          "url",
+          "embed_url"
+        ],
+        "title": "WatchTrailer",
+        "type": "object"
+      },
+      "WatchUniverse": {
+        "description": "A universe's header on a page payload.",
+        "properties": {
+          "accent": {
+            "title": "Accent",
+            "type": "string"
+          },
+          "backdrop_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backdrop Url"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          },
+          "short_name": {
+            "title": "Short Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced At"
+          },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "short_name",
+          "tagline",
+          "accent",
+          "logo_url",
+          "backdrop_url",
+          "published",
+          "synced_at"
+        ],
+        "title": "WatchUniverse",
+        "type": "object"
+      },
+      "WatchUniversePage": {
+        "description": "``GET /watchlist/universes/{slug}``: the whole watch-order page.",
+        "properties": {
+          "eras": {
+            "items": {
+              "$ref": "#/components/schemas/WatchEra"
+            },
+            "title": "Eras",
+            "type": "array"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/WatchPath"
+            },
+            "title": "Paths",
+            "type": "array"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "sort": {
+            "title": "Sort",
+            "type": "string"
+          },
+          "titles": {
+            "items": {
+              "$ref": "#/components/schemas/WatchTitle"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/WatchUniverse"
+          }
+        },
+        "required": [
+          "universe",
+          "path",
+          "region",
+          "sort",
+          "paths",
+          "eras",
+          "titles"
+        ],
+        "title": "WatchUniversePage",
+        "type": "object"
+      },
+      "WatchUniverseSummary": {
+        "description": "One universe with its aggregates, as listed by ``GET /watchlist/universes``.",
+        "properties": {
+          "accent": {
+            "title": "Accent",
+            "type": "string"
+          },
+          "backdrop_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backdrop Url"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          },
+          "short_name": {
+            "title": "Short Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced At"
+          },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "title_count": {
+            "title": "Title Count",
+            "type": "integer"
+          },
+          "total_runtime": {
+            "title": "Total Runtime",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "short_name",
+          "tagline",
+          "accent",
+          "logo_url",
+          "backdrop_url",
+          "sort_order",
+          "published",
+          "synced_at",
+          "title_count",
+          "total_runtime"
+        ],
+        "title": "WatchUniverseSummary",
+        "type": "object"
+      },
+      "WatchUniversesResponse": {
+        "description": "``GET /watchlist/universes``.",
+        "properties": {
+          "universes": {
+            "items": {
+              "$ref": "#/components/schemas/WatchUniverseSummary"
+            },
+            "title": "Universes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "universes"
+        ],
+        "title": "WatchUniversesResponse",
         "type": "object"
       },
       "WobbleBody": {
@@ -4387,9 +7165,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Comics Api V1 Comics Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComicBrowsePage"
                 }
               }
             },
@@ -4510,9 +7286,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Names Api V1 Comics Names Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComicNamesResponse"
                 }
               }
             },
@@ -4610,9 +7384,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Series Api V1 Comics Series Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComicSeriesList"
                 }
               }
             },
@@ -4719,9 +7491,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Series Api V1 Comics Series  Slug  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComicSeriesPage"
                 }
               }
             },
@@ -4819,9 +7589,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Comic Api V1 Comics  Brand   Slug  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComicDetail"
                 }
               }
             },
@@ -21637,9 +24405,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List News Api V1 News Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NewsPage"
                 }
               }
             },
@@ -21779,9 +24545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Related News Api V1 News Related Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NewsRelated"
                 }
               }
             },
@@ -21873,9 +24637,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Sources Api V1 News Sources Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NewsSourcesResponse"
                 }
               }
             },
@@ -22001,9 +24763,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Releases Overview Api V1 Releases Overview Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ReleasesOverview"
                 }
               }
             },
@@ -22131,9 +24891,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Search Subjects Api V1 Releases Subjects Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SubjectsResponse"
                 }
               }
             },
@@ -22262,9 +25020,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Progress Api V1 Releases Users  Discord Id  Progress Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ReleaseProgressDeleted"
                 }
               }
             },
@@ -22373,9 +25129,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Progress Api V1 Releases Users  Discord Id  Progress Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProgressResponse"
                 }
               }
             },
@@ -22472,9 +25226,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Put Progress Api V1 Releases Users  Discord Id  Progress Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProgressResponse"
                 }
               }
             },
@@ -22609,9 +25361,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Subscription Api V1 Releases Users  Discord Id  Subscriptions Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SubscriptionDeleted"
                 }
               }
             },
@@ -22720,9 +25470,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Subscriptions Api V1 Releases Users  Discord Id  Subscriptions Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SubscriptionsResponse"
                 }
               }
             },
@@ -22819,9 +25567,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Subscription Api V1 Releases Users  Discord Id  Subscriptions Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Subscription"
                 }
               }
             },
@@ -22918,9 +25664,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Put Subscription Api V1 Releases Users  Discord Id  Subscriptions Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Subscription"
                 }
               }
             },
@@ -25072,9 +27816,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Search People Api V1 Watchlist People Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchPeopleResponse"
                 }
               }
             },
@@ -25163,9 +27905,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Person Api V1 Watchlist People  Slug  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchPersonPage"
                 }
               }
             },
@@ -25287,9 +28027,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Title Api V1 Watchlist Titles  Universe   Slug  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchTitleDetail"
                 }
               }
             },
@@ -25381,9 +28119,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Universes Api V1 Watchlist Universes Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchUniversesResponse"
                 }
               }
             },
@@ -25514,9 +28250,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Universe Api V1 Watchlist Universes  Slug  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchUniversePage"
                 }
               }
             },
@@ -25623,9 +28357,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Universe Statistics Api V1 Watchlist Universes  Slug  Stats Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchStats"
                 }
               }
             },
@@ -25714,9 +28446,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Prefs Api V1 Watchlist Users  Discord Id  Prefs Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchPrefs"
                 }
               }
             },
@@ -25813,9 +28543,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Prefs Api V1 Watchlist Users  Discord Id  Prefs Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchPrefs"
                 }
               }
             },
@@ -25922,9 +28650,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Progress Api V1 Watchlist Users  Discord Id  Progress Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchProgressDeleted"
                 }
               }
             },
@@ -26029,9 +28755,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Progress Api V1 Watchlist Users  Discord Id  Progress Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchProgressResponse"
                 }
               }
             },
@@ -26128,9 +28852,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Put Progress Api V1 Watchlist Users  Discord Id  Progress Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WatchProgressResponse"
                 }
               }
             },

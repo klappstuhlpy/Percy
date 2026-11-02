@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import inspect
 from typing import Any
 
 import pytest
 from fastapi import HTTPException
+from pydantic import BaseModel
 
-from app.internal_api.routers import watchlist as api
+from app.internal_api.routers import watchlist as _api_module
 from app.services.watchlist.payload import (
     credit_payloads,
     era_payloads,
@@ -48,6 +50,26 @@ PATHS = [
     {'slug': 'complete', 'name': 'Complete', 'description': 'Everything', 'is_default': True, 'sort_order': 0},
     {'slug': 'essentials', 'name': 'Essentials', 'description': None, 'is_default': False, 'sort_order': 1},
 ]
+
+
+class _JsonApi:
+    """Handlers return pydantic response models now; these tests assert on the wire JSON."""
+
+    def __init__(self, module: Any) -> None:
+        self._module = module
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._module, name)
+        if not inspect.iscoroutinefunction(attr):
+            return attr
+
+        async def call(*args: Any, **kwargs: Any) -> Any:
+            result = await attr(*args, **kwargs)
+            return result.model_dump(mode='json') if isinstance(result, BaseModel) else result
+
+        return call
+
+api = _JsonApi(_api_module)
 
 
 def _title(**overrides: Any) -> dict[str, Any]:

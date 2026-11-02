@@ -24,6 +24,62 @@ pub use types::*;
 #[rustfmt::skip]
 pub mod generated;
 pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+pub use generated::{
+    // watchlist / releases / comics / news domains
+    CardSubject,
+    ComicBrowseFilters,
+    ComicBrowsePage,
+    ComicCharacter,
+    ComicCredit,
+    ComicDetail,
+    ComicDetailSeries,
+    ComicNameEntry,
+    ComicNamesResponse,
+    ComicRelease,
+    ComicSeriesList,
+    ComicSeriesPage,
+    ComicSeriesSummary,
+    NewsFilters,
+    NewsItem,
+    NewsItemSource,
+    NewsPage,
+    NewsRelated,
+    NewsSource,
+    NewsSourcesResponse,
+    NewsSubject,
+    OverviewWindow,
+    ProgressMark,
+    ProgressResponse,
+    ReleaseCard,
+    ReleaseProgressDeleted,
+    ReleasesOverview,
+    Subject,
+    SubjectsResponse,
+    Subscription,
+    SubscriptionDeleted,
+    SubscriptionsResponse,
+    WatchCredit,
+    WatchEra,
+    WatchPath,
+    WatchPeopleResponse,
+    WatchPerson,
+    WatchPersonCredit,
+    WatchPersonPage,
+    WatchPersonSummary,
+    WatchPrefs,
+    WatchProgressDeleted,
+    WatchProgressEntry,
+    WatchProgressResponse,
+    WatchProvider,
+    WatchStats,
+    WatchTitle,
+    WatchTitleDetail,
+    WatchTrailer,
+    WatchUniverse,
+    WatchUniversePage,
+    WatchUniverseSummary,
+    WatchUniversesResponse,
+};
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]
@@ -3411,19 +3467,20 @@ mod tests {
     }
 
     #[test]
-    fn the_overview_carries_progress_beside_the_cards_and_defaults_to_empty() {
+    fn the_overview_carries_progress_beside_the_cards() {
+        let card = serde_json::json!({
+            "media": "comic", "key": "MARVEL/asm-12", "name": "ASM #12", "subtitle": null,
+            "release_date": null, "cover_url": null, "url": null, "subjects": []
+        });
         let overview: ReleasesOverview = serde_json::from_value(serde_json::json!({
-            "comics": [{"media": "comic", "key": "MARVEL/asm-12"}],
-            "progress": {"comic": {"MARVEL/asm-12": {"status": "read"}}, "title": {}}
+            "window": {"start": "2026-10-25", "end": "2026-11-08"},
+            "comics": [card], "titles": [], "followed": [],
+            "progress": {"comic": {"MARVEL/asm-12": {"status": "read", "updated_at": null}}, "title": {}}
         }))
         .unwrap();
         assert_eq!(overview.progress["comic"]["MARVEL/asm-12"].status, "read");
-        // ...and `updated_at` is nullable in the database, so it must not be required.
+        // `updated_at` is nullable in the database, so a mark may carry none.
         assert!(overview.progress["comic"]["MARVEL/asm-12"].updated_at.is_none());
-
-        // A signed-out overview (and an older Percy) omits the key entirely.
-        let signed_out: ReleasesOverview = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert!(signed_out.progress.is_empty());
     }
 
     #[test]
@@ -3494,28 +3551,41 @@ mod tests {
         );
     }
 
+    /// A complete title as Percy sends it (every key present, nullable ones null).
+    fn title_json(slug: &str, trailer: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "id": 1, "universe": "mcu", "tmdb_type": "movie", "tmdb_id": 1726, "slug": slug, "title": "Iron Man",
+            "kind": "movie", "runtime": 126, "episodes": null, "release_date": null, "poster_path": null,
+            "backdrop_path": null, "overview": null, "tmdb_rating": null, "tmdb_votes": null, "era": null,
+            "era_order": 0, "story_order": 1, "release_order": 1, "milestone": false, "instruction": null,
+            "context": null, "spoiler": null, "credits_of": null, "sub_universe": null, "importance": null,
+            "providers": [], "trailer": trailer, "season_number": null, "season_name": null, "parent_id": null
+        })
+    }
+
     #[test]
     fn a_title_detail_carries_its_place_in_the_ordering_and_its_trailer() {
         // The four fields the detail page's "position N of M" strip is made of, plus the
         // V44 trailer — both URLs arrive pre-built, so the renderer never assembles one.
+        let trailer = serde_json::json!({
+            "site": "YouTube",
+            "key": "8ugaeA-nMTc",
+            "name": "Official Trailer",
+            "url": "https://www.youtube.com/watch?v=8ugaeA-nMTc",
+            "embed_url": "https://www.youtube.com/embed/8ugaeA-nMTc"
+        });
         let detail: WatchTitleDetail = serde_json::from_value(serde_json::json!({
-            "title": {
-                "slug": "iron-man",
-                "title": "Iron Man",
-                "trailer": {
-                    "site": "YouTube",
-                    "key": "8ugaeA-nMTc",
-                    "name": "Official Trailer",
-                    "url": "https://www.youtube.com/watch?v=8ugaeA-nMTc",
-                    "embed_url": "https://www.youtube.com/embed/8ugaeA-nMTc"
-                }
-            },
+            "title": title_json("iron-man", trailer),
+            "credits_of": null, "parent": null, "seasons": [], "previous": null, "next": null,
             "credits": [],
             "position": 3,
             "total": 42,
             "path": "complete",
             "sort": "story",
-            "universe": {"slug": "mcu", "name": "Marvel Cinematic Universe"}
+            "universe": {
+                "slug": "mcu", "name": "Marvel Cinematic Universe", "short_name": "MCU", "tagline": null,
+                "accent": "#E62429", "logo_url": null, "backdrop_url": null, "published": true, "synced_at": null
+            }
         }))
         .unwrap();
 
@@ -3531,23 +3601,11 @@ mod tests {
 
     #[test]
     fn a_title_without_a_trailer_is_none_rather_than_a_deserialisation_failure() {
-        // `null` and "the key is absent entirely" (a row read before V44) must both land
-        // as None — the common case, not an error.
-        let with_null: WatchTitle = serde_json::from_value(serde_json::json!({
-            "slug": "avengers-doomsday",
-            "trailer": null
-        }))
-        .unwrap();
+        // `null` is the common case (an unreleased film), not an error. The key itself is
+        // required now that the schema is generated from Percy's response model.
+        let with_null: WatchTitle =
+            serde_json::from_value(title_json("avengers-doomsday", serde_json::Value::Null)).unwrap();
         assert!(with_null.trailer.is_none());
-
-        let legacy: WatchTitle = serde_json::from_value(serde_json::json!({"slug": "iron-man"})).unwrap();
-        assert!(legacy.trailer.is_none());
-
-        // ...and a detail payload missing the ordering fields still shapes, so a dashboard
-        // built against this crate survives an older Percy.
-        let bare: WatchTitleDetail = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert_eq!((bare.position, bare.total), (0, 0));
-        assert_eq!(bare.path, None);
     }
 
     #[test]

@@ -117,17 +117,17 @@ small and self-contained first.
 | `starboard.py` | 2 | small, easy |
 | `profile.py` | 3 | `{ok}` replies + one object |
 | `gallery.py` | 3 | `asdict(dataclass)` results: model the dataclass fields |
-| `news.py` | 3 | pure payload builders in `app/services/news/payload.py` |
+| `news.py` | 3 | **done** (typed; pure payload builders in `app/services/news/payload.py`) |
 | `webhooks.py` (vote webhooks) | 2 | no dashboard consumer; skip unless wanted |
 | `rolemenus.py` | 6 | |
 | `backup.py` | 6 | export blob is intentionally free-form JSON: leave as `dict` |
 | `notifications.py` | 7 | |
 | `members.py` | 7 | |
 | `subscriptions.py` (outbound webhooks) | 7 | |
-| `comics.py` | 5 | shaping in `app/services/comics/payload.py` |
+| `comics.py` | 5 | **done** (typed; shaping in `app/services/comics/payload.py`) |
 | `stats.py` | 9 | mixed scope |
-| `releases.py` | 9 | `progress` map: `dict[str, dict[str, Row]]` |
-| `watchlist.py` | 11 | large nested payloads |
+| `releases.py` | 9 | **done** (typed; `progress` map: `dict[str, dict[str, Row]]`) |
+| `watchlist.py` | 11 | **done** (typed; large nested payloads) |
 | `moderation.py` | 12 | 1 route has no JSON body |
 | `leveling.py` | 12 | |
 | `economy.py` | 15 | |

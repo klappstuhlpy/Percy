@@ -65,6 +65,15 @@ from app.utils import cache, fuzzy
 
 from ..dependencies import BotDep, verify_token
 from ..helpers import naive_utc
+from .releases_models import (
+    ProgressResponse,
+    ReleaseProgressDeleted,
+    ReleasesOverview,
+    SubjectsResponse,
+    Subscription,
+    SubscriptionDeleted,
+    SubscriptionsResponse,
+)
 
 if TYPE_CHECKING:
     import asyncpg
@@ -166,13 +175,13 @@ def _check_subject_type(media: str, subject_type: str) -> str:
     return subject_type
 
 
-def _subscription(row: asyncpg.Record | dict[str, Any]) -> dict[str, Any]:
+def _subscription(row: asyncpg.Record | dict[str, Any]) -> Subscription:
     """Shapes a ``release_subscriptions`` row.
 
     ``guild_id`` goes out as a string: it is a snowflake, and the browser clients on the other
     end of this API lose precision on integers past 2^53.
     """
-    return {
+    return Subscription.model_validate({
         'media': row['media'],
         'subject_type': row['subject_type'],
         'subject_value': row['subject_value'],
@@ -181,7 +190,7 @@ def _subscription(row: asyncpg.Record | dict[str, Any]) -> dict[str, Any]:
         'delivery': row['delivery'],
         'guild_id': str(row['guild_id']) if row['guild_id'] is not None else None,
         'created_at': row['created_at'].isoformat() if row['created_at'] else None,
-    }
+    })
 
 
 # -- Subscriptions (per-user, never cached) -----------------------------------
@@ -192,14 +201,14 @@ async def list_subscriptions(
     bot: BotDep,
     discord_id: int,
     media: Annotated[Media | None, Query(description="Scope to one medium")] = None,
-) -> dict:
+) -> SubscriptionsResponse:
     """Everything a user follows. A user with no subscriptions is an empty list, not a 404."""
     rows = await bot.db.releases.list_subscriptions(discord_id, media=media)
-    return {'subscriptions': [_subscription(row) for row in rows]}
+    return SubscriptionsResponse(subscriptions=[_subscription(row) for row in rows])
 
 
 @router.put("/users/{discord_id}/subscriptions")
-async def put_subscription(bot: BotDep, discord_id: int, body: Annotated[SubscribeBody, Body()]) -> dict:
+async def put_subscription(bot: BotDep, discord_id: int, body: Annotated[SubscribeBody, Body()]) -> Subscription:
     """Follows a subject, or refreshes the settings of a follow that already exists.
 
     Idempotent by design: the picker cannot know whether the user already follows a subject
@@ -228,7 +237,7 @@ async def put_subscription(bot: BotDep, discord_id: int, body: Annotated[Subscri
 @router.patch("/users/{discord_id}/subscriptions")
 async def patch_subscription(
     bot: BotDep, discord_id: int, body: Annotated[SubscriptionPatchBody, Body()],
-) -> dict:
+) -> Subscription:
     """Changes the stream or delivery mode of an existing follow.
 
     A 404 here means "you do not follow that" -- distinct from a PUT, which would happily
@@ -267,14 +276,14 @@ async def delete_subscription(
     media: Annotated[Media, Query(description="comic or title")],
     subject_type: Annotated[SubjectType, Query(description="The subject key's type")],
     subject_value: Annotated[str, Query(description="The subject key")],
-) -> dict:
+) -> SubscriptionDeleted:
     """Unfollows a subject. ``deleted`` is false when there was nothing to remove.
 
     The triple travels as query parameters rather than a body: a DELETE body is awkward for
     both the Rust client and every HTTP cache between here and it.
     """
     _check_subject_type(media, subject_type)
-    return {'deleted': await bot.db.releases.unsubscribe(discord_id, media, subject_type, subject_value)}
+    return SubscriptionDeleted(deleted=await bot.db.releases.unsubscribe(discord_id, media, subject_type, subject_value))
 
 
 # -- Progress (per-user, never cached) ----------------------------------------
@@ -303,7 +312,7 @@ async def list_progress(
     bot: BotDep,
     discord_id: int,
     media: Annotated[Media | None, Query(description="Scope to one medium")] = None,
-) -> dict:
+) -> ProgressResponse:
     """A user's progress as ``{media: {release_key: {status, updated_at}}}``.
 
     Both media are always present (empty when the user has marked nothing in one), so a client
@@ -311,11 +320,11 @@ async def list_progress(
     empty maps, not a 404.
     """
     rows = await bot.db.releases.get_progress(discord_id, media=media)
-    return {'entries': progress_payload(rows)}
+    return ProgressResponse.model_validate({'entries': progress_payload(rows)})
 
 
 @router.put("/users/{discord_id}/progress")
-async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBody, Body()]) -> dict:
+async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBody, Body()]) -> ProgressResponse:
     """Merges a batch of progress entries, last-write-wins, and returns the merged set.
 
     The same contract as ``PUT /watchlist/users/{id}/progress``: the client sends its own
@@ -332,7 +341,7 @@ async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBod
         for entry in body.entries
     ]
     merged = await bot.db.releases.set_progress_bulk(discord_id, rows)
-    return {'merged': merged, **await list_progress(bot, discord_id, None)}
+    return ProgressResponse(merged=merged, entries=(await list_progress(bot, discord_id, None)).entries)
 
 
 @router.delete("/users/{discord_id}/progress")
@@ -341,7 +350,7 @@ async def delete_progress(
     discord_id: int,
     media: Annotated[Media | None, Query(description="Scope the reset to one medium")] = None,
     release_key: Annotated[str | None, Query(description="Unmark one item; needs ``media``")] = None,
-) -> dict:
+) -> ReleaseProgressDeleted:
     """Unmarks one item, or resets a medium (or everything). ``deleted`` counts what was removed.
 
     The key travels as a query parameter rather than a body for the same reason the
@@ -355,8 +364,8 @@ async def delete_progress(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="'release_key' needs 'media'; a release key is only unique within one medium",
             )
-        return {'deleted': int(await bot.db.releases.clear_progress(discord_id, media, release_key))}
-    return {'deleted': await bot.db.releases.clear_all_progress(discord_id, media=media)}
+        return ReleaseProgressDeleted(deleted=int(await bot.db.releases.clear_progress(discord_id, media, release_key)))
+    return ReleaseProgressDeleted(deleted=await bot.db.releases.clear_all_progress(discord_id, media=media))
 
 
 # -- Subject picker (catalogue read, TTL-cached) ------------------------------
@@ -452,7 +461,7 @@ async def search_subjects(
     q: Annotated[str, Query(description="What the user typed; empty returns popular subjects")] = "",
     media: Annotated[Media | None, Query(description="Narrow to one medium")] = None,
     limit: Annotated[int, Query(ge=1, le=50, description="Maximum subjects to return")] = 25,
-) -> dict:
+) -> SubjectsResponse:
     """The subject picker: everything a user could follow, ranked against ``q``.
 
     Spans both media unless ``media`` narrows it, because a user searching "loki" means the
@@ -460,7 +469,7 @@ async def search_subjects(
     """
     candidates = list(await _catalogue_subjects(bot, media))
     if not q:
-        return {'subjects': _popular(candidates, limit)}
+        return SubjectsResponse.model_validate({'subjects': _popular(candidates, limit)})
 
     if media != 'comic':
         # Person search is a trigram query against one GIN index, so it is per-query rather than
@@ -469,7 +478,7 @@ async def search_subjects(
             hint = f"person · {row['credit_count']} credits"
             candidates.append((row['credit_count'], _subject('title', 'person', row['slug'], row['name'], hint)))
 
-    return {'subjects': _rank(candidates, q, limit)}
+    return SubjectsResponse.model_validate({'subjects': _rank(candidates, q, limit)})
 
 
 # -- Overview (catalogue TTL-cached, personalisation never) -------------------
@@ -530,7 +539,7 @@ async def releases_overview(
     days: Annotated[int, Query(ge=1, le=MAX_DAYS, description="Half-width of the window, in days")] = DEFAULT_DAYS,
     discord_id: Annotated[int | None, Query(description="Personalise for this user; omit for the public page")] = None,
     limit: Annotated[int, Query(ge=1, le=OVERVIEW_FETCH_LIMIT, description="Maximum cards per list")] = 24,
-) -> dict:
+) -> ReleasesOverview:
     """The front door: what just landed and what is imminent, across both media.
 
     **The window is deliberately asymmetric**, because "new" means different things to the two
@@ -571,6 +580,6 @@ async def releases_overview(
     start, end, comics, titles = await _overview_entries(bot, days)
     subscriptions = await bot.db.releases.list_subscriptions(discord_id) if discord_id is not None else ()
     progress = await bot.db.releases.get_progress(discord_id) if discord_id is not None else ()
-    return build_overview(
+    return ReleasesOverview.model_validate(build_overview(
         comics[:limit], titles[:limit], start=start, end=end,
-        subscriptions=subscriptions, progress=progress)
+        subscriptions=subscriptions, progress=progress))
