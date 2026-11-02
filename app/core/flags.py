@@ -326,6 +326,7 @@ class ConsumeUntilFlag(Converter[T]):
 
         if ctx.command.custom_flags.is_flag_starter(argument):
             if self.default is not MISSING:
+                ctx.view.undo()  # hand the flag word back, or the flags parameter never sees it
                 return self.default  # type: ignore[return-value]
 
             raise MissingRequiredArgument(ctx.current_parameter)  # type: ignore[arg-type]
