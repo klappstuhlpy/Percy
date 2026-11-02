@@ -22,6 +22,7 @@ from discord.ui.select import BaseSelect
 from app.core.components_v2 import Accent, make_notice
 from app.core.pagination import BasePaginatorV2
 from app.services.custom_commands.manager import (
+    TYPE_WORDS,
     describe_cooldown,
     describe_signature,
     placeholder_help,
@@ -557,8 +558,8 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
             Field('response', 'Response', paragraph=True, max_length=MAX_RESPONSE_LENGTH,
                   description='What the bot answers. Placeholders are filled in when it runs.',
                   placeholder='{author} hugs {who}! ({choice:aww|so sweet})'),
-        ], apply, intro=placeholder_help(()) + '\nArgument types: `str` `int` `number` `bool` `member` `user` `role` '
-                                              '`channel` `duration`. An argument `<who:member>` becomes `{who}`.')
+        ], apply, intro=placeholder_help(()) + '\n**Argument types:** ' + ' '.join(f'`{t}`' for t in TYPE_WORDS)
+                        + '\n-> An argument `<who:member>` becomes `{who}`.')
 
     # edit
 
