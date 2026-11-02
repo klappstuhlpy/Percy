@@ -4,7 +4,7 @@ import contextlib
 import csv
 import datetime
 import io
-from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 
 import asyncpg
 import discord
@@ -786,6 +786,13 @@ class Tags(Cog):
     """Commands to fetch something by a tag name."""
 
     emoji = "<:tag:1322338570484322304>"
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Browse": ("tag list", "tag search", "tag find", "tag info", "tag raw", "tag stats"),
+        "Manage": ("tag create", "tag make", "tag alias", "tag edit", "tag delete", "tag purge", "tag export"),
+        "Ownership": ("tag transfer", "tag claim"),
+    }
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)

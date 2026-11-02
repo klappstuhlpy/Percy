@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from app.core import Cog
 
+from .assistant import AssistantMixin
 from .dstatus import DiscordStatusMixin
 from .gimmicks import GimmicksMixin
 from .meta import MetaMixin
@@ -19,6 +20,7 @@ __all__ = ('Misc', 'setup')
 
 
 class Misc(
+    AssistantMixin,
     GimmicksMixin,
     KlappstuhlToolsMixin,
     TranslatorMixin,
@@ -38,6 +40,20 @@ class Misc(
     """
 
     emoji = '<a:staff_animated:1322337965774602313>'
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        'Info': (
+            'serverinfo', 'featureinfo', 'avatar', 'appinfo', 'charinfo', 'snowflake', 'raw', 'permissions', 'ping',
+            'dashboard', 'vote', 'feedback',
+        ),
+        'Tools': (
+            'ask', 'translate', 'shorten', 'qr', 'paste', 'preview', 'scan', 'screenshot', 'codeimage', 'chart',
+            'mdpdf', 'color', 'solved',
+        ),
+        'Fun': ('quote', 'urban', 'meme', 'fact'),
+        'Server Setup': ('prefix', 'temp', 'statcounter'),
+    }
 
     def __init__(self, bot: Bot) -> None:
         # Kicks off the cooperative ``__init__`` chain: each mixin calls

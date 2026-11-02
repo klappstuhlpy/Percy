@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from itertools import accumulate
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 import asyncpg
 import discord
@@ -248,6 +248,17 @@ class Config(Cog):
     """
 
     emoji = "<:green_shield:1322354653991796816>"
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Ignoring": ("config ignore", "config unignore"),
+        "Command Toggles": (
+            "config enable", "config disable", "config disabled", "config disabledmessage", "config channel",
+            "config server",
+        ),
+        "Permissions": ("config perms",),
+        "Rules": ("config rule", "config rules", "config explain"),
+    }
 
     @cache.cache(maxsize=1024, strategy=cache.Strategy.LRU, ignore_kwargs=True)
     async def is_plonked(

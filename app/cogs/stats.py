@@ -306,6 +306,14 @@ class Stats(Cog):
 
     emoji = "<:graph:1322354647910055967>"
 
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Bot": ("about", "uptime"),
+        "Users": ("userinfo", "names", "lastseen", "avatarhistory", "presence"),
+        "Command Usage": ("stats",),
+        "Games": ("stats games", "stats gameboard"),
+    }
+
     _presence_map: ClassVar[dict[discord.Status, str]] = {
         discord.Status.online: "Online",
         discord.Status.idle: "Idle",

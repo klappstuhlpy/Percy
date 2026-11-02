@@ -16,7 +16,7 @@ import math
 import random
 import re
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 from discord.ext import commands
@@ -85,6 +85,12 @@ class CustomCommands(Cog):
     """Server-made commands with typed arguments, and aliases for existing commands."""
 
     emoji = '\N{SPEECH BALLOON}'
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        'Custom Commands': ('customcommand',),
+        'Aliases': ('alias',),
+    }
 
     def __init__(self, bot: Bot) -> None:
         self.bot = bot

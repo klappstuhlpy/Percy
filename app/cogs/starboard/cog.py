@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import weakref
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import discord
 from discord.ext import commands  # noqa: TC002  (runtime-resolved command annotation)
@@ -23,6 +23,14 @@ class Starboard(Cog):
     """Repost messages that gather enough star reactions into a dedicated channel."""
 
     emoji = '\N{WHITE MEDIUM STAR}'
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        'Settings': (
+            'starboard config', 'starboard toggle', 'starboard channel', 'starboard threshold', 'starboard emoji',
+            'starboard selfstar', 'starboard nsfw', 'starboard maxage', 'starboard ignore', 'starboard unignore',
+        ),
+    }
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)

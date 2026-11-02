@@ -4,7 +4,7 @@ import random
 import time
 import weakref
 from contextlib import nullcontext
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 import discord
 from discord import app_commands
@@ -140,6 +140,15 @@ class Economy(Cog):
     """Economy commands"""
 
     emoji = Emojis.Economy.cash
+
+    #: Help-menu sections (root command names); groups such as ``pet`` get their own.
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Bank": ("balance", "deposit", "withdraw", "transfer"),
+        "Rewards": ("daily", "weekly", "monthly", "voteclaim", "quests", "achievements"),
+        "Earning": ("work", "job", "fish", "hunt", "beg", "dig", "search", "postmemes"),
+        "Items": ("item", "shop", "buy", "sell", "inventory", "use", "gift", "trade", "market", "collection"),
+        "Progress": ("profile", "prestige", "perks", "multipliers", "cooldowns", "passive"),
+    }
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)

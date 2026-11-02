@@ -1,4 +1,4 @@
-"""Tests for the ``?ask`` reply-chain reconstruction (:mod:`app.cogs.automation.assistant`).
+"""Tests for the ``?ask`` reply-chain reconstruction (:mod:`app.cogs.misc.assistant`).
 
 The conversational assistant rebuilds an entire multi-turn chat by walking a Discord reply
 chain upward. These tests pin that reconstruction (role tagging, invocation stripping,
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.cogs.automation import assistant as assistant_mod
-from app.cogs.automation.assistant import ASSISTANT_MARKER, AssistantMixin
+from app.cogs.misc import assistant as assistant_mod
+from app.cogs.misc.assistant import ASSISTANT_MARKER, AssistantMixin
 
 
 class FakeUser:

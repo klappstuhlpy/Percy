@@ -1,7 +1,7 @@
 """Member restrictions: voice kick/ban, nicknames (set and freeze) and per-channel mutes.
 
 Controller only: every command runs through ``apply_member_action`` (the path the dashboard and the
-case log share), the Discord work is in :mod:`.actions`, the rules in :mod:`app.services.restrictions`.
+case log share), the Discord work is in :mod:`.restriction_actions`, the rules in :mod:`app.services.restrictions`.
 """
 
 from __future__ import annotations
@@ -19,27 +19,29 @@ from app.core.models import PermissionTemplate
 from app.services.restrictions import is_current
 from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
 
-from . import actions
+from . import restriction_actions as actions
 
 if TYPE_CHECKING:
     from app.core.timer import Timer
 
 log = logging.getLogger(__name__)
 
-__all__ = ('Restrictions',)
+__all__ = ('RestrictionsMixin',)
 
 
 def _seconds(duration: timetools.FutureTime | None) -> int | None:
     return None if duration is None else int((duration.dt - discord.utils.utcnow()).total_seconds())
 
 
-class Restrictions(Cog):
-    """Voice bans, nickname control and channel mutes."""
+class RestrictionsMixin:
+    """Voice bans, nickname control and channel mutes — mixed into :class:`Moderation`.
 
-    emoji = '\N{NO ENTRY}'
+    Listener methods carry a ``restrictions_`` prefix with an explicit event name: ``CogMeta`` keys
+    listeners by attribute name, so a bare ``on_member_join`` here would shadow (or be shadowed by)
+    Moderation's own.
+    """
 
-    def __init__(self, bot: Bot) -> None:
-        super().__init__(bot)
+    bot: Bot
 
     async def _run(self, ctx: Context, member: discord.Member, action: str, done: str, **params: Any) -> None:
         assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
@@ -263,8 +265,8 @@ class Restrictions(Cog):
 
     # -- Listeners --------------------------------------------------------------------------
 
-    @Cog.listener()
-    async def on_member_join(self, member: discord.Member) -> None:
+    @Cog.listener('on_member_join')
+    async def restrictions_on_member_join(self, member: discord.Member) -> None:
         """Puts a rejoining member's voice ban, frozen nickname and channel mutes back."""
         try:
             await actions.reapply(self.bot, member)
@@ -274,8 +276,8 @@ class Restrictions(Cog):
         except discord.HTTPException:
             log.exception('Could not re-apply restrictions to %s in guild %s', member.id, member.guild.id)
 
-    @Cog.listener()
-    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+    @Cog.listener('on_member_update')
+    async def restrictions_on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         """Reverts a frozen nickname and restores a sticky role someone took off."""
         if before.nick != after.nick:
             await self._revert_nick(after)
@@ -304,8 +306,8 @@ class Restrictions(Cog):
         except discord.HTTPException:
             log.exception('Could not restore the sticky roles of %s in guild %s', member.id, member.guild.id)
 
-    @Cog.listener()
-    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
+    @Cog.listener('on_guild_channel_create')
+    async def restrictions_on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         """New voice channels get the voice-ban role's denials, as the mute role gets its own."""
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             return
@@ -313,8 +315,8 @@ class Restrictions(Cog):
         if role is not None:
             await actions.deny_voice(role, [channel], 'New voice channel.')
 
-    @Cog.listener()
-    async def on_guild_role_delete(self, role: discord.Role) -> None:
+    @Cog.listener('on_guild_role_delete')
+    async def restrictions_on_guild_role_delete(self, role: discord.Role) -> None:
         config = await self.bot.db.get_guild_config(role.guild.id)
         if role.id == config.voiceban_role_id:
             await config.update(voiceban_role_id=None)  # the next voice ban makes a new one
@@ -383,8 +385,3 @@ class Restrictions(Cog):
                 return
         await self.bot.db.restrictions.remove(guild.id, member_id, 'channelmute', channel_id)
         self.bot.dispatch('mod_action', guild.id, 'channelunmute', member_id, guild.me.id, reason)
-
-
-async def setup(bot: Bot) -> None:
-    await bot.add_cog(Restrictions(bot))
-

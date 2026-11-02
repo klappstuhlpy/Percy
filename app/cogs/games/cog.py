@@ -7,7 +7,7 @@ import logging
 import random
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import discord
 from discord import app_commands
@@ -98,6 +98,16 @@ class Games(Cog):
     """Play games against the bot or other players to earn money."""
 
     emoji = "\N{VIDEO GAME}"
+
+    #: Help-menu sections (root command names); ``games`` itself stays under General.
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Casino": (
+            "slots", "blackjack", "roulette", "poker", "coinflip", "dice", "higherlower", "mines", "tower",
+            "crash", "plinko", "keno", "scratch", "snakeeyes", "gamble", "horserace", "russianroulette",
+        ),
+        "Crime": ("crime", "slut", "rob", "heist", "fight"),
+        "Puzzles & Party": ("tictactoe", "minesweeper", "hangman", "wordle", "trivia", "trivialist"),
+    }
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)

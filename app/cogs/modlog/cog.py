@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
+from typing import ClassVar
 
 import discord
 from discord.ext import commands  # noqa: TC002 - resolved at runtime for command/flag annotations
@@ -38,6 +39,13 @@ class ModLog(Cog):
     """A queryable moderation case log: warnings plus an audit trail of mod actions."""
 
     emoji = '\N{CLIPBOARD}'
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        'Warnings': ('warn', 'warnings', 'pardon', 'clearwarns', 'warnreason'),
+        'Cases': ('cases', 'case', 'reason', 'delcase'),
+        'Settings': ('warnpolicy', 'modlog'),
+    }
 
     # -- case persistence -------------------------------------------------
 

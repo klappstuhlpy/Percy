@@ -138,7 +138,7 @@ async def test_repository_for_member_and_get_reach_the_base_helpers() -> None:
 
 
 async def test_reapply_restores_a_frozen_nick_through_the_real_repository() -> None:
-    from app.cogs.restrictions.actions import reapply
+    from app.cogs.moderation.restriction_actions import reapply
     from app.database.repositories.restrictions import RestrictionsRepository
 
     row = {'kind': 'nickfreeze', 'value': 'Bob', 'expires_at': None, 'channel_id': 0}
@@ -151,7 +151,7 @@ async def test_reapply_restores_a_frozen_nick_through_the_real_repository() -> N
 
 
 async def test_reapply_gives_back_sticky_roles_it_can_assign() -> None:
-    from app.cogs.restrictions.actions import reapply
+    from app.cogs.moderation.restriction_actions import reapply
     from app.database.repositories.restrictions import RestrictionsRepository
 
     class Role:
@@ -176,7 +176,7 @@ async def test_reapply_gives_back_sticky_roles_it_can_assign() -> None:
 
 
 async def test_nickfreeze_persists_before_editing_and_nick_follows_the_freeze() -> None:
-    from app.cogs.restrictions import actions
+    from app.cogs.moderation import restriction_actions as actions
 
     order: list[str] = []
     member = _member()

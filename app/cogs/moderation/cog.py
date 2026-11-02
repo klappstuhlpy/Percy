@@ -5,13 +5,14 @@ import datetime
 import logging
 from collections import Counter, defaultdict
 from contextlib import nullcontext, suppress
-from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 
 import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from app.cogs.moderation.restrictions import RestrictionsMixin
 from app.core import Bot, Context, Flags, NoticeView, flag, store_true
 from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, IgnoreEntity, MemberID
 from app.core.models import BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
@@ -104,10 +105,20 @@ class PurgeFlags(Flags):
 
 
 # noinspection PyProtectedMember
-class Moderation(Cog):
+class Moderation(RestrictionsMixin, Cog):
     """Utility commands for moderation."""
 
     emoji = "<:mod_badge:1322337933428260874>"
+
+    #: Help-menu sections (root command names); groups such as ``lockdown`` get their own.
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Bans & Kicks": ("kick", "ban", "multiban", "softban", "unban", "tempban"),
+        "Mutes": ("mute", "unmute", "tempmute", "muterole", "selfmute"),
+        "Restrictions": (
+            "voicekick", "voiceban", "voiceunban", "nick", "nickfreeze", "nickunfreeze",
+            "channelmute", "channelunmute", "stickyrole",
+        ),
+    }
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)

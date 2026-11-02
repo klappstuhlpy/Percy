@@ -29,6 +29,8 @@ COMMAND_ICON_URL = "https://klappstuhl.me/gallery/raw/jQkGI.png"
 #: How many commands a single category page lists.
 COMMANDS_PER_PAGE = 6
 
+SEARCH_EMOJI = "\N{LEFT-POINTING MAGNIFYING GLASS}"
+
 
 # -- shared rendering helpers ---------------------------------------------
 
@@ -52,14 +54,95 @@ def iter_help_notes(is_any_locked: bool, any_has_more_help: bool, prefix: str) -
 
 
 
+# -- sections & search -----------------------------------------------------
+
+#: The section a cog's commands land in when nothing else claims them.
+GENERAL_SECTION = "General"
+
+
+def section_title(name: str) -> str:
+    """``economy-config`` -> ``Economy Config``, ``dj`` -> ``DJ``: a group name, read as a heading."""
+    return " ".join(w.upper() if len(w) <= 2 else w.capitalize() for w in name.replace("_", "-").split("-"))
+
+
+def command_sections(cog: Cog, entries: Iterable[AnyCommand]) -> dict[str, list[AnyCommand]]:
+    """Split one category's commands into the sections its help page offers.
+
+    The cog's ``help_sections`` mapping (``{"Bans": ("ban", "unban"), "Rules": ("config rule",)}``)
+    names commands by qualified name, and a claim covers that command's subcommands too; the
+    nearest claimed ancestor wins. Unclaimed commands of a group with at least two of them form
+    a section named after the group — unless the whole cog is one group, where that would just
+    repeat the category — and everything else is :data:`GENERAL_SECTION`. General comes first,
+    then the declared sections in declaration order, then the group sections alphabetically.
+    Empty sections never appear.
+    """
+    declared: Mapping[str, Iterable[str]] = getattr(cog, "help_sections", None) or {}
+    claimed = {name: section for section, names in declared.items() for name in names}
+
+    def claim(cmd: AnyCommand) -> str | None:
+        node: AnyCommand | None = cmd
+        while node is not None:
+            if node.qualified_name in claimed:
+                return claimed[node.qualified_name]
+            node = node.parent  # type: ignore[assignment]
+        return None
+
+    resolved = [(cmd, claim(cmd)) for cmd in entries]
+    roots = {(cmd.root_parent or cmd).name for cmd, _ in resolved}
+    unclaimed: dict[str, int] = {}
+    for cmd, section in resolved:
+        if section is None:
+            root = (cmd.root_parent or cmd).name
+            unclaimed[root] = unclaimed.get(root, 0) + 1
+
+    sections: dict[str, list[AnyCommand]] = {}
+    for cmd, section in resolved:
+        if section is None:
+            root = (cmd.root_parent or cmd).name
+            section = section_title(root) if unclaimed[root] > 1 and len(roots) > 1 else GENERAL_SECTION
+        sections.setdefault(section, []).append(cmd)
+
+    order = {name: i for i, name in enumerate(declared, start=1)}
+
+    def rank(name: str) -> tuple[int, str]:
+        return (0, "") if name == GENERAL_SECTION else (order.get(name, len(order) + 1), name)
+
+    return {name: sections[name] for name in sorted(sections, key=rank)}
+
+
+def search_commands(entries: Iterable[AnyCommand], query: str) -> list[AnyCommand]:
+    """Commands matching ``query``, best first: name prefix, then name/alias, then description."""
+    needle = query.casefold().strip()
+    if not needle:
+        return []
+
+    ranked: list[tuple[int, str, AnyCommand]] = []
+    seen: set[str] = set()
+    for cmd in entries:
+        name = cmd.qualified_name.casefold()
+        if name in seen:
+            continue
+        seen.add(name)
+        if name.startswith(needle) or cmd.name.casefold().startswith(needle):
+            rank = 0
+        elif needle in name or any(needle in alias.casefold() for alias in cmd.aliases):
+            rank = 1
+        elif needle in (cmd.description or "").casefold():
+            rank = 2
+        else:
+            continue
+        ranked.append((rank, name, cmd))
+    return [cmd for _, _, cmd in sorted(ranked, key=lambda r: (r[0], r[1]))]
+
+
 # -- Components V2 help view -----------------------------------------------
 
 
 class HelpView(LayoutView):
     """The Components V2 help menu — front page, paginated category pages and selects.
 
-    Replaces the old embed-based ``HelpPaginator``. A single :class:`~app.core.LayoutView`
-    holds the current card, the prev/next navigation row (on category pages) and the
+    A single :class:`~app.core.LayoutView` holds the current card, a control row (search,
+    plus prev/next on multi-page lists), a section select on large categories and the
     category :class:`CategorySelect`s, all swapped in place as the user navigates.
     """
 
@@ -75,12 +158,21 @@ class HelpView(LayoutView):
         super().__init__(members=helper.context.author, timeout=180)
         self.helper: PaginatedHelpCommand = helper
         self.mapping: dict[Cog, list[AnyCommand]] = mapping
-        self.group: Cog | None = group
         self.with_index: bool = with_index
 
         self.container: discord.ui.Container | None = None
 
-        self._set_entries(entries or [])
+        self.group: Cog | None = None
+        #: The open category's sections; empty when the category is small enough to skim.
+        self.sections: dict[str, list[AnyCommand]] = {}
+        self.section: str | None = None
+        #: Set while the card shows search results instead of a category.
+        self.query: str | None = None
+
+        if group is not None:
+            self.show_group(group, entries or [])
+        else:
+            self._set_entries([])
 
     def _set_entries(self, entries: list[AnyCommand]) -> None:
         cmds = list(entries)
@@ -95,22 +187,38 @@ class HelpView(LayoutView):
         return len(self.pages)
 
     async def _current_container(self) -> discord.ui.Container:
+        page = self.pages[self.index]
+        if self.query is not None:
+            return self.helper.build_group_container(
+                None,
+                page,
+                heading=f"## {SEARCH_EMOJI} Results for `{truncate(self.query, 40)}`",
+                footer=f"{pluralize(len(self.entries)):match|matches}",
+                show_category=len(self.mapping) > 1,
+            )
         if self.group is None:
             return await self.helper.build_front_page_container()
-        return self.helper.build_group_container(self.group, self.pages[self.index], total_commands=len(self.entries))
-
-    def _make_nav_row(self) -> discord.ui.ActionRow:
-        row: discord.ui.ActionRow = discord.ui.ActionRow()
-        back = discord.ui.Button(style=discord.ButtonStyle.green, label="<==")
-        back.callback = functools.partial(self._navigate, delta=-1)  # type: ignore[assignment]
-        indicator = discord.ui.Button(
-            style=discord.ButtonStyle.grey, label=f"{self.index + 1}/{self.total_pages}", disabled=True
+        return self.helper.build_group_container(
+            self.group, page, section=self.section, total_commands=len(self.entries)
         )
-        forward = discord.ui.Button(style=discord.ButtonStyle.green, label="==>")
-        forward.callback = functools.partial(self._navigate, delta=1)  # type: ignore[assignment]
-        row.add_item(back)
-        row.add_item(indicator)
-        row.add_item(forward)
+
+    def _make_control_row(self) -> discord.ui.ActionRow:
+        row: discord.ui.ActionRow = discord.ui.ActionRow()
+        if self.total_pages > 1:
+            back = discord.ui.Button(style=discord.ButtonStyle.green, label="<==")
+            back.callback = functools.partial(self._navigate, delta=-1)  # type: ignore[assignment]
+            indicator = discord.ui.Button(
+                style=discord.ButtonStyle.grey, label=f"{self.index + 1}/{self.total_pages}", disabled=True
+            )
+            forward = discord.ui.Button(style=discord.ButtonStyle.green, label="==>")
+            forward.callback = functools.partial(self._navigate, delta=1)  # type: ignore[assignment]
+            row.add_item(back)
+            row.add_item(indicator)
+            row.add_item(forward)
+
+        search = discord.ui.Button(style=discord.ButtonStyle.grey, label="Search", emoji=SEARCH_EMOJI)
+        search.callback = self._open_search  # type: ignore[assignment]
+        row.add_item(search)
         return row
 
     async def _navigate(self, interaction: discord.Interaction, *, delta: int) -> None:
@@ -118,16 +226,23 @@ class HelpView(LayoutView):
         await self.compose()
         await interaction.response.edit_message(view=self)
 
+    async def _open_search(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(HelpSearchModal(self))
+
     async def compose(self) -> None:
-        """Rebuild every component for the current state (card + nav + selects)."""
+        """Rebuild every component for the current state (card + controls + selects)."""
         self.clear_items()
         self.container = await self._current_container()
 
         assert self.container is not None
-        if self.group is not None and self.total_pages > 1:
-            self.container.add_item(self._make_nav_row())
+        self.container.add_item(self._make_control_row())
 
-        default = self.group if self.group in self.mapping else None
+        if self.sections and self.query is None:
+            select = SectionSelect(self.sections, current=self.section)
+            select.bind(self)
+            self.container.add_item(discord.ui.ActionRow(select))
+
+        default = self.group if self.group in self.mapping and self.query is None else None
         for select in build_category_selects(
             self.helper.context.bot, self.mapping, with_index=self.with_index, default=default
         ):
@@ -137,14 +252,38 @@ class HelpView(LayoutView):
         self.add_item(self.container)
 
     def show_group(self, cog: Cog, entries: list[AnyCommand]) -> None:
-        """Switch the view to a category's command list (page 0)."""
+        """Switch the view to a category's full command list (page 0)."""
         self.group = cog
-        self._set_entries(entries)
+        self.query = None
+        self.section = None
+        sections = command_sections(cog, entries) if len(entries) > COMMANDS_PER_PAGE else {}
+        self.sections = sections if len(sections) > 1 else {}
+        self._set_entries([cmd for cmds in self.sections.values() for cmd in cmds] if self.sections else entries)
+
+    def show_section(self, section: str | None) -> None:
+        """Narrow the open category to one section (``None`` = every command, section by section)."""
+        self.section = section
+        if section is None:
+            self._set_entries([cmd for cmds in self.sections.values() for cmd in cmds])
+        else:
+            self._set_entries(self.sections[section])
+
+    def show_search(self, query: str, results: list[AnyCommand]) -> None:
+        """Switch the card to search results; the category selects stay as the way back."""
+        self.query = query
+        self._set_entries(results)
 
     def show_front_page(self) -> None:
         """Switch the view back to the index/front page."""
         self.group = None
+        self.query = None
+        self.section = None
+        self.sections = {}
         self._set_entries([])
+
+    def searchable(self) -> list[AnyCommand]:
+        """Every command this menu may show — the whole help mapping, not just the open category."""
+        return [cmd for cmds in self.mapping.values() for cmd in cmds]
 
     @classmethod
     async def start(
@@ -161,6 +300,56 @@ class HelpView(LayoutView):
         await self.compose()
         self.message = await helper.context.send(view=self)
         return self
+
+
+class HelpSearchModal(discord.ui.Modal, title="Search commands"):
+    """Asks for a search term and swaps the help card to the matches."""
+
+    query: discord.ui.TextInput[HelpSearchModal] = discord.ui.TextInput(
+        label="Command name or keyword", placeholder="e.g. ban, playlist, daily", min_length=1, max_length=50
+    )
+
+    def __init__(self, view: HelpView) -> None:
+        super().__init__()
+        self.help_view: HelpView = view
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        query = self.query.value.strip()
+        results = search_commands(self.help_view.searchable(), query)
+        if not results:
+            await interaction.response.send_message(
+                f"{Emojis.error} No commands match `{truncate(query, 40)}`.", ephemeral=True
+            )
+            return
+        self.help_view.show_search(query, results)
+        await self.help_view.compose()
+        await interaction.response.edit_message(view=self.help_view)
+
+
+class SectionSelect(discord.ui.Select["HelpView"]):
+    """Jumps between the sections of one large category."""
+
+    def __init__(self, sections: dict[str, list[AnyCommand]], *, current: str | None) -> None:
+        super().__init__(placeholder="Jump to a section...")
+        total = sum(len(cmds) for cmds in sections.values())
+        self.add_option(
+            label="All commands", value="__all", description=f"{pluralize(total):command}", default=current is None
+        )
+        for name, cmds in list(sections.items())[: MAX_SELECT_OPTIONS - 1]:
+            self.add_option(
+                label=name, value=name, description=f"{pluralize(len(cmds)):command}", default=name == current
+            )
+        self._helpview: HelpView | None = None
+
+    def bind(self, view: HelpView) -> None:
+        self._helpview = view
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self._helpview is not None
+        value = self.values[0]
+        self._helpview.show_section(None if value == "__all" else value)
+        await self._helpview.compose()
+        await interaction.response.edit_message(view=self._helpview)
 
 
 class CategorySelect(discord.ui.Select["HelpView"]):
@@ -644,15 +833,30 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     def build_group_container(
         self,
-        group: Cog,
+        group: Cog | None,
         entries: list[AnyCommand],
         *,
-        total_commands: int,
+        total_commands: int = 0,
+        section: str | None = None,
+        heading: str | None = None,
+        footer: str | None = None,
+        show_category: bool = False,
     ) -> discord.ui.Container:
-        """Build the Components V2 card listing one page of a category's commands."""
-        emoji = getattr(group, "emoji", "")
+        """Build the Components V2 card listing one page of commands.
+
+        Normally one page of a category, optionally narrowed to ``section``. Search results pass
+        ``group=None`` with their own ``heading``/``footer``, plus ``show_category`` to name each
+        command's category, since results span several.
+        """
         container = discord.ui.Container()
-        container.add_item(discord.ui.TextDisplay(f"## {emoji} {group.qualified_name}\n{group.description or ''}"))
+        if heading is None:
+            assert group is not None
+            emoji = getattr(group, "emoji", "")
+            title = group.qualified_name
+            if section:
+                title += f" \N{SINGLE RIGHT-POINTING ANGLE QUOTATION MARK} {section}"
+            heading = f"## {emoji} {title}\n{group.description or ''}"
+        container.add_item(discord.ui.TextDisplay(heading))
         container.add_item(discord.ui.Separator())
 
         is_any_locked = any(getattr(cmd, "is_locked", False) for cmd in entries)
@@ -669,6 +873,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             if not label:
                 label = f"**`{self.get_command_signature(cmd, no_signature=True)}`**"
             description = truncate(cmd.description or "…", 150)
+            if show_category and cmd.cog is not None:
+                description = f"{cmd.cog.qualified_name} · {description}"
             lines.append(f"{prefix}{label}\n-# {description}")
         container.add_item(discord.ui.TextDisplay("\n".join(lines)))
 
@@ -678,7 +884,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             container.add_item(discord.ui.TextDisplay("\n".join(notes)))
 
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"-# {pluralize(total_commands):command} in this category"))
+        if footer is None:
+            footer = f"{pluralize(total_commands):command} in this {'section' if section else 'category'}"
+        container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
         return container
 
     def build_flag_help_container(self) -> discord.ui.Container:

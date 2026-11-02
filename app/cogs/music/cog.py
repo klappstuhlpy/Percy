@@ -126,6 +126,16 @@ class Music(Cog):
 
     emoji = "<:music:1322338453937193000>"
 
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Playback": (
+            "play", "playsearch", "vibe", "toggle", "stop", "forceskip", "back", "seek", "volume", "loop", "shuffle",
+            "lyrics",
+        ),
+        "Queue": ("queue", "cleanupleft"),
+        "Settings": ("music", "dj"),
+    }
+
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
         # Free, key-less synced-lyrics provider (Genius scrape stays a plain fallback).

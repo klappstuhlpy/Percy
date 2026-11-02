@@ -262,7 +262,7 @@ async def apply_member_action(
             elif action == 'unmute':
                 await lift_mute(bot, guild, member, reason)
             elif action in RESTRICTION_ACTIONS:
-                from app.cogs.restrictions import actions as restrict
+                from app.cogs.moderation import restriction_actions as restrict
 
                 if action == 'voicekick':
                     await restrict.apply_voicekick(member, reason)

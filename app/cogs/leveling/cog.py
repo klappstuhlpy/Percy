@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 import discord
 from discord import AppCommandOptionType, app_commands
@@ -41,6 +41,11 @@ class Leveling(Cog):
     """Leveling system, commands and utilities."""
 
     emoji = Emojis.level_up
+
+    #: Help-menu sections (qualified command names; a claim covers subcommands).
+    help_sections: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Settings": ("level config",),
+    }
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
