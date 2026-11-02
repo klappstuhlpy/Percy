@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated: 3 October 2026**
+**Last updated: 2 November 2026**
 
 This Privacy Policy explains what data the **Percy** Discord bot ("Percy", "the Bot", "we", "us") collects, why we collect it, how long we keep it, who it is shared with, and the rights you have over it. It applies to everyone who uses Percy or is a member of a Discord server ("guild") that Percy is in.
 
@@ -31,9 +31,12 @@ We only collect what a feature needs to work. Under the EU/UK GDPR, our legal ba
 | **Username & nickname history**                                                                  | "Name history" feature                                                     | Consent                               | **Off — opt-in**     |
 | **Avatar history** (image snapshots)                                                             | "Avatar history" feature                                                   | Consent                               | **Off — opt-in**     |
 | **Server configuration & moderation logs**                                                       | Run the features a server admin enables (logging, automod, leveling, etc.) | Service necessity / admin instruction | Set by server admins |
+| **Moderation records** (cases, warning points, voice bans, frozen nicknames, channel mutes, sticky roles) | Enforce a server's moderation, including after a member rejoins            | Legitimate interest (server safety)   | When a moderator acts |
+| **Reports** you file (who you reported, your reason, the reported message link and a short excerpt) | Let a server's moderators review and act on the report                     | Legitimate interest (server safety)   | When you report      |
 | **Message & voice activity counts**                                                              | Leveling / XP                                                              | Service necessity (where enabled)     | Set by server admins |
-| **Content you submit to a command** (reminders, tags, playlists, giveaways, notes, poll answers) | Provide that feature                                                       | Service necessity                     | When you use it      |
-| **Linked accounts** (e.g. AniList) and **timezone**                                              | Features you opt into                                                      | Consent                               | When you set it      |
+| **Content you submit to a command** (reminders, tags, custom commands, aliases, trivia lists, playlists, giveaways, notes, poll answers) | Provide that feature                                                       | Service necessity                     | When you use it      |
+| **Game & leveling progress** (XP, economy balance, trivia scores)                                | Leaderboards and progression                                               | Service necessity (where enabled)     | When you take part   |
+| **Timezone**                                                                                     | Show times in your timezone                                                | Consent                               | When you set it      |
 
 We **do not** sell your data, and we **do not** use it for advertising or profiling beyond the features described above.
 
@@ -50,6 +53,8 @@ A server administrator cannot consent to this tracking on your behalf; the choic
 - **Presence history:** automatically deleted after **30 days**.
 - **Username, nickname and avatar history:** kept until you delete it (see [Section 7](#7-your-rights)) or until Percy is removed and the data is purged.
 - **Server configuration & logs:** kept while Percy is in the server; configuration for a server is deleted when Percy is removed from it.
+- **Moderation records:** kept while Percy is in the server, so a moderation action cannot be escaped by leaving or by deleting your data.
+- **Reports:** automatically deleted after **90 days**. A report's message on the server's report channel stays until a moderator deletes it.
 - **Feature content** (reminders, tags, etc.): kept until the item is completed, deleted by you, or no longer needed for the feature.
 
 When data is no longer needed for its purpose, it is deleted.
@@ -64,7 +69,7 @@ Percy is hosted on secured private servers. To provide certain features, some da
 |------------------------------------------------------|-------------------------------------------------------------------------------------------|----------------------------------------|
 | **Discord**                                          | All bot activity (Discord is the platform)                                                | Always                                 |
 | **Google Translate** (`translate.googleapis.com`)    | The text you ask to translate (including a message you select via the "Translate" action) | When you use translation               |
-| **AniList** (`anilist.co`)                           | OAuth authorization to link your AniList account                                          | When you link AniList                  |
+| **AniList** (`anilist.co`)                           | Your anime/manga search terms (no account data; Percy no longer links AniList accounts)   | When you use the anime commands        |
 | **Lavalink** (self-hosted, `lavalink.klappstuhl.me`) | Music search queries and track URLs                                                       | When you use music                     |
 | **klappstuhl.me dashboard**                          | Discord OAuth login and the configuration you change in the web dashboard                 | When a server admin uses the dashboard |
 
@@ -91,7 +96,7 @@ Some processors listed in [Section 4](#4-who-we-share-it-with) may process data 
 Regardless of where you live, you can exercise the following rights over your personal data. Some are available directly through bot commands; for anything else, contact us (see [Section 1](#1-who-is-responsible-for-your-data)).
 
 - **Access / portability** — get a copy of your stored data: `settings request-data` (Percy sends you a JSON export).
-- **Erasure** — permanently delete your stored presence, name/nickname and avatar history: `settings remove-personal-data`.
+- **Erasure** — permanently delete your stored presence, name/nickname and avatar history and your trivia scores: `settings remove-personal-data`. Moderation records about you and content you created for a server (tags, custom commands, aliases, trivia lists) are kept for the reasons in [Section 3](#3-how-long-we-keep-it). To have any other data erased (for example XP, economy balance, playlists, reminders or notes), contact us and we will delete it.
 - **Object / restrict** — stop future tracking: switch the toggles on your `settings` panel off.
 - **Rectification** — ask us to correct inaccurate data via the contact details above.
 
