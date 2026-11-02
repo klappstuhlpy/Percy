@@ -19,50 +19,12 @@ mod types;
 pub use types::*;
 
 // Generated from Percy's OpenAPI schema (see GENERATION.md): every response model, re-exported by
-// name so the dashboard imports `percy_client::AnalyticsSummary` as before. The list is exactly
-// the `pub struct`/`pub enum` names in generated.rs (none is also defined in `types`).
+// name so the dashboard imports `percy_client::AnalyticsSummary` as before (no generated name is
+// also defined in `types`; a clash would be a compile error).
 #[rustfmt::skip]
 #[allow(dead_code)]
 pub mod generated;
-#[rustfmt::skip]
-pub use generated::{
-    ActionRequest, ActionRequestList, ActiveTempChannel, ActivityDay, ActivityResponse, AiAskResponse,
-    AiChannelOverride, AiConfig, AiFlags, AiSuggestion, AlwaysOnState, AnalyticsMetric, AnalyticsPoint,
-    AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand, AvatarEntry, AvatarHistoryResponse, BalanceEntry,
-    BalancesResponse, BotStats, BulkActionFailure, BulkActionResponse, CardOption, CardSubject, CaseActionResponse,
-    CaseDeleteResponse, CaseEntry, CasesResponse, ChangelogEntry, ChangelogResponse, ChangelogSection, Channel,
-    ChannelRef, ComicBrowseFilters, ComicBrowsePage, ComicCharacter, ComicCredit, ComicDetail, ComicDetailSeries,
-    ComicFeedEntry, ComicNameEntry, ComicNamesResponse, ComicRelease, ComicSeriesList, ComicSeriesPage,
-    ComicSeriesSummary, ComicsResponse, CommandUsage, CustomBotAck, CustomBotProfile, EconomyInfo, EconomySettings,
-    EmojiStatEntry, EmojiStatsResponse, GalleryDeleteResult, GalleryImage, GalleryResponse, GalleryUploadResult,
-    GameOverviewEntry, GamePlayerEntry, GamesStats, GiveawayInfo, GiveawaysResponse, GuildFlags, GuildHealth,
-    GuildInfo, GuildOverview, GuildOverviewBot, GuildOverviewFeatures, GuildOverviewGuild, GuildOverviewStats,
-    GuildStats, HealthFeature, HistoryAvatarEntry, HistoryNameEntry, HistoryPresenceEntry, IgnoredEntity,
-    InventoryChange, InventoryItem, LeaderboardEntry, LeaderboardResponse, LevelingConfig, LockdownEntry,
-    LockdownsResponse, LotteryInfo, LyricLine, Member, MemberActionResult, MemberBalance, MemberCase,
-    MemberCommandStats, MemberDetail, MemberEconomy, MemberInventory, MemberLevel, MemberLeveling, MemberMessage,
-    MemberMessages, MemberNameHistory, MemberOwnedTag, MemberRoleBadge, MemberRolesResult, MemberSelf,
-    MemberSelfLeveling, MemberTopCommand, MembersResponse, MusicAck, MusicAlbum, MusicAlbumInfo,
-    MusicAlwaysOnApplied, MusicArtist, MusicArtistInfo, MusicAudio, MusicAudioApplied, MusicChannelRef,
-    MusicControlResult, MusicDjModeApplied, MusicEqualizer, MusicEqualizerApplied, MusicFiltersState, MusicHistory,
-    MusicHistoryItem, MusicInfo, MusicLyrics, MusicPlayResult, MusicRelease, MusicSearch, MusicSetup,
-    MusicSetupResponse, MusicTrackFull, MusicTrending, MusicViewer, NameHistoryEntry, NewsFilters, NewsItem,
-    NewsItemSource, NewsPage, NewsRelated, NewsSource, NewsSourcesResponse, NewsSubject, Notification,
-    NotificationList, NotificationSummary, NotificationsReadResult, NowPlaying, OverviewWindow, PlaylistDetail,
-    PlaylistSummary, PlaylistTrack, PollInfo, PollsResponse, ProgressMark, ProgressResponse, QueueTrack, RankCard,
-    RecentCasesResponse, ReleaseCard, ReleaseProgressDeleted, ReleasesOverview, Reminder, RemindersResponse,
-    RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings, Role, RoleMenu, RoleMenuCreated,
-    RoleMenuNotice, RoleMenuRole, RoleMenusResponse, RoleRef, SentinelInfo, ShopItem, StarboardInfo, StarboardSaved,
-    StarboardTop, Subject, SubjectsResponse, Subscription, SubscriptionDeleted, SubscriptionsResponse, TagCreator,
-    TagDetail, TagInfo, TagsResponse, TempChannelEntry, TempChannelsResponse, TemplateEntry, TemplateVariable,
-    TemplatesResponse, TrackLink, TrackRequester, TrendingTrack, UserAvatar, UserGuild, UserHistory, UserSettings,
-    WarnPolicy, WarnThreshold, WatchCredit, WatchEra, WatchPath, WatchPeopleResponse, WatchPerson,
-    WatchPersonCredit, WatchPersonPage, WatchPersonSummary, WatchPrefs, WatchProgressDeleted, WatchProgressEntry,
-    WatchProgressResponse, WatchProvider, WatchStats, WatchTitle, WatchTitleDetail, WatchTrailer, WatchUniverse,
-    WatchUniversePage, WatchUniverseSummary, WatchUniversesResponse, WebhookCreateResponse,
-    WebhookDeliveriesResponse, WebhookDelivery, WebhookEventsResponse, WebhookSubscription,
-    WebhookSubscriptionsResponse, WebhookTestResponse, XpHistoryPoint, XpHistoryResponse
-};
+pub use generated::*;
 
 /// A track as Percy's `_serialize_track` sends it; the live queue uses the same shape.
 pub type MusicTrack = QueueTrack;
