@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from app.cogs.moderation.member_actions import HIERARCHY_ACTIONS, MemberActionError, apply_member_action
-from app.services.reports import REPORT_ACTIONS, check_report_rate, report_meta
+from app.services.reports import REPORT_ACTIONS, check_report_rate, report_channel_error, report_meta
 from app.utils import truncate
 from app.utils.checks import hierarchy_error
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-__all__ = ("ReportButton", "ReportModal", "file_report")
+__all__ = ("ReportButton", "ReportModal", "file_report", "report_setup_error")
 
 TIMEOUT_SECONDS = 3600
 
@@ -55,11 +55,23 @@ def report_view(report_id: int) -> discord.ui.View:
     return view
 
 
+async def report_setup_error(bot: Bot, guild: discord.Guild) -> str | None:
+    """A refusal for the reporter when the guild has no usable report channel, else ``None``."""
+    config = await bot.db.get_guild_config(guild.id)
+    channel = guild.get_channel(config.request_channel_id) if config.request_channel_id else None
+    can_post = isinstance(channel, discord.TextChannel) and channel.permissions_for(guild.me).send_messages
+    return report_channel_error(
+        configured=bool(config.request_channel_id), exists=isinstance(channel, discord.TextChannel), can_post=bool(can_post)
+    )
+
+
 async def file_report(
     bot: Bot, guild: discord.Guild, reporter: discord.Member, target: discord.abc.User | discord.Member, reason: str,
     *, message: discord.Message | None = None,
 ) -> str:  # fmt: skip
     """Records a report and posts it to the mod queue. Returns the text to show the reporter."""
+    if error := await report_setup_error(bot, guild):
+        return error
     if target.id == reporter.id:
         return "You can't report yourself."
     if target.bot:
@@ -191,7 +203,9 @@ class ReportButton(
                     log.exception("Report %s action failed unexpectedly.", self.report_id)
                 await repo.release_report_claim(guild.id, self.report_id)
                 why = exc.detail if isinstance(exc, MemberActionError) else "unexpected error"
-                await interaction.followup.send(f"Report #{self.report_id}: {self.verb} failed ({why}). It is still open.", ephemeral=True)
+                await interaction.followup.send(
+                    f"Report #{self.report_id}: {self.verb} failed ({why}). It is still open.", ephemeral=True
+                )
                 return
         outcome = "Dismissed" if action is None else self.verb.title()
         handled = f"{outcome} by {moderator.mention}"

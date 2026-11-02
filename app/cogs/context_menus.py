@@ -16,7 +16,7 @@ from discord.ext import commands
 
 from app.clients import TranslateClient, TranslationError
 from app.clients.base import HTTPClientError
-from app.cogs.notifications.reports import ReportModal
+from app.cogs.notifications.reports import ReportModal, report_setup_error
 from app.core import Accent, Bot, Cog, make_notice
 from app.utils import timetools, truncate
 from config import Emojis
@@ -174,6 +174,9 @@ class ContextMenus(Cog):
     @app_commands.guild_only()
     async def report_message(self, interaction: discord.Interaction, message: discord.Message) -> None:
         """Open a modal asking why the message is being reported."""
+        if interaction.guild and (error := await report_setup_error(self.bot, interaction.guild)):
+            await interaction.response.send_message(error, ephemeral=True)
+            return
         await interaction.response.send_modal(ReportModal(self.bot, message))
 
 

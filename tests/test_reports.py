@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import datetime
 
-from app.services.reports import EXCERPT_LIMIT, HOURLY_LIMIT, check_report_rate, report_meta
+from app.services.reports import (
+    EXCERPT_LIMIT,
+    HOURLY_LIMIT,
+    NOT_SET_UP,
+    check_report_rate,
+    report_channel_error,
+    report_meta,
+)
 
 NOW = datetime.datetime(2026, 1, 1, 12, 0)
 
@@ -42,3 +49,13 @@ def test_report_permissions_match_action_permissions() -> None:
     for action, permission in REPORT_ACTIONS.values():
         if action:
             assert ACTION_PERMISSIONS[action] == permission
+
+
+def test_report_channel_required() -> None:
+    assert report_channel_error(configured=True, exists=True, can_post=True) is None
+    for kw in (
+        {"configured": False, "exists": False, "can_post": False},
+        {"configured": True, "exists": False, "can_post": False},
+        {"configured": True, "exists": True, "can_post": False},
+    ):
+        assert report_channel_error(**kw) == NOT_SET_UP

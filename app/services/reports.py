@@ -11,11 +11,15 @@ if TYPE_CHECKING:
 __all__ = (
     "EXCERPT_LIMIT",
     "HOURLY_LIMIT",
+    "NOT_SET_UP",
     "PAIR_COOLDOWN",
     "REPORT_ACTIONS",
     "check_report_rate",
+    "report_channel_error",
     "report_meta",
 )
+
+NOT_SET_UP = "Reports aren't set up on this server — ask a moderator to set a report channel."
 
 EXCERPT_LIMIT = 300
 PAIR_COOLDOWN = datetime.timedelta(minutes=10)  # one report per reporter per target
@@ -54,3 +58,8 @@ def report_meta(
     if content:
         meta["excerpt"] = content[: EXCERPT_LIMIT - 1] + "…" if len(content) > EXCERPT_LIMIT else content
     return meta
+
+
+def report_channel_error(*, configured: bool, exists: bool, can_post: bool) -> str | None:
+    """The refusal shown to a reporter when there is nowhere to deliver the report, else ``None``."""
+    return None if configured and exists and can_post else NOT_SET_UP
