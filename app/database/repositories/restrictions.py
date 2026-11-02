@@ -1,4 +1,4 @@
-"""Data access for voice bans, frozen nicknames and channel mutes (``migrations/V70``)."""
+"""Data access for voice bans, frozen nicknames and channel mutes (``migrations/V11``)."""
 
 from __future__ import annotations
 

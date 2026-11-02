@@ -15,7 +15,7 @@ if it became two releasables it would take two delivery claims and appear twice 
 ``match`` dedupes per user by :attr:`Releasable.key`, so one releasable carrying both media's
 subjects is told once -- and because the claim is ``(user, media, key)``, a constant ``media``
 is also what stops two consecutive runs claiming the same story under two different names.
-``release_deliveries.media`` deliberately carries no CHECK constraint (``V42``), so this is a
+``release_deliveries.media`` deliberately carries no CHECK constraint (``V14``), so this is a
 legal third value rather than a schema change.
 
 **``key`` is** ``news/{id}``, so the namespace §4.4 promises holds: a comic issue

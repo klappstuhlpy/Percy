@@ -117,7 +117,7 @@ def test_an_unknown_medium_is_rejected_before_the_status_is_even_looked_at() -> 
 
 
 def test_the_union_of_the_sets_is_exactly_the_migrations_check() -> None:
-    """``V42`` constrains the column to the union; the *pairing* lives in the service."""
+    """``V14`` constrains the column to the union; the *pairing* lives in the service."""
     union = {status for statuses in PROGRESS_STATUSES.values() for status in statuses}
     assert union == {'read', 'watched', 'skipped'}
 

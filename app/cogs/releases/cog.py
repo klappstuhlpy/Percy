@@ -614,7 +614,7 @@ class Releases(Cog):
         the next tick.
 
         Seeding runs here rather than once at startup because the tables may not exist yet (a
-        deploy that has not applied ``V43`` yet) and a ``before_loop`` that raises kills the loop
+        deploy that has not applied ``V14`` yet) and a ``before_loop`` that raises kills the loop
         for the process's lifetime. It is insert-if-absent, so it never re-enables a source an
         operator switched off, and after the first successful tick it is six cheap lookups.
 

@@ -126,7 +126,7 @@ TITLES = [
     ),
 ]
 
-#: ``list_providers`` rows. ``link`` (``V46``) is TMDB's per-region watch link, the same on every
+#: ``list_providers`` rows. ``link`` (``V13``) is TMDB's per-region watch link, the same on every
 #: row of one title+region because that is the grain TMDB publishes it at.
 PROVIDERS = [
     {'title_id': 1, 'region': 'DE', 'provider_id': 337, 'provider_name': 'Disney Plus',
@@ -171,7 +171,7 @@ def test_title_payload_is_json_safe() -> None:
 
 
 def test_title_payload_carries_the_provider_attribution_link() -> None:
-    # V46: TMDB's terms ask for their watch link wherever the provider logos are shown, and the
+    # V13: TMDB's terms ask for their watch link wherever the provider logos are shown, and the
     # watch-order page shows them -- so every provider entry has to carry it, on every surface
     # that renders a logo (the title detail page reuses this same shaping).
     payload = title_payload(TITLES[0], providers=PROVIDERS)
@@ -227,7 +227,7 @@ class FakeWatchlistRepository:
 
     def __init__(self) -> None:
         self.universes: dict[str, dict[str, Any]] = {'mcu': dict(UNIVERSE)}
-        #: Copied per instance so a test can add rows (V45 season entries, say) without the
+        #: Copied per instance so a test can add rows (V13 season entries, say) without the
         #: shared ``TITLES`` constant leaking into every other test.
         self.titles: list[dict[str, Any]] = [dict(row) for row in TITLES]
         self.progress: dict[int, dict[int, tuple[str, datetime.datetime]]] = {}
@@ -253,7 +253,7 @@ class FakeWatchlistRepository:
         if path_slug != 'complete':
             for row in titles:
                 row['importance'] = None
-        # Mirrors the repository's ORDER BY, season tiebreak included (V45).
+        # Mirrors the repository's ORDER BY, season tiebreak included (V13).
         titles.sort(key=lambda r: (
             r['story_order' if sort == 'story' else 'release_order'],
             -1 if r['season_number'] is None else r['season_number'],
@@ -437,7 +437,7 @@ async def test_get_title_carries_the_trailer_with_both_urls(bot: Any) -> None:
     }
 
 
-#: A series (id 3, "loki") turned into a container plus two season entries, as V45's ingest
+#: A series (id 3, "loki") turned into a container plus two season entries, as V13's ingest
 #: writes it: the seasons share the series' story/release order and carry its parent id.
 SEASONS = [
     _title(id=4, tmdb_type='tv', kind='tv', tmdb_id=88396, slug='loki-season-1',

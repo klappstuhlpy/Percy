@@ -760,7 +760,7 @@ def test_tv_row_excludes_season_zero_when_seasons_absent() -> None:
     assert row['episodes'] == 1
 
 
-# -- season entries (V45) -----------------------------------------------------------------------
+# -- season entries (V13) -----------------------------------------------------------------------
 
 
 def _show(**overrides: Any) -> dict[str, Any]:
@@ -837,7 +837,7 @@ def test_tv_row_splits_a_multi_season_show_into_one_entry_per_season() -> None:
 
 
 def test_tv_row_leaves_a_single_season_show_exactly_as_it_was() -> None:
-    # The "films and one-season shows behave byte-identically" half of V45: no season columns,
+    # The "films and one-season shows behave byte-identically" half of V13: no season columns,
     # no `_seasons`, nothing for a consumer to branch on.
     seed_title = _title(tmdb_type='tv', tmdb_id=88396)
     seasons = {1: {'name': 'Season 1', 'air_date': '2021-06-09', 'episodes': [{'runtime': 45}] * 6}}
@@ -904,7 +904,7 @@ def test_provider_rows_flattens_all_buckets() -> None:
 
 
 def test_provider_rows_keep_the_regions_attribution_link() -> None:
-    # V46: TMDB hands over one ``link`` per region and this function used to drop it, while the
+    # V13: TMDB hands over one ``link`` per region and this function used to drop it, while the
     # page it feeds shows the provider logos the link is the required attribution for. It is the
     # region's property, so every row of that region carries the same one.
     payload = {
@@ -1129,7 +1129,7 @@ async def test_sync_records_provider_rows_and_report_count() -> None:
 
 
 async def test_sync_disambiguates_a_colliding_slug_instead_of_dropping_the_title() -> None:
-    # V45. Two genuinely different films whose TMDB titles slugify identically -- exactly the
+    # V13. Two genuinely different films whose TMDB titles slugify identically -- exactly the
     # x-men/fantastic-four case that silently lost movie 166424 (and star-wars/the-clone-wars
     # before it). The old behaviour was to warn and skip the loser; both must now be stored.
     seed = _seed((_title(tmdb_id=1), _title(tmdb_id=166424, story=2, release=2)))
@@ -1167,7 +1167,7 @@ async def test_sync_falls_back_to_the_tmdb_id_when_the_year_is_taken_too() -> No
 
 
 async def test_sync_skips_a_title_whose_every_slug_candidate_collides() -> None:
-    # The pre-V45 failure path is still the failure path once disambiguation is exhausted: warn,
+    # The pre-V13 failure path is still the failure path once disambiguation is exhausted: warn,
     # skip, and keep the existing row so prune_titles cannot delete it.
     seed = _seed((_title(tmdb_id=2),))
     tmdb = FakeTMDBClient(movies={2: {'title': 'Two', 'runtime': 50, 'release_date': '2009-01-01'}})
@@ -1266,7 +1266,7 @@ async def test_refresh_release_dates_compares_a_season_against_its_own_air_date(
     assert written == [(12, datetime.date(2016, 3, 25))]
 
 
-# -- credits (V41 people) -----------------------------------------------------------------------
+# -- credits (V13 people) -----------------------------------------------------------------------
 
 
 async def test_sync_writes_people_and_credits_for_each_title() -> None:

@@ -30,7 +30,7 @@ _PROGRESS_STATUSES = ('watched', 'skipped')
 #: Valid ``watch_title_importance.importance`` values.
 _IMPORTANCE_VALUES = ('essential', 'recommended', 'optional')
 
-#: A series row that has season children (``V45``) is a container, not a watch entry: the
+#: A series row that has season children (``V13``) is a container, not a watch entry: the
 #: seasons are what a reader watches and marks, and counting the parent as well would double
 #: every exploded show's runtime and announce a series and its first season as two releases.
 #: Spelled against the alias ``t`` so the count/runtime aggregate and the release window use one
@@ -98,7 +98,7 @@ class WatchlistRepository(BaseRepository):
         interpolated into the query unchecked. Ordering is deterministic: the chosen
         column, then ``id``.
 
-        Seasons (``V45``) inherit their series' order value *exactly* rather than being offset
+        Seasons (``V13``) inherit their series' order value *exactly* rather than being offset
         from it, so the tiebreak is where they are placed: ``COALESCE(season_number, -1)`` puts
         the series row first (its ``season_number`` is NULL) and its seasons after it in season
         order. Inheriting rather than offsetting means seasons consume no order space at all,
@@ -252,7 +252,7 @@ class WatchlistRepository(BaseRepository):
         ``parent_id``. ``credits_of`` is resolved separately via :meth:`set_credits_of`, since
         the referenced title may not exist yet on first insert.
 
-        The conflict target is ``V45``'s expression index rather than a plain column list: a
+        The conflict target is ``V13``'s expression index rather than a plain column list: a
         season carries its series' ``tmdb_id``, so identity is
         ``(universe, tmdb_type, tmdb_id, COALESCE(season_number, -1))``. The ``COALESCE`` must be
         written exactly as the index declares it or Postgres cannot infer the index -- and a
@@ -384,7 +384,7 @@ class WatchlistRepository(BaseRepository):
         await self.execute("UPDATE watch_titles SET release_date = $2 WHERE id = $1;", title_id, release_date)
 
     async def set_trailer(self, title_id: int, trailer: dict[str, Any]) -> None:
-        """Writes one title's trailer columns (``V44``). Separate from :meth:`upsert_title` by design.
+        """Writes one title's trailer columns (``V13``). Separate from :meth:`upsert_title` by design.
 
         A trailer is only ever written when the ingest *found* one, so a TMDB outage, a title
         with no videos, or a payload where nothing matches the selection precedence all leave

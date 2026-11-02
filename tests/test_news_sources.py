@@ -3,7 +3,7 @@
 Pure: no repository, no network. What is worth proving is the shape ``seed_sources`` and the
 ``news_sources`` schema both depend on -- a duplicate slug would silently drop a source at
 insert time, a duplicate feed URL would poll and store the same publisher twice under two
-identities, and a ``media`` value outside the schema's ``CHECK`` (``migrations/V43__news.sql``)
+identities, and a ``media`` value outside the schema's ``CHECK`` (``migrations/V14__comics_releases_news.sql``)
 would fail the insert at runtime rather than at review time.
 """
 

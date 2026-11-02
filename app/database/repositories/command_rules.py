@@ -1,4 +1,4 @@
-"""Data access for per-guild command allow/deny rules (``migrations/V72``)."""
+"""Data access for per-guild command allow/deny rules (``migrations/V12``)."""
 
 from __future__ import annotations
 

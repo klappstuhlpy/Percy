@@ -1066,7 +1066,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     alert_webhook_url: str | None
     alert_channel_id: int | None
 
-    # Added by V21 migration — accessed via getattr() until migration is applied.
+    # Added by V11 migration — accessed via getattr() until migration is applied.
     mod_log_channel_id: int | None
     message_log_channel_id: int | None
     voice_log_channel_id: int | None
@@ -1120,7 +1120,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
 
     def _coerce(self) -> None:
         self.flags = self.AutoModFlags(self.flags or 0)  # type: ignore
-        # ``ai_flags`` is added by the V32 migration; tolerate its absence (getattr) so a
+        # ``ai_flags`` is added by the V8 migration; tolerate its absence (getattr) so a
         # record loaded before the migration applies still coerces cleanly to 0.
         self.ai_flags = self.AIFlags(getattr(self, "ai_flags", 0) or 0)  # type: ignore
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])

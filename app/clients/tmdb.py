@@ -1,7 +1,7 @@
 """TMDB (The Movie Database) client built on :class:`BaseHTTPClient`.
 
-Metadata source for the universe watchlist feature (see ``migrations/V38__watchlist_core.sql``
-and ``V39__watchlist_progress.sql``). This stays a thin transport wrapper: it returns TMDB's
+Metadata source for the universe watchlist feature (see ``migrations/V13__watchlist.sql``
+and ``V13__watchlist.sql``). This stays a thin transport wrapper: it returns TMDB's
 decoded JSON verbatim and does **no** reshaping — mapping payloads onto database rows belongs
 to a later ingest-service task, not here.
 

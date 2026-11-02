@@ -1,7 +1,7 @@
 """News endpoints: the stream, the per-subject strip, and the source list.
 
 Not guild-scoped -- a story belongs to the catalogue, not to a server (``news_sources`` /
-``news_items`` / ``news_subjects``, see ``migrations/V43__news.sql``). Reads only: ingest is the
+``news_items`` / ``news_subjects``, see ``migrations/V14__comics_releases_news.sql``). Reads only: ingest is the
 ``Releases`` cog's polling loop and ``main.py news poll``, both separate from this API.
 
 Every item goes out with its **source name and a link to the original**. That is not a payload

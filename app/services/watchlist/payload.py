@@ -105,7 +105,7 @@ def era_payloads(titles: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def trailer_payload(row: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Shapes a title row's ``V44`` trailer columns, or ``None`` when it has no trailer.
+    """Shapes a title row's ``V13`` trailer columns, or ``None`` when it has no trailer.
 
     Both URLs are handed over ready to use: ``url`` for the plain link-out and ``embed_url``
     for the click-to-load iframe. Neither carries playback parameters -- autoplay is forbidden
@@ -129,7 +129,7 @@ def title_payload(
 
     ``importance`` is present only when the row came from a path-joined query; it is emitted
     as ``None`` otherwise so the key is always there for the typed Rust model. ``trailer`` is
-    read the same forgiving way, so a row selected before ``V44`` landed still shapes.
+    read the same forgiving way, so a row selected before ``V13`` landed still shapes.
     """
     payload: dict[str, Any] = {key: row[key] for key in _TITLE_PASSTHROUGH}
     payload['release_date'] = _iso(row['release_date'])
@@ -260,7 +260,7 @@ def universe_stats(titles: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     ``essential`` / ``recommended`` / ``optional`` count the path-joined ``importance``
     values; titles with no importance row for the path are counted only in ``total``.
 
-    A series row that other rows name as their ``parent_id`` is a **container** (``V45``), not an
+    A series row that other rows name as their ``parent_id`` is a **container** (``V13``), not an
     entry: its seasons are what a reader watches, and its ``runtime`` is their sum, so counting
     both would report every exploded show twice and its runtime twice over. Derived from the
     list itself rather than queried, since the whole universe is already in hand -- and it

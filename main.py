@@ -411,7 +411,7 @@ class _NullBot:
 
 @main.group('comics', short_help='Comic catalogue archive', options_metavar='[options]')
 def comics() -> None:
-    """Fills the ``comic_*`` archive (V40) from the same sources the bot's 6 h refresh uses.
+    """Fills the ``comic_*`` archive (V14) from the same sources the bot's 6 h refresh uses.
 
     The bot ingests on every refresh, so this is only needed to populate the archive without
     waiting for one — a fresh database, or a backfill after downtime.
@@ -602,7 +602,7 @@ async def _run_search(kind: str, query: str) -> None:
 
 @main.group('news', short_help='News feed polling', options_metavar='[options]')
 def news() -> None:
-    """Polls the RSS/Atom sources in ``news_sources`` (V43) into ``news_items``/``news_subjects``.
+    """Polls the RSS/Atom sources in ``news_sources`` (V14) into ``news_items``/``news_subjects``.
 
     The bot polls on its own 15-minute loop, so this exists for the same reason
     ``comics backfill`` does: a fresh database stays empty until a background task has run, and

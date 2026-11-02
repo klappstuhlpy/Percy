@@ -1,4 +1,4 @@
-"""Data access for custom trivia lists and scores (``migrations/V74``)."""
+"""Data access for custom trivia lists and scores (``migrations/V3``)."""
 
 from __future__ import annotations
 

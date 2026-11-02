@@ -41,7 +41,7 @@ worse than a missed tag.** Every rule below is that sentence applied.
    contradictory tags for one subject, so the ambiguity is resolved here.
 7. **Every tag records which rule fired and the surface form that fired it** (``rule`` and
    ``matched``), which is what makes a bad rule revocable without deleting the story --
-   see ``migrations/V43__news.sql``.
+   see ``migrations/V14__comics_releases_news.sql``.
 
 Failure modes deliberately rejected: substring/``in`` matching (rule 2), fuzzy or trigram
 similarity and stemming (rule 1), matching a subject's *slug* against prose (a slug is an

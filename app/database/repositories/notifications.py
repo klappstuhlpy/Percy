@@ -1,5 +1,5 @@
 """Data access for guild notifications and moderator -> admin action requests
-(``migrations/V50__notifications.sql``).
+(``migrations/V10__notifications.sql``).
 
 Only :meth:`NotificationsRepository.update_request_settings` touches a cached row
 (``guild_config``) and so fires the cache signal; everything else is uncached.

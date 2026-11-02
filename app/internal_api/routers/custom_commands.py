@@ -1,4 +1,4 @@
-"""Guild custom commands and command aliases (``custom_commands`` / ``command_aliases``, V73).
+"""Guild custom commands and command aliases (``custom_commands`` / ``command_aliases``, V12).
 
 Validation is the same pure code the ``customcommand``/``alias`` commands use
 (``app/services/custom_commands/``), so a signature or name the bot would refuse is a 400 here with the

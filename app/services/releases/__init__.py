@@ -1,6 +1,6 @@
 """Release subscriptions: subject derivation, fan-out and digest building.
 
-See ``migrations/V42__subscriptions.sql`` for the tables,
+See ``migrations/V14__comics_releases_news.sql`` for the tables,
 ``app/database/repositories/releases.py`` for the data-access layer, and the plan's §4.1 for
 why one subscription table serves both media.
 """

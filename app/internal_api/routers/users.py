@@ -405,7 +405,7 @@ _YOUTUBE_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/)|youtu\.
 def _artwork(url: str, played: dict[str, str]) -> str | None:
     """A cover for a saved track that has none stored: its last play's, else YouTube's thumbnail.
 
-    Rows saved before V61 carry only name + url, so their cover is recovered rather than kept.
+    Rows saved before V7 carry only name + url, so their cover is recovered rather than kept.
     """
     # ponytail: music_plays is pruned after 90 days, so an old non-YouTube row can stay coverless.
     if url in played:
@@ -434,7 +434,7 @@ def _clean_track(body: TrackBody) -> tuple[str, str, str | None, str | None]:
 
 
 async def _tracks_payload(bot: Any, rows: list[Any]) -> list[PlaylistTrack]:
-    """Saved tracks with artist and cover, recovering covers for rows saved before V61."""
+    """Saved tracks with artist and cover, recovering covers for rows saved before V7."""
     missing = [t["url"] for t in rows if t["url"] and not t["artwork"]]
     played = await bot.db.music_plays.artwork_for(missing) if missing else {}
     return [

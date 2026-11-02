@@ -1,6 +1,6 @@
 """Universe watchlist: TOML seed parsing + TMDB-backed ingest.
 
-See ``migrations/V38__watchlist_core.sql`` / ``V39__watchlist_progress.sql`` for the tables
+See ``migrations/V13__watchlist.sql`` / ``V13__watchlist.sql`` for the tables
 this ingests into, ``app/database/repositories/watchlist.py`` for the data-access layer, and
 ``main.py``'s ``watchlist`` CLI group for the entry point.
 """

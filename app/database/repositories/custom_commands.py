@@ -1,4 +1,4 @@
-"""Data access for guild custom commands and command aliases (``migrations/V73``).
+"""Data access for guild custom commands and command aliases (``migrations/V12``).
 
 Every mutation busts ``custom_commands_changed`` so the cached dispatch index
 (``db.get_custom_command_index``) sees it on the next message. ``bump_uses`` deliberately does
