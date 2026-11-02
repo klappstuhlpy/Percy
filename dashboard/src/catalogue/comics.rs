@@ -312,7 +312,8 @@ pub async fn comic_detail(
         }
     };
 
-    let release = detail.release;
+    let series = detail.series.clone();
+    let release = detail;
     // §6.2's "6b. Related news": the stories tagged with this release's series. The subject
     // key is the series slug verbatim — Percy normalises both sides of the comparison, so a
     // prettified label would match nothing. No series, no section.
@@ -338,9 +339,9 @@ pub async fn comic_detail(
         accent: brand_accent(&release.brand).to_string(),
         issue_label: issue_label(release.issue_number.as_deref(), &release.title),
         price_label: price_label(release.price),
-        previous: detail.series.previous.as_ref().map(comic_card),
-        next: detail.series.next.as_ref().map(comic_card),
-        more_from_series: detail.series.more_from_series.iter().map(comic_card).collect(),
+        previous: series.previous.as_ref().map(comic_card),
+        next: series.next.as_ref().map(comic_card),
+        more_from_series: series.more_from_series.iter().map(comic_card).collect(),
         credit_groups: group_credits_by_role(&release.credits, &release.brand),
         characters: release
             .characters

@@ -30,6 +30,13 @@ from app.services.comics.payload import (
 from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
+from .comics_models import (
+    ComicBrowsePage,
+    ComicDetail,
+    ComicNamesResponse,
+    ComicSeriesList,
+    ComicSeriesPage,
+)
 
 if TYPE_CHECKING:
     from app.core.bot import Bot
@@ -115,18 +122,19 @@ async def list_comics(
     search: Annotated[str | None, Query(description="Substring match on the title")] = None,
     page: Annotated[int, Query(ge=1, description="1-based page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=MAX_PER_PAGE, description="Page size")] = DEFAULT_PER_PAGE,
-) -> dict:
+) -> ComicBrowsePage:
     """Browses the archive newest-first, filtered by any combination of the query params."""
-    return await _browse(bot, brand, series, creator, character, since, until, search, page, per_page)
+    return ComicBrowsePage.model_validate(
+        await _browse(bot, brand, series, creator, character, since, until, search, page, per_page))
 
 
 @router.get("/series")
 async def list_series(
     bot: BotDep,
     brand: Annotated[str | None, Query(description="Filter to one brand")] = None,
-) -> dict:
+) -> ComicSeriesList:
     """Every series (optionally scoped to a brand), with its issue count and latest release."""
-    return await _series_list(bot, brand)
+    return ComicSeriesList.model_validate(await _series_list(bot, brand))
 
 
 @router.get("/series/{slug}")
@@ -134,12 +142,12 @@ async def get_series(
     bot: BotDep,
     slug: str,
     brand: Annotated[str | None, Query(description="Scope to one brand, for a slug two brands share")] = None,
-) -> dict:
+) -> ComicSeriesPage:
     """One series: header plus its issues in reading order. 404 when the series has no issues."""
     rows = await bot.db.releases.list_series_releases(slug, brand=brand)
     if not rows:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown series {slug!r}")
-    return series_detail_payload(rows)
+    return ComicSeriesPage.model_validate(series_detail_payload(rows))
 
 
 @router.get("/names")
@@ -148,17 +156,17 @@ async def list_names(
     kind: Annotated[str, Query(description="creators or characters")],
     brand: Annotated[str | None, Query(description="Filter to one brand")] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
-) -> dict:
+) -> ComicNamesResponse:
     """Distinct creator or character names with appearance counts."""
     table = _check_kind(kind)
-    return await _names(bot, table, brand, limit)
+    return ComicNamesResponse.model_validate(await _names(bot, table, brand, limit))
 
 
 # -- One release ---------------------------------------------------------------------
 
 
 @router.get("/{brand}/{slug}")
-async def get_comic(bot: BotDep, brand: str, slug: str) -> dict:
+async def get_comic(bot: BotDep, brand: str, slug: str) -> ComicDetail:
     """One release: fields, credits, characters, and its position within its series.
 
     404 when unknown. Registered last among the ``/comics/*`` routes -- ``/series`` and
@@ -181,4 +189,4 @@ async def get_comic(bot: BotDep, brand: str, slug: str) -> dict:
     else:
         payload['series'] = {'previous': None, 'next': None, 'more_from_series': []}
 
-    return payload
+    return ComicDetail.model_validate(payload)
