@@ -22,6 +22,7 @@ pub use types::*;
 // are re-exported, by name, so the hand-written `types` and the generated types never collide and
 // the dashboard keeps importing `percy_client::AnalyticsSummary` unchanged.
 #[rustfmt::skip]
+#[allow(dead_code)]
 pub mod generated;
 pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
 pub use generated::{
@@ -32,6 +33,13 @@ pub use generated::{
     RankCardOption, Reminder, RemindersResponse, UserAvatar, UserGuild, UserHistory, UserSettings,
 }; // users domain
 pub use generated::{ActiveTempChannel, ComicFeedEntry, ComicsResponse, EmojiStatEntry, EmojiStatsResponse, GiveawayInfo, GiveawaysResponse, LockdownEntry, LockdownsResponse, PollInfo, PollsResponse, TagCreator, TagDetail, TagInfo, TagsResponse, TempChannelEntry, TempChannelsResponse}; // content domain
+    BalanceEntry, BalancesResponse, EconomyInfo, EconomySettings, InventoryChange, InventoryItem, LotteryInfo, MemberBalance,
+    MemberInventory, ShopItem,
+}; // economy domain
+pub use generated::{
+    CardOption, LeaderboardEntry, LeaderboardResponse, LevelingConfig, MemberLevel, TemplateVariable, XpHistoryPoint,
+    XpHistoryResponse,
+}; // leveling domain
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

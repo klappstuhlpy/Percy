@@ -40,6 +40,88 @@ _PRESET_LEVEL_ROLES = (
 
 
 # ---------------------------------------------------------------------------
+# Response models — the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md). Class names are the Rust type names.
+# ---------------------------------------------------------------------------
+
+
+class CardOption(BaseModel):
+    """One rank card preset as offered by a picker."""
+
+    value: str
+    label: str
+
+
+class TemplateVariable(BaseModel):
+    """One ``{placeholder}`` a message template accepts."""
+
+    name: str
+    description: str
+
+
+class LevelingConfig(BaseModel):
+    """Guild leveling config. An unconfigured guild answers only ``enabled``/``configured``
+    (the route uses ``response_model_exclude_unset``), so every other field has a default."""
+
+    enabled: bool
+    configured: bool = False
+    level_up_channel: int = 1
+    level_up_message: str | None = None
+    special_level_up_messages: dict[str, str] = {}
+    blacklisted_roles: list[int] = []
+    blacklisted_channels: list[int] = []
+    blacklisted_users: list[int] = []
+    level_roles: dict[str, int] = {}
+    multiplier_roles: dict[str, float] = {}
+    multiplier_channels: dict[str, float] = {}
+    role_stack: bool = False
+    voice_enabled: bool = False
+    delete_after_leave: bool = False
+    factor: float = 1.0
+    base: int = 100
+    min_gain: int = 8
+    max_gain: int = 15
+    cooldown_per: int = 40
+    card_style: dict[str, str] = {}
+    card_locked: bool = False
+    card_options: dict[str, list[CardOption]] = {}
+    level_up_variables: list[TemplateVariable] = []
+
+
+class LeaderboardEntry(BaseModel):
+    user_id: str
+    username: str
+    avatar_url: str | None
+    level: int
+    xp: int
+    total_xp: int
+
+
+class LeaderboardResponse(BaseModel):
+    entries: list[LeaderboardEntry]
+    total: int
+
+
+class XpHistoryPoint(BaseModel):
+    day: str
+    total_xp: int
+    gainers: int
+
+
+class XpHistoryResponse(BaseModel):
+    points: list[XpHistoryPoint]
+    days: int
+
+
+class MemberLevel(BaseModel):
+    user_id: str
+    level: int
+    xp: int
+    messages: int
+    rank: int
+
+
+# ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
 
@@ -95,13 +177,13 @@ class PostLevelingBlacklistBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/leveling/config")
-async def get_leveling_config(guild: GuildDep, bot: BotDep) -> dict:
+@router.get("/leveling/config", response_model_exclude_unset=True)
+async def get_leveling_config(guild: GuildDep, bot: BotDep) -> LevelingConfig:
     record = await bot.db.leveling.get_guild_config_record(guild.id)
     if record is None:
-        return {'enabled': False, 'configured': False}
+        return LevelingConfig.model_validate({'enabled': False, 'configured': False})
 
-    return {
+    return LevelingConfig.model_validate({
         'enabled': record.get('enabled', False),
         'configured': True,
         # 0 = don't send, 1 = source channel, 2 = DM, else channel id
@@ -126,7 +208,7 @@ async def get_leveling_config(guild: GuildDep, bot: BotDep) -> dict:
         'card_locked': record.get('card_locked', False),
         'card_options': style_options(),
         'level_up_variables': [{'name': k, 'description': v} for k, v in LEVEL_UP_VARIABLES.items()],
-    }
+    })
 
 
 @router.get("/leveling/leaderboard")
@@ -135,7 +217,7 @@ async def get_leveling_leaderboard(
     bot: BotDep,
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-) -> dict:
+) -> LeaderboardResponse:
     records = await bot.db.leveling.get_leaderboard(guild.id, limit=limit + offset)
 
     entries = []
@@ -153,22 +235,22 @@ async def get_leveling_leaderboard(
 
     total = await bot.db.leveling.count_leaderboard(guild.id)
     entries = entries[offset:offset + limit]
-    return {'entries': entries, 'total': total}
+    return LeaderboardResponse.model_validate({'entries': entries, 'total': total})
 
 
 @router.get("/leveling/users/{user_id}")
-async def get_leveling_user(guild: GuildDep, bot: BotDep, user_id: UserId) -> dict:
+async def get_leveling_user(guild: GuildDep, bot: BotDep, user_id: UserId) -> MemberLevel:
     """One member's level row (read-only; a member with no XP is level 0, no row is created)."""
     record = await bot.db.leveling.get_user_level(user_id, guild.id)
     if record is None:
-        return {'user_id': str(user_id), 'level': 0, 'xp': 0, 'messages': 0, 'rank': 0}
-    return {
+        return MemberLevel.model_validate({'user_id': str(user_id), 'level': 0, 'xp': 0, 'messages': 0, 'rank': 0})
+    return MemberLevel.model_validate({
         'user_id': str(user_id),
         'level': record['level'],
         'xp': record['xp'],
         'messages': record['messages'],
         'rank': await bot.db.leveling.get_rank(user_id, guild.id),
-    }
+    })
 
 
 @router.get("/leveling/xp-history")
@@ -176,7 +258,7 @@ async def get_leveling_xp_history(
     guild: GuildDep,
     bot: BotDep,
     days: int = Query(default=30, ge=1, le=365),
-) -> dict:
+) -> XpHistoryResponse:
     records = await bot.db.leveling.get_xp_history(guild.id, days=days)
 
     points = [
@@ -187,7 +269,7 @@ async def get_leveling_xp_history(
         }
         for record in records
     ]
-    return {'points': points, 'days': days}
+    return XpHistoryResponse.model_validate({'points': points, 'days': days})
 
 
 @router.patch("/leveling/users/{user_id}")
