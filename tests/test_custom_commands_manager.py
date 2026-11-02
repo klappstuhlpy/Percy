@@ -76,6 +76,8 @@ def _manager(commands: list[CustomCommand], *, can_manage: bool, aliases: list[C
     index = CustomCommandIndex.build(commands, aliases)
     bot = MagicMock()
     bot.db.get_custom_command_index = AsyncMock(return_value=index)
+    by_id = {c.id: c for c in commands}
+    bot.db.custom_commands.get_command = AsyncMock(side_effect=lambda g, i: by_id.get(i))
     cog = SimpleNamespace(bot=bot, save=AsyncMock(), alias_problem=AsyncMock(return_value=None))
     author = SimpleNamespace(id=5)
     return CustomCommandManager(cog, author=author, guild_id=10, prefix='!', index=index, can_manage=can_manage)  # type: ignore[arg-type]
@@ -244,3 +246,68 @@ async def test_create_wizard_lands_on_the_new_command() -> None:
     assert view.cog.save.await_args.kwargs == {'command_id': None}
     assert view.screen == 'detail' and view.selected is created
     assert 'Created `!hug <who:member>`' in _text(submit.edit_original_response.await_args.kwargs['view'])
+
+
+async def test_unexpected_error_still_answers_and_saves_nothing() -> None:
+    view = _manager([FULL], can_manage=True)
+    view.selected, view.screen = FULL, 'detail'
+    view.cog.save.side_effect = RuntimeError('db down')
+    interaction = _interaction()
+    await view.toggle_delete(interaction)
+    assert 'Something went wrong' in _text(interaction.edit_original_response.await_args.kwargs['view'])
+
+
+async def test_edits_apply_to_the_stored_row_not_the_snapshot() -> None:
+    shown = cc(1, 'hug', responses=('a', 'b'))
+    view = _manager([cc(1, 'hug', responses=('a', 'b', 'c'))], can_manage=True)  # another manager added `c`
+    view.selected, view.screen = shown, 'responses'
+    view.cog.save.side_effect = lambda g, a, merged, command_id: cc(1, 'hug', responses=tuple(merged['responses']))
+    opening = _interaction()
+    await view.add_response(opening)
+    await opening.response.send_modal.await_args.args[0]._callback(_interaction(), {'response': 'd'})
+    assert view.selected.responses == ('a', 'b', 'c', 'd')
+
+    view.selected = shown  # a stale list: removing "number 2" must not guess
+    view.cog.save.reset_mock()
+    interaction = _interaction()
+    await view.remove_response(interaction, 1)
+    view.cog.save.assert_not_awaited()
+    assert 'changed in the meantime' in _text(interaction.edit_original_response.await_args.kwargs['view'])
+
+
+async def test_edit_of_a_deleted_command_returns_to_the_list() -> None:
+    view = _manager([], can_manage=True)
+    view.selected, view.screen = FULL, 'detail'
+    interaction = _interaction()
+    await view.toggle_delete(interaction)
+    view.cog.save.assert_not_awaited()
+    assert view.screen == 'list'
+    assert 'deleted in the meantime' in _text(interaction.edit_original_response.await_args.kwargs['view'])
+
+
+async def test_invalid_stored_signature_does_not_break_the_card() -> None:
+    broken = cc(1, 'hug', signature='<x:nope>')
+    view = _manager([broken], can_manage=True)
+    view.selected, view.screen = broken, 'detail'
+    await view.build()
+    assert 'Signature invalid' in _text(view)
+    opening = _interaction()
+    await view.add_response(opening)
+    assert opening.response.send_modal.await_args.args[0].inputs['response'].placeholder.startswith('Use {author}')
+
+
+async def test_manager_create_runs_the_real_validation() -> None:
+    from app.cogs.custom_commands import CustomCommands
+
+    view = _manager([], can_manage=True)
+    bot = view.cog.bot
+    bot.all_commands = {'ban': object()}
+    bot.db.custom_commands.count_commands = AsyncMock(return_value=0)
+    bot.db.custom_commands.create_command = AsyncMock()
+    view.cog = CustomCommands(bot)
+    opening = _interaction()
+    await view.new_command(opening)
+    submit = _interaction()
+    await opening.response.send_modal.await_args.args[0]._callback(submit, {'name': 'Ban', 'signature': '', 'response': 'x'})
+    bot.db.custom_commands.create_command.assert_not_awaited()
+    assert 'already a built-in command' in _text(submit.edit_original_response.await_args.kwargs['view'])

@@ -11,6 +11,7 @@ Anyone may browse; edit controls only render for, and only act for, members with
 from __future__ import annotations
 
 import datetime
+import logging
 import random
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -34,7 +35,7 @@ from app.services.custom_commands.models import (
     CustomCommandIndex,
     parse_cooldown,
 )
-from app.services.custom_commands.signature import MAX_SIGNATURE_LENGTH, SignatureError, parse_signature
+from app.services.custom_commands.signature import MAX_SIGNATURE_LENGTH, Param, SignatureError, parse_signature
 from app.services.custom_commands.template import render
 from app.utils.formats import truncate
 from config import Emojis
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
     from app.core import Context
 
 __all__ = ('COMMON_PERMISSIONS', 'CustomCommandManager', 'Field', 'FormModal')
+
+log = logging.getLogger(__name__)
 
 #: The permissions offered in the "who can use it" select (flag name, label).
 COMMON_PERMISSIONS: tuple[tuple[str, str], ...] = (
@@ -118,6 +121,20 @@ def _button(label: str, callback: Any, *, style: discord.ButtonStyle = discord.B
     button: discord.ui.Button[Any] = discord.ui.Button(label=label, style=style, disabled=disabled, emoji=emoji)
     button.callback = callback  # type: ignore[assignment]
     return button
+
+
+def _params(cc: CustomCommand) -> tuple[tuple[Param, ...], str | None]:
+    """The parsed signature, or no params and the error for a row whose signature no longer parses."""
+    try:
+        return parse_signature(cc.signature), None
+    except SignatureError as exc:
+        return (), str(exc)
+
+
+def _same_responses(shown: CustomCommand, fresh: CustomCommand) -> None:
+    """Refuse a by-number response edit when the list changed since it was shown (another edit landed)."""
+    if shown.responses != fresh.responses:
+        raise ValueError('The responses changed in the meantime; check the list and pick again.')
 
 
 def _quote(text: str, limit: int) -> str:
@@ -237,10 +254,14 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         assert cc is not None
         items = self._head(f'## {self.prefix}{cc.name}\n-# Usage: {self._usage(cc)}')
 
-        args = describe_signature(parse_signature(cc.signature))
-        responses = '\n'.join(f'`{i}.` {_quote(r, 90)}' for i, r in enumerate(cc.responses, 1))
+        params, error = _params(cc)
+        args = '\n'.join(f'- {a}' for a in describe_signature(params))
+        if error:
+            args = f'*Signature invalid: {error}* Fix it with **Arguments**.'
+        preview = max(30, 1500 // max(len(cc.responses), 1))
+        responses = truncate('\n'.join(f'`{i}.` {_quote(r, preview)}' for i, r in enumerate(cc.responses, 1)), 1800)
         body = [
-            '**Arguments**\n' + ('\n'.join(f'- {a}' for a in args) if args else '*None: it takes no arguments.*'),
+            '**Arguments**\n' + (truncate(args, 900) or '*None: it takes no arguments.*'),
             f'**Responses** ({len(cc.responses)}, one picked at random)\n{responses}',
             f'**Who can use it**\n{self._gate_text(cc)}',
             f'**Cooldown:** {describe_cooldown(cc.cooldown_rate, cc.cooldown_per)}',
@@ -300,7 +321,7 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         )
         limit = max(60, 2600 // max(len(cc.responses), 1))
         items.append(discord.ui.TextDisplay(
-            '\n'.join(f'`{i}.` {_quote(r, limit)}' for i, r in enumerate(cc.responses, 1))
+            truncate('\n'.join(f'`{i}.` {_quote(r, limit)}' for i, r in enumerate(cc.responses, 1)), 3000)
         ))
         options = [
             discord.SelectOption(label=f'Response {i}', value=str(i - 1), description=truncate(' '.join(r.split()), 100))
@@ -472,16 +493,24 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
                 self.notice = f'{Emojis.error} {exc}\n-# Nothing was saved. Open the same form again; what you typed is kept.'
             else:
                 self.notice = f'{Emojis.error} {exc}'
+        except Exception:
+            log.exception('Custom-command manager edit failed (guild=%s, user=%s)', self.guild_id, self.author.id)
+            self.notice = f'{Emojis.error} Something went wrong, so nothing was saved. Please try again.'
         else:
             if form is not None:
                 self.drafts.pop(form, None)
             self.notice = f'{Emojis.success} {done}'
         await self.refresh(interaction)
 
-    async def _update(self, changes: dict[str, Any]) -> CustomCommand:
-        cc = self.selected
-        assert cc is not None
-        saved = await self.cog.save(self.guild_id, self.author.id, cc.editable() | changes, command_id=cc.id)
+    async def _update(self, change: dict[str, Any] | Callable[[CustomCommand], dict[str, Any]]) -> CustomCommand:
+        """Apply ``change`` (or ``change(fresh_row)``) onto the row as stored now, not the screen's snapshot,
+        so two open managers do not overwrite each other's edits."""
+        assert self.selected is not None
+        fresh = await self.cog.bot.db.custom_commands.get_command(self.guild_id, self.selected.id)
+        saved = None
+        if fresh is not None:
+            changes = change(fresh) if callable(change) else change
+            saved = await self.cog.save(self.guild_id, self.author.id, fresh.editable() | changes, command_id=fresh.id)
         await self._reload()
         if saved is None:
             self.selected, self.screen = None, 'list'
@@ -588,7 +617,7 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         assert cc is not None
 
         async def apply() -> str:
-            saved = await self._update({'delete_invocation': not cc.delete_invocation})
+            saved = await self._update(lambda fresh: {'delete_invocation': not fresh.delete_invocation})
             return 'The message that runs it will now be deleted.' if saved.delete_invocation else (
                 'The message that runs it is kept now.'
             )
@@ -599,20 +628,22 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
 
     def _response_field(self, default: str = '') -> Field:
         assert self.selected is not None
-        params = parse_signature(self.selected.signature)
+        params, _ = _params(self.selected)
         return Field('response', 'Response', default, paragraph=True, max_length=MAX_RESPONSE_LENGTH,
                      placeholder=placeholder_hint(params), description='Placeholders are filled in when the command runs.')
 
     def _response_intro(self) -> str:
         assert self.selected is not None
-        return placeholder_help(parse_signature(self.selected.signature))
+        params, error = _params(self.selected)
+        help_text = placeholder_help(params)
+        return f'**Signature invalid:** {error}\n{help_text}' if error else help_text
 
     async def add_response(self, interaction: discord.Interaction) -> None:
         cc = self.selected
         assert cc is not None
 
         async def apply(values: dict[str, str]) -> str:
-            saved = await self._update({'responses': [*cc.responses, values['response']]})
+            saved = await self._update(lambda fresh: {'responses': [*fresh.responses, values['response']]})
             return f'Added response {len(saved.responses)}.'
 
         await self._form(interaction, 'response:add', f'New response for {cc.name}', [self._response_field()], apply,
@@ -623,9 +654,13 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         assert cc is not None and position < len(cc.responses)
 
         async def apply(values: dict[str, str]) -> str:
-            responses = list(cc.responses)
-            responses[position] = values['response']
-            await self._update({'responses': responses})
+            def change(fresh: CustomCommand) -> dict[str, Any]:
+                _same_responses(cc, fresh)
+                responses = list(fresh.responses)
+                responses[position] = values['response']
+                return {'responses': responses}
+
+            await self._update(change)
             return f'Saved response {position + 1}.'
 
         await self._form(interaction, f'response:{position}', f'Response {position + 1} of {cc.name}',
@@ -636,9 +671,13 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         assert cc is not None
 
         async def apply() -> str:
-            if len(cc.responses) < 2:
-                raise ValueError('That is the only response; delete the command instead.')
-            await self._update({'responses': [r for i, r in enumerate(cc.responses) if i != position]})
+            def change(fresh: CustomCommand) -> dict[str, Any]:
+                _same_responses(cc, fresh)
+                if len(fresh.responses) < 2:
+                    raise ValueError('That is the only response; delete the command instead.')
+                return {'responses': [r for i, r in enumerate(fresh.responses) if i != position]}
+
+            await self._update(change)
             return f'Removed response {position + 1}.'
 
         await self._run(interaction, apply)
@@ -649,10 +688,12 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         cc = self.selected
         assert cc is not None
         chosen = discord.Permissions(**dict.fromkeys(names, True)).value
-        kept = (cc.required_permissions or 0) & ~_COMMON_MASK  # set with `cc edit --perms`, not offered here
 
         async def apply() -> str:
-            await self._update({'required_permissions': kept | chosen or None})
+            # bits set with `cc edit --perms` that the select does not offer are kept
+            await self._update(lambda fresh: {
+                'required_permissions': ((fresh.required_permissions or 0) & ~_COMMON_MASK) | chosen or None
+            })
             return 'Saved the required permissions.'
 
         await self._run(interaction, apply)
@@ -697,7 +738,7 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
             return f'`{self.prefix}{name}` now runs `{self.prefix}{expansion}`.'
 
         await self._form(interaction, 'alias', 'New alias', [
-            Field('name', 'Alias', max_length=32, placeholder='sb', description='The short name. Using an existing alias replaces it.'),
+            Field('name', 'Alias', max_length=32, placeholder='sb', description='Reusing one of the aliases below replaces it. Command names are refused.'),
             Field('expansion', 'Runs', max_length=2000, placeholder='ban {0} spamming',
                   description='A command without the prefix. {args} = everything typed, {0}..{9} = single words.'),
         ], apply)
@@ -716,10 +757,7 @@ class CustomCommandManager(BasePaginatorV2[CustomCommand]):
         cc = self.selected
         assert cc is not None
         user = interaction.user
-        try:
-            params = parse_signature(cc.signature)
-        except SignatureError:  # stored signatures are validated; this guards a hand-edited row
-            params = ()
+        params, _ = _params(cc)  # a bad stored signature just means no sample arguments
         member = {'': user.display_name, 'id': str(user.id), 'name': user.name, 'mention': user.mention}
         values, tokens = sample_values(params, member)
         raw = ' '.join(tokens)
