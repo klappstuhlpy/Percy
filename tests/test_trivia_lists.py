@@ -64,6 +64,11 @@ def test_file_size_and_encoding() -> None:
         parse_list(b'question:\n- answer\n')
 
 
+def test_deep_nesting_is_a_list_error() -> None:
+    with pytest.raises(TriviaListError, match='nested'):
+        parse_list(b'[' * 100000)
+
+
 def test_answer_matches() -> None:
     assert answer_matches('  PARIS ', ('paris',))
     assert answer_matches('new  york', ('New York',))

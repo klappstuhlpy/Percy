@@ -54,7 +54,7 @@ from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.services.economy import GuildEconomySettings, roll_death
-from app.services.trivia.lists import MAX_FILE_BYTES, TriviaListError, answer_matches, parse_list
+from app.services.trivia.lists import MAX_FILE_BYTES, NAME_RE, TriviaListError, answer_matches, parse_list
 from app.utils import (
     FAILED_CRIME_RESPONSES,
     FAILED_SLUT_RESPONSES,
@@ -111,6 +111,7 @@ class Games(Cog):
         # (guild_id, user_id, date.toordinal()) of members who already played today's Wordle.
         self.wordle_played: set[tuple[int, int, int]] = set()
         self._trivia_questions: list[RawQuestion] | None = None
+        self._trivia_channels: set[int] = set()  # channels with an open custom round
         self._wordle_words: list[str] | None = None
 
     async def cog_load(self) -> None:
@@ -775,7 +776,14 @@ class Games(Cog):
     async def trivia(self, ctx: Context, list_name: str | None = None) -> None:
         """Post a trivia question; built-in ones are multiple choice, custom lists are answered by typing."""
         if list_name is not None:
-            await self._play_custom_trivia(ctx, list_name.lower())
+            if ctx.channel.id in self._trivia_channels:
+                await ctx.send_warning("A custom trivia round is already running in this channel.")
+                return
+            self._trivia_channels.add(ctx.channel.id)
+            try:
+                await self._play_custom_trivia(ctx, list_name.lower())
+            finally:
+                self._trivia_channels.discard(ctx.channel.id)
             return
         raw = random.choice(self._load_trivia())
         view = trivia_ui.TriviaView(build_round(raw))
@@ -818,8 +826,8 @@ class Games(Cog):
         """Attach a JSON file: `{"question": ["answer", ...]}` (Red's format) or the built-in shape."""
         assert ctx.guild is not None
         name = name.lower()
-        if len(name) > 32:
-            await ctx.send_error("The list name can be at most 32 characters.")
+        if not NAME_RE.fullmatch(name):
+            await ctx.send_error("List names use only `a-z`, `0-9`, `_` and `-`, up to 32 characters.")
             return
         if not ctx.message.attachments:
             await ctx.send_error("Attach a `.json` file to this message.")

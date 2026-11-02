@@ -24,6 +24,5 @@ CREATE TABLE IF NOT EXISTS trivia_scores
     guild_id BIGINT NOT NULL,
     user_id  BIGINT NOT NULL,
     correct  INT    NOT NULL DEFAULT 0,
-    played   INT    NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id)
 );

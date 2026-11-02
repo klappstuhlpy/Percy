@@ -11,11 +11,22 @@ Accepted JSON shapes (PyYAML is not a dependency, so Red's YAML files must be co
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
+NAME_RE = re.compile(r'[a-z0-9_-]{1,32}')
+
 __all__ = (
-    'MAX_ANSWERS', 'MAX_ANSWER_LENGTH', 'MAX_FILE_BYTES', 'MAX_QUESTIONS', 'MAX_QUESTION_LENGTH',
-    'CustomQuestion', 'TriviaListError', 'answer_matches', 'parse_list',
+    'MAX_ANSWERS',
+    'MAX_ANSWER_LENGTH',
+    'MAX_FILE_BYTES',
+    'MAX_QUESTIONS',
+    'MAX_QUESTION_LENGTH',
+    'NAME_RE',
+    'CustomQuestion',
+    'TriviaListError',
+    'answer_matches',
+    'parse_list',
 )
 
 MAX_FILE_BYTES = 256 * 1024
@@ -68,6 +79,8 @@ def parse_list(data: bytes) -> list[CustomQuestion]:
         raise TriviaListError(f'The file is {len(data) // 1024} KB (max {MAX_FILE_BYTES // 1024} KB).')
     try:
         payload = json.loads(data.decode('utf-8-sig'))
+    except RecursionError as exc:
+        raise TriviaListError('The file is nested too deeply.') from exc
     except (UnicodeDecodeError, ValueError) as exc:
         raise TriviaListError(f'The file is not valid UTF-8 JSON ({exc}). YAML is not supported.') from exc
 

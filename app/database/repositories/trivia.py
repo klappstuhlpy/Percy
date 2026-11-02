@@ -40,8 +40,7 @@ class TriviaRepository(BaseRepository):
     async def get_lists(self, guild_id: int) -> list[asyncpg.Record]:
         return await self.fetch(
             'SELECT l.name, l.author_id, (SELECT count(*) FROM trivia_questions q WHERE q.list_id = l.id) AS questions '
-            'FROM trivia_lists l WHERE l.guild_id = $1 ORDER BY l.name;'
-,
+            'FROM trivia_lists l WHERE l.guild_id = $1 ORDER BY l.name;',
             guild_id,
         )
 
@@ -54,15 +53,14 @@ class TriviaRepository(BaseRepository):
 
     async def record_correct(self, guild_id: int, user_id: int) -> None:
         await self.execute(
-            'INSERT INTO trivia_scores (guild_id, user_id, correct, played) VALUES ($1, $2, 1, 1) '
-            'ON CONFLICT (guild_id, user_id) DO UPDATE SET correct = trivia_scores.correct + 1, '
-            'played = trivia_scores.played + 1;',
+            'INSERT INTO trivia_scores (guild_id, user_id, correct) VALUES ($1, $2, 1) '
+            'ON CONFLICT (guild_id, user_id) DO UPDATE SET correct = trivia_scores.correct + 1;',
             guild_id, user_id,
         )
 
     async def top_scores(self, guild_id: int, limit: int = 10) -> list[asyncpg.Record]:
         return await self.fetch(
-            'SELECT user_id, correct, played FROM trivia_scores WHERE guild_id = $1 '
+            'SELECT user_id, correct FROM trivia_scores WHERE guild_id = $1 '
             'ORDER BY correct DESC, user_id LIMIT $2;',
             guild_id, limit,
         )
