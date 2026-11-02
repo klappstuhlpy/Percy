@@ -24,6 +24,10 @@ pub use types::*;
 #[rustfmt::skip]
 pub mod generated;
 pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+pub use generated::{
+    AiAskResponse, AiChannelOverride, AiConfig, AiFlags, AiSuggestion, Channel, ChannelRef, GuildFlags, GuildHealth,
+    GuildInfo, HealthFeature, IgnoredEntity, Role, RoleRef, SentinelInfo,
+}; // guild domain
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]

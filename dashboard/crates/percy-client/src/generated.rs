@@ -2,6 +2,50 @@
 // Regenerate after any API change: `poetry run python scripts/export_openapi.py && cargo run -p percy-codegen`.
 // See GENERATION.md.
 
+///``available`` is false when the assistant is off/unreachable; ``reason`` then says why.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AiAskResponse {
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub answer: ::std::option::Option<::std::string::String>,
+    pub available: bool,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub reason: ::std::option::Option<::std::string::String>,
+    pub suggestions: ::std::vec::Vec<AiSuggestion>,
+}
+///`AiChannelOverride`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AiChannelOverride {
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel: ::std::option::Option<ChannelRef>,
+    pub channel_id: ::std::string::String,
+    pub controlled: AiFlags,
+    pub enabled: AiFlags,
+}
+///Per-guild AI feature flags plus per-channel overrides.
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AiConfig {
+    pub flags: AiFlags,
+    pub overrides: ::std::vec::Vec<AiChannelOverride>,
+}
+///`AiFlags`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AiFlags {
+    pub assistant: bool,
+    pub giveaways: bool,
+    pub moderation: bool,
+    pub music: bool,
+    pub polls: bool,
+    pub reminders: bool,
+    pub router: bool,
+    pub sentinel: bool,
+    pub tags: bool,
+}
+///`AiSuggestion`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct AiSuggestion {
+    pub command: ::std::string::String,
+    pub label: ::std::string::String,
+}
 ///A headline number paired with its delta vs the preceding equal window.
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
 pub struct AnalyticsMetric {
@@ -38,6 +82,137 @@ pub struct AnalyticsSummary {
 pub struct AnalyticsTopCommand {
     pub command: ::std::string::String,
     pub uses: i64,
+}
+///`Channel`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct Channel {
+    pub can_post: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub category_id: ::std::option::Option<::std::string::String>,
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+    pub position: i32,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
+///`ChannelRef`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct ChannelRef {
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
+///`GuildFlags`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GuildFlags {
+    pub alerts: bool,
+    pub audit_log: bool,
+    pub mentions: bool,
+    pub raid: bool,
+    pub sentinel: bool,
+}
+///`GuildHealth`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GuildHealth {
+    pub attention: u32,
+    pub features: ::std::vec::Vec<HealthFeature>,
+}
+///`GuildInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct GuildInfo {
+    pub ai: AiConfig,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub alert_channel: ::std::option::Option<ChannelRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub audit_log_channel: ::std::option::Option<ChannelRef>,
+    pub audit_log_flags: ::std::collections::HashMap<::std::string::String, bool>,
+    pub flags: GuildFlags,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub icon_url: ::std::option::Option<::std::string::String>,
+    pub id: u64,
+    pub ignored_entities: ::std::vec::Vec<IgnoredEntity>,
+    pub is_new_config: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub member_count: ::std::option::Option<u32>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub mention_count: ::std::option::Option<u32>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub message_log_channel: ::std::option::Option<ChannelRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub mod_log_channel: ::std::option::Option<ChannelRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub music_panel_channel: ::std::option::Option<ChannelRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub mute_role: ::std::option::Option<RoleRef>,
+    pub name: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub poll_channel: ::std::option::Option<ChannelRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub poll_ping_role: ::std::option::Option<RoleRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub poll_reason_channel: ::std::option::Option<ChannelRef>,
+    pub prefixes: ::std::vec::Vec<::std::string::String>,
+    pub use_music_panel: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub voice_log_channel: ::std::option::Option<ChannelRef>,
+}
+///`HealthFeature`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct HealthFeature {
+    pub key: ::std::string::String,
+    pub label: ::std::string::String,
+    pub problems: ::std::vec::Vec<::std::string::String>,
+    pub status: ::std::string::String,
+}
+///`IgnoredEntity`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct IgnoredEntity {
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
+///`Role`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct Role {
+    pub assignable: bool,
+    pub color: u32,
+    pub hoist: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub icon_url: ::std::option::Option<::std::string::String>,
+    pub id: ::std::string::String,
+    pub managed: bool,
+    pub mentionable: bool,
+    pub name: ::std::string::String,
+    pub permissions: u64,
+    pub position: i32,
+}
+///`RoleRef`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct RoleRef {
+    pub color: u32,
+    pub id: ::std::string::String,
+    pub name: ::std::string::String,
+}
+///`SentinelInfo`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, Default)]
+pub struct SentinelInfo {
+    pub bypass_action: ::std::string::String,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub channel: ::std::option::Option<ChannelRef>,
+    pub member_count: u32,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub message: ::std::option::Option<u64>,
+    pub needs_setup: bool,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub rate: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub role: ::std::option::Option<RoleRef>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub started_at: ::std::option::Option<::std::string::String>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub starter_role: ::std::option::Option<RoleRef>,
 }
 /// Error types.
 pub mod error {

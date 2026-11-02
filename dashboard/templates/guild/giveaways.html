@@ -107,7 +107,7 @@
             <label class="config-label" for="gw_channel">Channel</label>
             <select id="gw_channel" class="config-select">
                 {% for ch in channels %}
-                {% if ch.channel_type == "text" %}
+                {% if ch.type_ == "text" %}
                 <option value="{{ ch.id }}">#{{ ch.name }}</option>
                 {% endif %}
                 {% endfor %}

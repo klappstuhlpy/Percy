@@ -64,7 +64,7 @@ pub async fn guild_role_menus(State(app): State<AppState>, session: Session, Pat
         channels: channels
             .unwrap_or_default()
             .into_iter()
-            .filter(|c| c.channel_type == "text")
+            .filter(|c| c.type_ == "text")
             .collect(),
         roles: roles
             .unwrap_or_default()
@@ -179,7 +179,7 @@ pub async fn guild_starboard(State(app): State<AppState>, session: Session, Path
         channels: channels
             .unwrap_or_default()
             .into_iter()
-            .filter(|c| c.channel_type == "text")
+            .filter(|c| c.type_ == "text")
             .collect(),
     }
     .into_response()
