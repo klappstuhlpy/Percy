@@ -75,7 +75,6 @@ RETAINED: dict[str, str] = {
     'music_plays.user_id': 'GAP: music play history',
     'user_notes.owner_id': 'GAP: personal notes',
     'highlights.user_id': 'GAP: highlight keywords',
-    'anilist_users.user_id': 'GAP: legacy AniList link',
     'watch_progress.user_id': 'GAP: watch progress',
     'watch_prefs.user_id': 'GAP: watchlist prefs',
     'release_subscriptions.user_id': 'GAP: release subscriptions',

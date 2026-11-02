@@ -90,6 +90,7 @@ class UsersRepository(BaseRepository):
         data, so it queries tables owned by other cogs rather than fanning out to their
         repositories.
         """
+        # Export is hand-written, not driven by personal_data.DELETED/RETAINED (left alone on purpose).
         uid_text = str(user_id)
 
         settings = await self.fetchrow("SELECT * FROM user_settings WHERE id = $1;", user_id)

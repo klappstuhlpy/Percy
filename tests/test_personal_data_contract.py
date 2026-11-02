@@ -14,22 +14,45 @@ NAME = re.compile(
     r'^(user_id|author_id|owner_id|member_id|moderator_id|reporter_id|target_id|created_by|decided_by|from_id|'
     r'discord_id|uuid|creator_id|requester_id|actor_id)$')
 TABLE = re.compile(r'(?:CREATE TABLE(?: IF NOT EXISTS)?|CREATE TYPE|ALTER TABLE(?: IF EXISTS)?(?: ONLY)?)\s+"?(\w+)', re.I)
-COLUMN = re.compile(r'\s*(?:ADD COLUMN(?: IF NOT EXISTS)?\s+)?"?(\w+)"?\s+(?:BIGINT|INTEGER|INT|TEXT|UUID)\b', re.I)
+DROP = re.compile(r'DROP TABLE(?: IF EXISTS)?\s+"?(\w+)', re.I)
+TYPES = r'(?:BIGINT|INTEGER|INT|TEXT|UUID)\b'
+CREATE_COL = re.compile(r'[(,]\s*"?(\w+)"?\s+' + TYPES, re.I)
+ADD_COL = re.compile(r'ADD COLUMN(?:\s+IF NOT EXISTS)?\s+"?(\w+)"?\s+' + TYPES, re.I)
 
 # Not discoverable by a column-name scan: the user's own settings row, id arrays and ids inside JSON.
 CURATED = {'user_settings.id', 'giveaways.entries', 'polls.entries', 'guild_notifications.meta', 'timers.metadata'}
 
 
-def discover() -> set[str]:
-    found = set(CURATED)
-    for path in MIGRATIONS.glob('V*.sql'):
-        table = None
-        for line in path.read_text(encoding='utf8').splitlines():
-            if m := TABLE.search(line):
-                table = m.group(1)
-            if (c := COLUMN.match(line)) and table and NAME.match(c.group(1)):
-                found.add(f'{table}.{c.group(1)}')
+def scan(scripts: list[str]) -> set[str]:
+    """User-id ``table.column`` keys declared by migration scripts (in order), per statement, minus dropped tables."""
+    found: set[str] = set()
+    for script in scripts:
+        for stmt in re.sub(r'--[^\n]*', '', script).split(';'):
+            if m := DROP.search(stmt):
+                found = {k for k in found if k.split('.')[0] != m.group(1)}
+            if not (t := TABLE.search(stmt)):
+                continue
+            cols = CREATE_COL if 'CREATE' in t.group(0).upper() else ADD_COL
+            found |= {f'{t.group(1)}.{c}' for c in cols.findall(stmt[t.end():]) if NAME.match(c)}
     return found
+
+
+def discover() -> set[str]:
+    files = sorted(MIGRATIONS.glob('V*.sql'), key=lambda p: int(re.match(r'V(\d+)', p.name).group(1)))  # type: ignore[union-attr]
+    return CURATED | scan([f.read_text(encoding='utf8') for f in files])
+
+
+def test_scan_handles_every_statement_shape() -> None:
+    found = scan([
+        'ALTER TABLE a ADD COLUMN author_id BIGINT;',
+        'ALTER TABLE b ADD COLUMN IF NOT EXISTS user_id BIGINT NOT NULL;',
+        'CREATE TABLE c (user_id BIGINT NOT NULL);',
+        'CREATE TABLE IF NOT EXISTS d ( "owner_id" BIGINT, x TEXT );',
+        'CREATE TABLE e\n(\n    id SERIAL,\n    -- note\n    target_id BIGINT,\n    other INT\n);',
+        'CREATE TABLE gone (user_id BIGINT);',
+        'DROP TABLE IF EXISTS gone;',
+    ])
+    assert found == {'a.author_id', 'b.user_id', 'c.user_id', 'd.owner_id', 'e.target_id'}
 
 
 def test_every_user_id_column_is_classified() -> None:
@@ -41,13 +64,6 @@ def test_registry_has_no_overlap_stale_or_blank_reasons() -> None:
     assert not set(DELETED) & set(RETAINED)
     assert not (set(DELETED) | set(RETAINED)) - discover(), 'registry names a column no migration declares'
     assert all(reason.strip() for reason in RETAINED.values())
-
-
-def test_red_parity_tables_are_classified() -> None:
-    for key in ('trivia_scores.user_id', 'member_restrictions.user_id', 'command_rules.target_id',
-                'custom_commands.owner_id', 'command_aliases.owner_id', 'trivia_lists.author_id',
-                'mod_cases.target_id', 'guild_notifications.meta'):
-        assert key in DELETED or key in RETAINED, key
 
 
 async def test_delete_issues_one_statement_per_registry_entry() -> None:
