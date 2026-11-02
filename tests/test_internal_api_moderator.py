@@ -84,7 +84,11 @@ def _setup(*, mod_top: int = 5, target_top: int = 3, me_top: int = 10, **perms: 
 
 def _bot() -> Any:
     timers = SimpleNamespace(delete_member_timer=AsyncMock(), create=AsyncMock())
-    return SimpleNamespace(dispatch=MagicMock(), timers=timers, db=MagicMock())
+    db = MagicMock()
+    db.get_guild_config = AsyncMock(
+        return_value=SimpleNamespace(mod_require_reason=False, mod_default_ban_delete_days=0, mod_dm_on_action=False)
+    )
+    return SimpleNamespace(dispatch=MagicMock(), timers=timers, db=db)
 
 
 async def _act(guild: Any, bot: Any, action: str, *, user_id: int = TARGET, **body: Any) -> dict:
@@ -161,7 +165,11 @@ async def test_mute_does_not_need_percy_to_outrank_the_member() -> None:
     guild, _, target = _setup(mod_top=11, target_top=10, manage_roles=True)
     bot = _bot()
     mute_role = next(r for r in guild.roles if r.position == 4)
-    bot.db.get_guild_config = AsyncMock(return_value=SimpleNamespace(mute_role_id=mute_role.id))
+    bot.db.get_guild_config = AsyncMock(
+        return_value=SimpleNamespace(
+            mute_role_id=mute_role.id, mod_require_reason=False, mod_default_ban_delete_days=0, mod_dm_on_action=False
+        )
+    )
     guild.get_role = MagicMock(return_value=mute_role)
     result = await _act(guild, bot, 'mute')
     assert result.action == 'mute'

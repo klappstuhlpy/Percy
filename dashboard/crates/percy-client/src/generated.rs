@@ -658,6 +658,8 @@ pub struct GuildInfo {
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub audit_log_channel: ::std::option::Option<ChannelRef>,
     pub audit_log_flags: ::std::collections::HashMap<::std::string::String, bool>,
+    #[serde(deserialize_with = "::std::option::Option::deserialize")]
+    pub disabled_command_message: ::std::option::Option<::std::string::String>,
     pub flags: GuildFlags,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub icon_url: ::std::option::Option<::std::string::String>,
@@ -670,8 +672,12 @@ pub struct GuildInfo {
     pub mention_count: ::std::option::Option<u32>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub message_log_channel: ::std::option::Option<ChannelRef>,
+    pub mod_default_ban_delete_days: u32,
+    pub mod_dm_on_action: bool,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub mod_log_channel: ::std::option::Option<ChannelRef>,
+    pub mod_reinvite_on_unban: bool,
+    pub mod_require_reason: bool,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub music_panel_channel: ::std::option::Option<ChannelRef>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]

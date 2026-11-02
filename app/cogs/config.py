@@ -10,8 +10,10 @@ import discord
 from discord.ext import commands
 
 from app.core import Cog, Context
+from app.core.errors import CommandDisabled
 from app.core.models import PermissionSpec, PermissionTemplate, cooldown, describe, group
 from app.core.pagination import LinePaginator
+from app.services.moderation_settings import DISABLED_MESSAGE_VARIABLES, check_disabled_message, render_disabled_message
 from app.utils import cache, get_asset_url, helpers
 
 if TYPE_CHECKING:
@@ -291,7 +293,13 @@ class Config(Cog):
             return True
 
         resolved = await self.get_commands_configuration(guild_id=ctx.guild.id)
-        return not resolved.is_blocked(ctx)
+        if not resolved.is_blocked(ctx):
+            return True
+        # Blocked: silent unless the server set a reply for it.
+        message = (await self.bot.db.get_guild_config(ctx.guild.id)).disabled_command_message
+        if message:
+            raise CommandDisabled(render_disabled_message(message, ctx.command.qualified_name, ctx.channel.mention))
+        return False
 
     async def _bulk_ignore_entries(self, ctx: Context, entries: Iterable[discord.abc.Snowflake]) -> None:
         await self.bot.db.guilds.bulk_add_plonks(ctx.guild.id, [e.id for e in entries])
@@ -592,6 +600,32 @@ class Config(Cog):
         assert guild is not None
         embed.set_thumbnail(url=get_asset_url(guild))
         await LinePaginator.start(ctx, entries=disabled, per_page=15, embed=embed, location="description", numerate=True)
+
+    @config.command(
+        "disabledmessage",
+        aliases=["disabledmsg"],
+        description="Sets the reply members get when they use a command disabled here; blank turns it off.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.mod,
+    )
+    @describe(text="The reply. {command} and {channel} are filled in. Leave blank to stay silent.")
+    async def config_disabledmessage(self, ctx: Context, *, text: str | None = None) -> None:
+        """Sets what Percy answers (for 10 seconds) when someone runs a command that `config` disabled.
+        Placeholders: `{command}`, `{channel}`. Without text the reply is removed and Percy stays silent.
+        """
+        assert ctx.guild is not None
+        try:
+            message = check_disabled_message(text)
+        except ValueError as e:
+            await ctx.send_error(str(e))
+            return
+        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        await config.update(disabled_command_message=message)
+        if message is None:
+            await ctx.send_success("Disabled commands now fail silently.")
+            return
+        names = ", ".join(f"`{{{name}}}`" for name in DISABLED_MESSAGE_VARIABLES)
+        await ctx.send_success(f"Members who use a disabled command now get that reply. Placeholders: {names}.")
 
     # -- command permission overrides ------------------------------------
 

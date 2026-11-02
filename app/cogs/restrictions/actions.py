@@ -10,15 +10,16 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
 from app.cogs.moderation.member_actions import MemberActionError, validate_mute_duration
+from app.services.moderation_settings import sticky_to_restore
 from app.services.restrictions import CHANNEL_MUTE_DENIALS, normalize_nickname
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from app.core import Bot
 
@@ -32,6 +33,9 @@ __all__ = (
     'lift_nickfreeze',
     'lift_voiceban',
     'reapply',
+    'remove_stickyrole',
+    'restore_stickyroles',
+    'sticky_error',
 )
 
 VOICEBAN_ROLE_NAME = 'Voice Banned'
@@ -198,7 +202,8 @@ async def reapply(bot: Bot, member: discord.Member) -> None:
     now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     guild = member.guild
     reason = 'Member rejoined with an active restriction.'
-    for row in await bot.db.restrictions.for_member(guild.id, member.id):
+    rows = await bot.db.restrictions.for_member(guild.id, member.id)
+    for row in rows:
         if row['expires_at'] is not None and row['expires_at'] <= now:
             continue  # the expiry timer owns the cleanup
         if row['kind'] == 'voiceban':
@@ -208,3 +213,47 @@ async def reapply(bot: Bot, member: discord.Member) -> None:
             await member.edit(nick=row['value'], reason=reason)
         elif row['kind'] == 'channelmute' and (channel := guild.get_channel(row['channel_id'])) is not None:
             await set_channel_denial(channel, member, True, reason)
+    await restore_stickyroles(member, rows, 'Sticky roles restored after the member rejoined.')
+
+
+def sticky_error(guild: discord.Guild, moderator: discord.Member, role: discord.Role) -> str | None:
+    """Why ``role`` cannot be made sticky by ``moderator`` (Percy and the moderator must both outrank it)."""
+    if role.is_default() or role.managed:
+        return 'that role cannot be assigned: it is @everyone or managed by an integration'
+    if guild.me.top_role <= role:
+        return 'that role is equal to or above my highest role'
+    if moderator.id != guild.owner_id and moderator.top_role <= role:
+        return 'your highest role must be above that role'
+    return None
+
+
+async def add_stickyrole(
+    bot: Bot, guild: discord.Guild, member: discord.Member, moderator: discord.Member, role: discord.Role
+) -> None:
+    """Makes ``role`` sticky for ``member`` and gives it to them now."""
+    if error := sticky_error(guild, moderator, role):
+        raise MemberActionError(403, error)
+    await bot.db.restrictions.upsert(guild.id, member.id, 'stickyrole', channel_id=role.id)
+    if member.get_role(role.id) is None:
+        await member.add_roles(role, reason=f'Sticky role added by {moderator}.')
+
+
+async def remove_stickyrole(
+    bot: Bot, guild: discord.Guild, member: discord.Member, moderator: discord.Member, role: discord.Role
+) -> None:
+    """Stops re-applying ``role`` to ``member``; the role itself stays on them."""
+    if error := sticky_error(guild, moderator, role):
+        raise MemberActionError(403, error)
+    if not await bot.db.restrictions.remove(guild.id, member.id, 'stickyrole', role.id):
+        raise MemberActionError(400, 'that role is not sticky for this member')
+
+
+async def restore_stickyroles(member: discord.Member, rows: Iterable[Mapping[str, Any]], reason: str) -> None:
+    """Gives ``member`` back the sticky roles (among their restriction ``rows``) they lack. Discord errors propagate."""
+    guild = member.guild
+    stored = {r['channel_id'] for r in rows if r['kind'] == 'stickyrole'}
+    if not stored:
+        return
+    assignable = {r.id for r in guild.roles if not r.is_default() and not r.managed and r < guild.me.top_role}
+    if roles := sticky_to_restore(stored, {r.id for r in member.roles}, assignable):
+        await member.add_roles(*(discord.Object(id=r) for r in roles), reason=reason)

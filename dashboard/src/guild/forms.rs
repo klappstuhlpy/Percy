@@ -114,6 +114,27 @@ pub fn build_patch(section: &str, fields: &HashMap<String, String>) -> serde_jso
             if let Some(v) = fields.get("voice_log_channel_id") {
                 patch.insert("voice_log_channel_id".into(), parse_id_or_null(v));
             }
+            for key in ["mod_dm_on_action", "mod_require_reason", "mod_reinvite_on_unban"] {
+                patch.insert(key.into(), serde_json::Value::Bool(fields.contains_key(key)));
+            }
+            if let Some(v) = fields.get("mod_default_ban_delete_days") {
+                // Percy validates 0-7; an unparseable box means "none" rather than a failed save.
+                patch.insert(
+                    "mod_default_ban_delete_days".into(),
+                    v.trim().parse::<u8>().unwrap_or(0).into(),
+                );
+            }
+            if let Some(v) = fields.get("disabled_command_message") {
+                let text = v.trim();
+                patch.insert(
+                    "disabled_command_message".into(),
+                    if text.is_empty() {
+                        serde_json::Value::Null
+                    } else {
+                        text.into()
+                    },
+                );
+            }
             serde_json::Value::Object(patch)
         }
         "polls" => {
@@ -192,6 +213,23 @@ fn parse_id_or_null(s: &str) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moderation_section_carries_switches_days_and_message() {
+        let fields: HashMap<String, String> = [
+            ("mod_require_reason", "on"),
+            ("mod_default_ban_delete_days", " 3 "),
+            ("disabled_command_message", "  "),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let patch = build_patch("moderation", &fields);
+        assert_eq!(patch["mod_require_reason"], true);
+        assert_eq!(patch["mod_dm_on_action"], false); // an unticked box is absent from the form
+        assert_eq!(patch["mod_default_ban_delete_days"], 3);
+        assert!(patch["disabled_command_message"].is_null());
+    }
 
     #[test]
     fn mention_count_off_or_forwarded() {

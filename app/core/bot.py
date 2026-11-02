@@ -25,6 +25,7 @@ from app.clients import OllamaClient
 from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand, assign_native_permissions
 from app.core.context import Context
+from app.core.errors import CommandDisabled
 from app.core.feature_flags import FeatureFlags
 from app.core.flags import FlagMeta
 from app.core.help import PaginatedHelpCommand
@@ -760,7 +761,11 @@ class Bot(commands.Bot):
         self.metrics.record_error(type(error).__name__)
 
         # CommandNotFound is handled earlier in process_commands (an unmatched command never
-        # reaches invoke(), so it is never raised here); CheckFailure stays silent.
+        # reaches invoke(), so it is never raised here); CheckFailure stays silent, bar the one reply a
+        # server asked for when a disabled command is invoked.
+        if isinstance(error, CommandDisabled):
+            await ctx.send(error.message, delete_after=10, allowed_mentions=NO_MENTIONS)
+            return
         if isinstance(error, (commands.CommandNotFound, commands.CheckFailure)):
             return
 

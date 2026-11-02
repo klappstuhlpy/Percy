@@ -13,7 +13,7 @@ import discord
 
 from app.cogs.moderation.infractions import default_reason, retry_expiry_timer
 from app.cogs.moderation.member_actions import MemberActionError, apply_member_action
-from app.core import Bot, Cog, Context, command, describe
+from app.core import Bot, Cog, Context, command, describe, group
 from app.core.converter import ActionReason
 from app.core.models import PermissionTemplate
 from app.services.restrictions import is_current
@@ -191,6 +191,76 @@ class Restrictions(Cog):
             ctx, member, 'channelunmute', f'Unmuted {member} in {target.mention}.', channel_id=target.id
         )
 
+    # -- Sticky roles -----------------------------------------------------------------------
+
+    @group(
+        'stickyrole',
+        aliases=['forcerole'],
+        description='Roles that are given back when a member rejoins or loses them.',
+        guild_only=True,
+        hybrid=False,
+        user_permissions=PermissionTemplate.roles,
+    )
+    async def stickyrole(self, ctx: Context) -> None:
+        """Sticky roles come back when a member rejoins the server or someone takes them off."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help('stickyrole')
+
+    async def _sticky(self, ctx: Context, member: discord.Member, role: discord.Role, add: bool) -> None:
+        assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
+        try:
+            if add:
+                await actions.add_stickyrole(self.bot, ctx.guild, member, ctx.author, role)
+            else:
+                await actions.remove_stickyrole(self.bot, ctx.guild, member, ctx.author, role)
+        except MemberActionError as e:
+            await ctx.send_error(e.detail)
+            return
+        if add:
+            await ctx.send_success(f'{role.mention} is now sticky for {member}.')
+        else:
+            await ctx.send_success(f'{role.mention} is no longer sticky for {member} (they keep it for now).')
+
+    @stickyrole.command(
+        'add',
+        description='Makes a role sticky for a member and gives it to them.',
+        bot_permissions=PermissionTemplate.roles,
+        user_permissions=PermissionTemplate.roles,
+    )
+    @describe(member='The member.', role='The role to keep on them.')
+    async def stickyrole_add(self, ctx: Context, member: discord.Member, *, role: discord.Role) -> None:
+        """Gives the role and re-applies it whenever the member rejoins or loses it."""
+        await self._sticky(ctx, member, role, True)
+
+    @stickyrole.command(
+        'remove',
+        description='Stops re-applying a sticky role to a member.',
+        user_permissions=PermissionTemplate.roles,
+    )
+    @describe(member='The member.', role='The role to release.')
+    async def stickyrole_remove(self, ctx: Context, member: discord.Member, *, role: discord.Role) -> None:
+        """Stops re-applying the role; the member keeps it until it is removed."""
+        await self._sticky(ctx, member, role, False)
+
+    @stickyrole.command(
+        'list',
+        description="Lists sticky roles, for one member or the whole server.",
+        user_permissions=PermissionTemplate.roles,
+    )
+    @describe(member='Only this member.')
+    async def stickyrole_list(self, ctx: Context, member: discord.Member | None = None) -> None:
+        """Lists the sticky roles."""
+        assert ctx.guild is not None
+        rows = await self.bot.db.restrictions.list_kind(ctx.guild.id, 'stickyrole')
+        lines = [
+            f'<@{r["user_id"]}>: <@&{r["channel_id"]}>' for r in rows if member is None or r['user_id'] == member.id
+        ]
+        if not lines:
+            await ctx.send_info('There are no sticky roles.')
+            return
+        extra = f'\n...and {len(lines) - 25} more.' if len(lines) > 25 else ''
+        await ctx.send_info('\n'.join(lines[:25]) + extra, allowed_mentions=discord.AllowedMentions.none())
+
     # -- Listeners --------------------------------------------------------------------------
 
     @Cog.listener()
@@ -206,19 +276,33 @@ class Restrictions(Cog):
 
     @Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
-        """Reverts a frozen nickname."""
-        if before.nick == after.nick:
-            return
-        row = await self.bot.db.restrictions.get(after.guild.id, after.id, 'nickfreeze')
-        if row is None or row['value'] == after.nick:
+        """Reverts a frozen nickname and restores a sticky role someone took off."""
+        if before.nick != after.nick:
+            await self._revert_nick(after)
+        if len(after.roles) < len(before.roles):
+            await self._restore_sticky(after)
+
+    async def _revert_nick(self, member: discord.Member) -> None:
+        row = await self.bot.db.restrictions.get(member.guild.id, member.id, 'nickfreeze')
+        if row is None or row['value'] == member.nick:
             return
         try:
-            await after.edit(nick=row['value'], reason='Nickname is frozen.')
+            await member.edit(nick=row['value'], reason='Nickname is frozen.')
         except discord.Forbidden:
-            config = await self.bot.db.get_guild_config(after.guild.id)
-            await config.alert_missing_permission(f'revert the frozen nickname of {after}')
+            config = await self.bot.db.get_guild_config(member.guild.id)
+            await config.alert_missing_permission(f'revert the frozen nickname of {member}')
         except discord.HTTPException:
-            log.exception('Could not revert the frozen nickname of %s in guild %s', after.id, after.guild.id)
+            log.exception('Could not revert the frozen nickname of %s in guild %s', member.id, member.guild.id)
+
+    async def _restore_sticky(self, member: discord.Member) -> None:
+        rows = await self.bot.db.restrictions.for_member(member.guild.id, member.id)
+        try:
+            await actions.restore_stickyroles(member, rows, 'Sticky role was removed.')
+        except discord.Forbidden:
+            config = await self.bot.db.get_guild_config(member.guild.id)
+            await config.alert_missing_permission(f'restore the sticky roles of {member}')
+        except discord.HTTPException:
+            log.exception('Could not restore the sticky roles of %s in guild %s', member.id, member.guild.id)
 
     @Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
@@ -234,6 +318,7 @@ class Restrictions(Cog):
         config = await self.bot.db.get_guild_config(role.guild.id)
         if role.id == config.voiceban_role_id:
             await config.update(voiceban_role_id=None)  # the next voice ban makes a new one
+        await self.bot.db.restrictions.remove_scope(role.guild.id, 'stickyrole', role.id)
 
     # -- Expiry -----------------------------------------------------------------------------
 

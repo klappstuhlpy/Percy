@@ -6,6 +6,7 @@ from contextlib import suppress
 import discord
 from discord.ext import commands  # noqa: TC002 - resolved at runtime for command/flag annotations
 
+from app.cogs.moderation.infractions import refuse_without_reason
 from app.cogs.modlog.models import CaseType, ModerationCase
 from app.cogs.modlog.ui import CaseHistoryView, build_case_view, build_warn_result_view, send_warn_dm
 from app.cogs.modlog.warns import (
@@ -252,6 +253,9 @@ class ModLog(Cog):
         # A warning never touches the member's roles, so only the moderator has to outrank them.
         if error := hierarchy_error(ctx.author, member, ctx.guild.me, action='warn', check_bot=False):  # type: ignore[arg-type]
             await ctx.send_error(error)
+            return
+
+        if await refuse_without_reason(ctx, 'warn', reason):
             return
 
         presets = {

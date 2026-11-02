@@ -3954,6 +3954,17 @@
             "title": "Audit Log Flags",
             "type": "object"
           },
+          "disabled_command_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Command Message"
+          },
           "flags": {
             "$ref": "#/components/schemas/GuildFlags"
           },
@@ -4021,6 +4032,16 @@
               }
             ]
           },
+          "mod_default_ban_delete_days": {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Mod Default Ban Delete Days",
+            "type": "integer"
+          },
+          "mod_dm_on_action": {
+            "title": "Mod Dm On Action",
+            "type": "boolean"
+          },
           "mod_log_channel": {
             "anyOf": [
               {
@@ -4030,6 +4051,14 @@
                 "type": "null"
               }
             ]
+          },
+          "mod_reinvite_on_unban": {
+            "title": "Mod Reinvite On Unban",
+            "type": "boolean"
+          },
+          "mod_require_reason": {
+            "title": "Mod Require Reason",
+            "type": "boolean"
           },
           "music_panel_channel": {
             "anyOf": [
@@ -4128,6 +4157,11 @@
           "audit_log_flags",
           "music_panel_channel",
           "use_music_panel",
+          "mod_dm_on_action",
+          "mod_require_reason",
+          "mod_reinvite_on_unban",
+          "mod_default_ban_delete_days",
+          "disabled_command_message",
           "prefixes",
           "is_new_config"
         ],
@@ -5180,9 +5214,15 @@
             "title": "Channel Id"
           },
           "delete_message_days": {
-            "default": 0,
-            "title": "Delete Message Days",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delete Message Days"
           },
           "duration": {
             "anyOf": [
@@ -8204,6 +8244,17 @@
             ],
             "title": "Audit Log Channel Id"
           },
+          "disabled_command_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Command Message"
+          },
           "flags": {
             "anyOf": [
               {
@@ -8240,6 +8291,28 @@
             ],
             "title": "Message Log Channel Id"
           },
+          "mod_default_ban_delete_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Default Ban Delete Days"
+          },
+          "mod_dm_on_action": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Dm On Action"
+          },
           "mod_log_channel_id": {
             "anyOf": [
               {
@@ -8250,6 +8323,28 @@
               }
             ],
             "title": "Mod Log Channel Id"
+          },
+          "mod_reinvite_on_unban": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Reinvite On Unban"
+          },
+          "mod_require_reason": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Require Reason"
           },
           "music_panel_channel_id": {
             "anyOf": [

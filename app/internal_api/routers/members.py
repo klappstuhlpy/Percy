@@ -35,7 +35,7 @@ class MemberActionBody(BaseModel):
     #: duration becomes a ``tempmute`` and is lifted by a timer).
     duration: int | None = None
     #: Days of message history to wipe, for ``ban`` and ``softban`` (Discord allows 0-7).
-    delete_message_days: int = 0
+    delete_message_days: int | None = None
     #: How many of the member's recent messages ``purge`` should delete.
     limit: int = 100
     #: The channel, for ``channelmute`` / ``channelunmute``.

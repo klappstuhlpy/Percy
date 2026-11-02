@@ -481,6 +481,44 @@
                            value="{% match guild.mention_count %}{% when Some with (n) %}{{ n }}{% when None %}{% endmatch %}">
                 </div>
             </div>
+            <h2 class="mt-lg">Actions</h2>
+            <p class="config-section-description">How kicks, bans, mutes and warnings behave.</p>
+            <div class="config-grid">
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">DM members on action</span>
+                        <span class="config-description">Tell a member the server, action and reason before a kick, ban, softban or mute</span>
+                    </div>
+                    <input type="checkbox" name="mod_dm_on_action" value="true" {% if guild.mod_dm_on_action %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Require a reason</span>
+                        <span class="config-description">Refuse kick, ban, softban, tempban, warn and mute without one</span>
+                    </div>
+                    <input type="checkbox" name="mod_require_reason" value="true" {% if guild.mod_require_reason %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Reinvite on unban</span>
+                        <span class="config-description">DM the user a single-use invite (24 hours) when they are unbanned</span>
+                    </div>
+                    <input type="checkbox" name="mod_reinvite_on_unban" value="true" {% if guild.mod_reinvite_on_unban %}checked{% endif %}>
+                </label>
+                <div class="config-field">
+                    <label class="config-label" for="mod_default_ban_delete_days">Default ban cleanup</label>
+                    <span class="config-description">Days of messages a ban deletes when no number is given (0&ndash;7)</span>
+                    <input type="number" name="mod_default_ban_delete_days" id="mod_default_ban_delete_days" class="config-input"
+                           min="0" max="7" value="{{ guild.mod_default_ban_delete_days }}">
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="disabled_command_message">Disabled command reply</label>
+                    <span class="config-description">What Percy says (for 10 seconds) when a member uses a command disabled here. <code>{command}</code> and <code>{channel}</code> are filled in; empty stays silent</span>
+                    <input type="text" name="disabled_command_message" id="disabled_command_message" class="config-input"
+                           maxlength="200" placeholder="Silent"
+                           value="{% match guild.disabled_command_message %}{% when Some with (text) %}{{ text }}{% when None %}{% endmatch %}">
+                </div>
+            </div>
             <h2 class="mt-lg">Logging Channels</h2>
             <p class="config-section-description">Route different event types to dedicated channels.</p>
             <div class="config-grid">

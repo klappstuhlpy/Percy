@@ -11,17 +11,18 @@ from __future__ import annotations
 import datetime
 import logging
 import time
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
 import discord
 
+from app.services.moderation_settings import action_notice, reason_missing
 from app.utils import merge_perms
 from app.utils.checks import hierarchy_error
 from config import Emojis
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 
     from app.core import Bot, Context
     from app.core.timer import Timer
@@ -67,6 +68,65 @@ def mute_role_error(guild: discord.Guild, role_id: int) -> str | None:
     if guild.me.top_role <= role:
         return "My highest role must be above the mute role before I can mute or unmute anyone."
     return None
+
+
+async def refuse_without_reason(ctx: Context, action: str, reason: str | None) -> bool:
+    """Sends the refusal and returns ``True`` when the guild requires a reason for ``action`` and none was given.
+
+    Call it with the reason as typed, *before* it defaults to :func:`default_reason`.
+    """
+    assert ctx.guild is not None
+    config = await ctx.bot.db.get_guild_config(ctx.guild.id)
+    if not reason_missing(action, reason, config.mod_require_reason):
+        return False
+    await ctx.send_error(f"This server requires a reason to {action}: add one after the member.")
+    return True
+
+
+@asynccontextmanager
+async def announce(
+    bot: Bot, guild: discord.Guild, member: discord.abc.Snowflake, action: str, reason: str | None, moderator: Any
+) -> AsyncIterator[None]:
+    """DMs ``member`` what is done to them when the guild enabled ``mod_dm_on_action``; failures are silent.
+
+    Wrap the action in it: the DM goes out first (after a kick/ban the two share no server and Discord
+    refuses it) and is deleted again when the action raises, so nobody is told about something that failed.
+    """
+    dm: discord.Message | None = None
+    config = await bot.db.get_guild_config(guild.id)
+    if config.mod_dm_on_action and isinstance(member, discord.Member) and not member.bot:
+        shown = (reason or "").removeprefix(f"{moderator} (ID: {moderator.id}): ")
+        notice = action_notice(guild.name, action, None if shown == default_reason(moderator) else shown)
+        with suppress(discord.HTTPException):
+            dm = await member.send(notice)
+    try:
+        yield
+    except BaseException:
+        if dm is not None:
+            with suppress(discord.HTTPException):
+                await dm.delete()
+        raise
+
+
+async def reinvite_if_enabled(bot: Bot, guild: discord.Guild, user_id: int) -> None:
+    """DMs an unbanned user a single-use 24 h invite when ``mod_reinvite_on_unban`` is on; failures are silent."""
+    config = await bot.db.get_guild_config(guild.id)
+    if not config.mod_reinvite_on_unban:
+        return
+    channel = next(
+        (
+            c
+            for c in guild.channels
+            if not isinstance(c, discord.CategoryChannel) and c.permissions_for(guild.me).create_instant_invite
+        ),
+        None,
+    )
+    if channel is None:
+        return
+    with suppress(discord.HTTPException):
+        invite = await channel.create_invite(max_age=86400, max_uses=1, unique=True, reason="Reinvite after unban.")
+        user = await bot.fetch_user(user_id)
+        await user.send(f"You were unbanned from **{guild.name}**. Single-use invite, valid for 24 hours: {invite.url}")
 
 
 async def softban(

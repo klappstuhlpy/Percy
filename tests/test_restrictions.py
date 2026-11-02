@@ -37,6 +37,14 @@ def test_every_restriction_action_is_gated_and_none_requestable() -> None:
     assert not RESTRICTION_ACTIONS & REQUESTABLE_ACTIONS
 
 
+def _bot() -> MagicMock:
+    bot = MagicMock()
+    bot.db.get_guild_config = AsyncMock(
+        return_value=SimpleNamespace(mod_require_reason=False, mod_default_ban_delete_days=0, mod_dm_on_action=False)
+    )
+    return bot
+
+
 def _guild(member: SimpleNamespace) -> MagicMock:
     guild = MagicMock()
     guild.owner_id = 999
@@ -55,7 +63,7 @@ async def test_voicekick_requires_voice() -> None:
     guild = _guild(_member())
     mod = SimpleNamespace(id=1, top_role=10, guild_permissions=SimpleNamespace(administrator=True))
     with pytest.raises(MemberActionError) as exc:
-        await apply_member_action(MagicMock(), guild, mod, 2, action='voicekick')  # type: ignore[arg-type]
+        await apply_member_action(_bot(), guild, mod, 2, action='voicekick')  # type: ignore[arg-type]
     assert exc.value.status == 400
 
 
@@ -63,7 +71,7 @@ async def test_voicekick_disconnects_and_records_a_case() -> None:
     member = _member()
     member.voice = SimpleNamespace()
     member.move_to = AsyncMock()
-    bot = MagicMock()
+    bot = _bot()
     mod = SimpleNamespace(id=1, top_role=10, guild_permissions=SimpleNamespace(administrator=True))
     guild = _guild(member)
     result = await apply_member_action(bot, guild, mod, 2, action='voicekick', reason='r')  # type: ignore[arg-type]
@@ -75,7 +83,7 @@ async def test_voicekick_disconnects_and_records_a_case() -> None:
 async def test_nickfreeze_requires_a_name_and_persists_it() -> None:
     member = _member()
     member.edit = AsyncMock()
-    bot = MagicMock()
+    bot = _bot()
     bot.db.restrictions.upsert = AsyncMock()
     mod = SimpleNamespace(id=1, top_role=10, guild_permissions=SimpleNamespace(administrator=True))
     guild = _guild(member)
@@ -92,14 +100,14 @@ async def test_channelmute_needs_a_channel() -> None:
     guild.get_channel.return_value = None
     mod = SimpleNamespace(id=1, top_role=10, guild_permissions=SimpleNamespace(administrator=True))
     with pytest.raises(MemberActionError) as exc:
-        await apply_member_action(MagicMock(), guild, mod, 2, action='channelmute')  # type: ignore[arg-type]
+        await apply_member_action(_bot(), guild, mod, 2, action='channelmute')  # type: ignore[arg-type]
     assert exc.value.status == 400
 
 
 async def test_voiceban_duration_is_bounded() -> None:
     mod = SimpleNamespace(id=1, top_role=10, guild_permissions=SimpleNamespace(administrator=True))
     with pytest.raises(MemberActionError):
-        await apply_member_action(MagicMock(), _guild(_member()), mod, 2, action='voiceban', duration=5)  # type: ignore[arg-type]
+        await apply_member_action(_bot(), _guild(_member()), mod, 2, action='voiceban', duration=5)  # type: ignore[arg-type]
 
 
 class _FakeDB:
@@ -134,9 +142,34 @@ async def test_reapply_restores_a_frozen_nick_through_the_real_repository() -> N
     from app.database.repositories.restrictions import RestrictionsRepository
 
     row = {'kind': 'nickfreeze', 'value': 'Bob', 'expires_at': None, 'channel_id': 0}
-    bot = MagicMock()
+    bot = _bot()
     bot.db.restrictions = RestrictionsRepository(_FakeDB([row]))  # type: ignore[arg-type]
     member = SimpleNamespace(id=2, guild=SimpleNamespace(id=1), edit=AsyncMock())
     await reapply(bot, member)  # type: ignore[arg-type]
     member.edit.assert_awaited_once()
     assert member.edit.await_args.kwargs['nick'] == 'Bob'
+
+
+async def test_reapply_gives_back_sticky_roles_it_can_assign() -> None:
+    from app.cogs.restrictions.actions import reapply
+    from app.database.repositories.restrictions import RestrictionsRepository
+
+    class Role:
+        def __init__(self, role_id: int, position: int, managed: bool = False) -> None:
+            self.id, self.position, self.managed = role_id, position, managed
+
+        def is_default(self) -> bool:
+            return False
+
+        def __lt__(self, other: Role) -> bool:
+            return self.position < other.position
+
+    roles = [Role(10, 1), Role(11, 2, managed=True), Role(12, 50)]  # 11 is an integration's, 12 outranks Percy
+    guild = SimpleNamespace(id=1, roles=roles, me=SimpleNamespace(top_role=Role(99, 10)))
+    rows = [{'kind': 'stickyrole', 'value': None, 'expires_at': None, 'channel_id': r} for r in (10, 11, 12, 13)]
+    bot = _bot()
+    bot.db.restrictions = RestrictionsRepository(_FakeDB(rows))  # type: ignore[arg-type]
+    member = SimpleNamespace(id=2, guild=guild, roles=[], add_roles=AsyncMock())
+    await reapply(bot, member)  # type: ignore[arg-type]
+    member.add_roles.assert_awaited_once()
+    assert [r.id for r in member.add_roles.await_args.args] == [10]

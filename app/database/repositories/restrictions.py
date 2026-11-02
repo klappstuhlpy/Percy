@@ -58,3 +58,13 @@ class RestrictionsRepository(BaseRepository):
             RETURNING 1;
         """
         return await self.fetchval(query, guild_id, user_id, kind, channel_id) is not None
+
+    async def list_kind(self, guild_id: int, kind: str) -> list[asyncpg.Record]:
+        """Every restriction of one kind in the guild."""
+        query = "SELECT * FROM member_restrictions WHERE guild_id = $1 AND kind = $2 ORDER BY user_id, channel_id;"
+        return await self.fetch(query, guild_id, kind)
+
+    async def remove_scope(self, guild_id: int, kind: str, channel_id: int) -> None:
+        """Deletes ``kind`` restrictions of every member for one scope (a deleted role's sticky rows)."""
+        query = "DELETE FROM member_restrictions WHERE guild_id = $1 AND kind = $2 AND channel_id = $3;"
+        await self.execute(query, guild_id, kind, channel_id)

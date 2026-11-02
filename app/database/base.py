@@ -1023,6 +1023,11 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     muted_members: set[int]
     mute_role_id: int | None
     voiceban_role_id: int | None
+    mod_dm_on_action: bool
+    mod_require_reason: bool
+    mod_reinvite_on_unban: bool
+    mod_default_ban_delete_days: int
+    disabled_command_message: str | None
 
     request_channel_id: int | None
     request_role_ids: list[int]
@@ -1054,12 +1059,17 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         "audit_log_flags",
         "audit_log_webhook_url",
         "bot",
+        "disabled_command_message",
         "flags",
         "id",
         "linked_automod_rules",
         "mention_count",
         "message_log_channel_id",
+        "mod_default_ban_delete_days",
+        "mod_dm_on_action",
         "mod_log_channel_id",
+        "mod_reinvite_on_unban",
+        "mod_require_reason",
         "music_dj_mode",
         "music_panel_channel_id",
         "music_panel_message_id",
