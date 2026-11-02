@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.26.0] - 2026-11-02
+
+### Changed
+- Internal API: 131 of 218 routes now declare pydantic response models (guild, users, content, music, profile, gallery, economy, leveling, moderation, members, notifications, stats, webhooks, backup templates, role menus, starboard, watchlist, releases, comics, news). The JSON on the wire is unchanged and every model is pinned by a round-trip test; the dashboard's client types are generated from the resulting OpenAPI schema. Deliberately untyped: ok-only mutations, file/binary/stream responses, open-ended backup documents.
+
+### Fixed
+- Moderation cases now carry `pardoned`, so the dashboard's Pardon button only shows for active warns.
+- Comic series with no stored name no longer fail the series endpoints.
+
 ## [2.25.0] - 2026-11-01
 
 ### Added

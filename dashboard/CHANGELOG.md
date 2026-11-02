@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-02
+
+### Changed
+- `percy-client` response types are generated from Percy's OpenAPI schema for 131 routes (`pub use generated::*`); the hand-written structs they replace are gone. Generated types are strict: dashboard and bot deploy together.
+
+### Fixed
+- Pardon button only on active warns; comic series pages fall back to the slug when a series has no name.
+
 ## [0.22.0] - 2026-11-01
 
 ### Added
