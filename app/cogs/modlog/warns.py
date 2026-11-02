@@ -19,6 +19,7 @@ __all__ = (
     'select_threshold',
     'threshold_error',
     'warn_expiry',
+    'warn_reason_name_error',
 )
 
 #: Upper bound for ``warnpolicy expiry`` (10 years).
@@ -88,6 +89,13 @@ def resolve_warn_reason(
         return reason, 1
     points, description = preset
     return ' - '.join(part for part in (description or head, rest.strip()) if part), points
+
+
+def warn_reason_name_error(name: str) -> str | None:
+    """Why ``name`` is not a valid reason preset name (one word, at most 32 characters), or ``None``."""
+    if not name or len(name.split()) != 1 or len(name) > 32:
+        return 'name must be one word of at most 32 characters'
+    return None
 
 
 def threshold_error(count: int, action: str, seconds: int | None) -> str | None:

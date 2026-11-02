@@ -8,6 +8,7 @@ from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
+    from collections.abc import Iterable
 
     import asyncpg
 
@@ -318,6 +319,19 @@ class PlaylistsRepository(BaseRepository):
         return await self.fetchval(
             "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;",
             user_id, name, ensure_utc(created))
+
+    async def create_playlist_with_tracks(
+        self, user_id: int, name: str, created: datetime.datetime, tracks: Iterable[tuple[str, str | None, str | None]]
+    ) -> int:
+        """Creates a playlist and its ``(title, url, author)`` tracks in one transaction; a failure leaves nothing."""
+        async with self.acquire() as conn, conn.transaction():
+            playlist_id = await conn.fetchval(
+                "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;",
+                user_id, name, ensure_utc(created))
+            await conn.executemany(
+                "INSERT INTO playlist_lookup (playlist_id, name, url, author, artwork) VALUES ($1, $2, $3, $4, NULL);",
+                [(playlist_id, title, url, author) for title, url, author in tracks])
+        return playlist_id
 
     async def get_playlist_by_id(self, playlist_id: int) -> asyncpg.Record | None:
         """Fetches a playlist by its id."""

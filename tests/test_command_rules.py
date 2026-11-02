@@ -139,3 +139,48 @@ async def test_api_roundtrip_and_validation() -> None:
             await api.put_command_rule(guild, bot, api.PutCommandRuleBody(allow=True, **bad))
 
     await api.delete_command_rule(guild, bot, subject='ping', target_type='role', target_id=str(R_HI))
+
+
+async def test_api_everyone_role_is_stored_as_guild_target() -> None:
+    guild = MagicMock(id=G)
+    guild.get_role.return_value = MagicMock()
+    bot = MagicMock()
+    bot.get_command.side_effect = lambda n: MagicMock(qualified_name=n, cog_name='Meta')
+    bot.db.command_rules.list_rules = AsyncMock(return_value=())
+    bot.db.command_rules.set_rule = AsyncMock()
+    bot.db.command_rules.remove_rule = AsyncMock(return_value=True)
+    bot.db.get_custom_command_index = AsyncMock(return_value=CustomCommandIndex())
+    body = api.PutCommandRuleBody(subject='ping', target_type='role', target_id=str(G), allow=False)
+    await api.put_command_rule(guild, bot, body)
+    bot.db.command_rules.set_rule.assert_awaited_once_with(G, 'ping', 'guild', G, False)
+    await api.delete_command_rule(guild, bot, subject='ping', target_type='role', target_id=str(G))
+    bot.db.command_rules.remove_rule.assert_awaited_once_with(G, 'ping', 'guild', G)
+
+
+async def test_rule_target_everyone_role_maps_to_guild() -> None:
+    import discord
+    from discord.ext import commands
+
+    from app.cogs.config import RuleTarget
+
+    ctx = MagicMock()
+    ctx.guild.id = G
+    role = MagicMock(spec=discord.Role, id=G)
+    with pytest.MonkeyPatch.context() as mp:
+        async def fail(self: object, ctx: object, arg: str) -> None:
+            raise commands.BadArgument('x')
+
+        async def ok(self: object, ctx: object, arg: str) -> object:
+            return role
+
+        mp.setattr(commands.MemberConverter, 'convert', fail)
+        mp.setattr(commands.RoleConverter, 'convert', ok)
+        assert await RuleTarget().convert(ctx, '@everyone-role') == ('guild', G)
+
+
+async def test_check_rules_fails_open_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    guild, member, channel = _member()
+    db = MagicMock(get_command_rules=AsyncMock(side_effect=RuntimeError('db down')))
+    with caplog.at_level('WARNING'):
+        assert (await check_rules(db, guild, member, channel, 'ping', 'Meta')).allowed is None
+    assert str(G) in caplog.text

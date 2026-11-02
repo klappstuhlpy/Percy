@@ -18,6 +18,7 @@ from app.cogs.modlog.warns import (
     select_threshold,
     threshold_error,
     warn_expiry,
+    warn_reason_name_error,
 )
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, PermissionTemplate, command, describe, group
@@ -450,6 +451,9 @@ class ModLog(Cog):
     ) -> None:
         """Add or replace a preset."""
         assert ctx.guild is not None
+        if error := warn_reason_name_error(name):
+            await ctx.send_error(error.capitalize() + '.')
+            return
         await self.bot.db.cases.set_warn_reason(ctx.guild.id, name.lower(), points, description)
         await ctx.send_success(f'Preset **{name.lower()}**: {points} point(s).')
 

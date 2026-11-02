@@ -127,17 +127,23 @@ async def lift_voiceban(bot: Bot, guild: discord.Guild, member: discord.Member, 
     await bot.db.restrictions.remove(guild.id, member.id, 'voiceban')
 
 
-async def apply_nick(member: discord.Member, nickname: str | None, reason: str | None) -> None:
-    """Sets the nickname; blank resets it."""
-    await member.edit(nick=_nickname(nickname), reason=reason)
+async def apply_nick(bot: Bot, member: discord.Member, nickname: str | None, reason: str | None) -> None:
+    """Sets the nickname; blank resets it. On a frozen member the freeze follows the new name (a reset is refused)."""
+    name = _nickname(nickname)
+    if await bot.db.restrictions.get(member.guild.id, member.id, 'nickfreeze') is not None:
+        if name is None:
+            raise MemberActionError(400, "the member's nickname is frozen; unfreeze it first")
+        await bot.db.restrictions.upsert(member.guild.id, member.id, 'nickfreeze', value=name)
+    await member.edit(nick=name, reason=reason)
 
 
 async def apply_nickfreeze(bot: Bot, member: discord.Member, nickname: str | None, reason: str | None) -> None:
     name = _nickname(nickname)
     if name is None:
         raise MemberActionError(400, 'nickfreeze requires a nickname')
-    await member.edit(nick=name, reason=reason)
+    # Row first: the edit fires on_member_update, whose revert must see the new value, not the old one.
     await bot.db.restrictions.upsert(member.guild.id, member.id, 'nickfreeze', value=name)
+    await member.edit(nick=name, reason=reason)
 
 
 async def lift_nickfreeze(bot: Bot, member: discord.Member) -> None:

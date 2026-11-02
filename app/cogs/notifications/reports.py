@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from app.cogs.moderation.member_actions import HIERARCHY_ACTIONS, MemberActionError, apply_member_action
-from app.services.reports import REPORT_ACTIONS, check_report_rate, report_channel_error, report_meta
+from app.services.reports import REPORT_ACTIONS, can_post_report, check_report_rate, report_channel_error, report_meta
 from app.utils import truncate
 from app.utils.checks import hierarchy_error
 
@@ -59,9 +59,14 @@ async def report_setup_error(bot: Bot, guild: discord.Guild) -> str | None:
     """A refusal for the reporter when the guild has no usable report channel, else ``None``."""
     config = await bot.db.get_guild_config(guild.id)
     channel = guild.get_channel(config.request_channel_id) if config.request_channel_id else None
-    can_post = isinstance(channel, discord.TextChannel) and channel.permissions_for(guild.me).send_messages
+    can_post = False
+    if isinstance(channel, discord.TextChannel):
+        perms = channel.permissions_for(guild.me)
+        can_post = can_post_report(
+            view_channel=perms.view_channel, send_messages=perms.send_messages, embed_links=perms.embed_links
+        )
     return report_channel_error(
-        configured=bool(config.request_channel_id), exists=isinstance(channel, discord.TextChannel), can_post=bool(can_post)
+        configured=bool(config.request_channel_id), exists=isinstance(channel, discord.TextChannel), can_post=can_post
     )
 
 

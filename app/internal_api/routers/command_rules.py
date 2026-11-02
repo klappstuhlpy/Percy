@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.core.permissions import custom_command_name, normalize_rule_subject
-from app.services.command_rules import TARGET_TYPES
+from app.services.command_rules import TARGET_TYPES, canonical_target_type
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id
@@ -38,7 +38,7 @@ class PutCommandRuleBody(BaseModel):
 
 def _target(
     bot, guild, subject: str, target_type: str, target_id: object, *, strict: bool = True, custom: str | None = None
-) -> tuple[str, int]:
+) -> tuple[str, str, int]:
     canonical = normalize_rule_subject(bot, subject) or custom
     if canonical is None and not strict:
         canonical = subject  # a rule for a since-removed command must stay deletable
@@ -53,7 +53,7 @@ def _target(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='target_id is not a role in this server')
     if target_type in ('channel', 'category') and guild.get_channel(tid) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'target_id is not a {target_type} in this server')
-    return canonical, tid
+    return canonical, canonical_target_type(target_type, tid, guild.id), tid
 
 
 @router.get("/command-rules")
@@ -67,8 +67,8 @@ async def list_command_rules(guild: GuildDep, bot: BotDep) -> CommandRulesRespon
 @router.put("/command-rules")
 async def put_command_rule(guild: GuildDep, bot: BotDep, body: PutCommandRuleBody) -> CommandRulesResponse:
     custom = None if normalize_rule_subject(bot, body.subject) else await custom_command_name(bot.db, guild, body.subject)
-    subject, tid = _target(bot, guild, body.subject, body.target_type, body.target_id, custom=custom)
-    await bot.db.command_rules.set_rule(guild.id, subject, body.target_type, tid, body.allow)
+    subject, target_type, tid = _target(bot, guild, body.subject, body.target_type, body.target_id, custom=custom)
+    await bot.db.command_rules.set_rule(guild.id, subject, target_type, tid, body.allow)
     return await list_command_rules(guild, bot)
 
 
@@ -80,6 +80,6 @@ async def delete_command_rule(
     target_type: str = Query(...),
     target_id: str = Query(...),
 ) -> None:
-    canonical, tid = _target(bot, guild, subject, target_type, target_id, strict=False)
+    canonical, target_type, tid = _target(bot, guild, subject, target_type, target_id, strict=False)
     if not await bot.db.command_rules.remove_rule(guild.id, canonical, target_type, tid):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='no such rule')

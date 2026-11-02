@@ -2491,12 +2491,9 @@ class Music(Cog):
             await ctx.send_error("There is already a playlist with this name, please choose another name.")
             return
 
-        playlist_id = await self.bot.db.playlists.create_playlist(ctx.author.id, name, discord.utils.utcnow())
-        if playlist_id is None:
-            await ctx.send_error("Could not create the playlist.")
-            return
-        for track in parsed.tracks:
-            await self.bot.db.playlists.add_track(playlist_id, track.title, track.uri, author=track.author)
+        playlist_id = await self.bot.db.playlists.create_playlist_with_tracks(
+            ctx.author.id, name, discord.utils.utcnow(), [(t.title, t.uri, t.author) for t in parsed.tracks]
+        )
         self.get_playlists.invalidate(ctx.author.id)
         await ctx.send_success(f"Imported **{name}** [`{playlist_id}`] with **{len(parsed.tracks)}** tracks.")
 

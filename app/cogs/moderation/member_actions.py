@@ -273,7 +273,7 @@ async def apply_member_action(
                 elif action == 'voiceunban':
                     await restrict.lift_voiceban(bot, guild, member, reason)
                 elif action == 'nick':
-                    await restrict.apply_nick(member, nickname, reason)
+                    await restrict.apply_nick(bot, member, nickname, reason)
                 elif action == 'nickfreeze':
                     await restrict.apply_nickfreeze(bot, member, nickname, reason)
                 elif action == 'nickunfreeze':

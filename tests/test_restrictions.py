@@ -173,3 +173,24 @@ async def test_reapply_gives_back_sticky_roles_it_can_assign() -> None:
     await reapply(bot, member)  # type: ignore[arg-type]
     member.add_roles.assert_awaited_once()
     assert [r.id for r in member.add_roles.await_args.args] == [10]
+
+
+async def test_nickfreeze_persists_before_editing_and_nick_follows_the_freeze() -> None:
+    from app.cogs.restrictions import actions
+
+    order: list[str] = []
+    member = _member()
+    member.guild = SimpleNamespace(id=7)
+    member.edit = AsyncMock(side_effect=lambda **kw: order.append('edit'))
+    bot = _bot()
+    bot.db.restrictions.upsert = AsyncMock(side_effect=lambda *a, **kw: order.append('upsert'))
+    await actions.apply_nickfreeze(bot, member, 'Bob', None)  # type: ignore[arg-type]
+    assert order == ['upsert', 'edit']
+
+    order.clear()
+    bot.db.restrictions.get = AsyncMock(return_value={'value': 'Bob'})
+    await actions.apply_nick(bot, member, 'Al', None)  # type: ignore[arg-type]
+    assert order == ['upsert', 'edit']
+    bot.db.restrictions.upsert.assert_awaited_with(7, 2, 'nickfreeze', value='Al')
+    with pytest.raises(MemberActionError):
+        await actions.apply_nick(bot, member, ' ', None)  # type: ignore[arg-type]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Literal, NamedTuple, Union
@@ -9,6 +10,8 @@ from discord.ext import commands
 from discord.flags import flag_value
 
 from app.services.command_rules import Decision, Invocation, resolve
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -357,6 +360,7 @@ async def check_rules(
         rules = await db.get_command_rules(guild.id)
     except Exception:
         # A cache/DB hiccup must never harden into a lockout.
+        log.warning("Command rules of guild %s could not be loaded; failing open.", guild.id, exc_info=True)
         return Decision(None, reason="Rules could not be loaded.")
     if not rules:
         return Decision(None)

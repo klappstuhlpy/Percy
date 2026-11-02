@@ -14,7 +14,7 @@ from app.core.errors import CommandDisabled
 from app.core.models import PermissionSpec, PermissionTemplate, cooldown, describe, group
 from app.core.pagination import LinePaginator
 from app.core.permissions import check_rules, custom_command_name, normalize_rule_subject
-from app.services.command_rules import Decision
+from app.services.command_rules import Decision, canonical_target_type
 from app.services.moderation_settings import DISABLED_MESSAGE_VARIABLES, check_disabled_message, render_disabled_message
 from app.utils import cache, get_asset_url, helpers
 
@@ -96,7 +96,9 @@ class RuleTarget(commands.Converter["tuple[str, int]"]):
                 obj = await converter().convert(ctx, argument)
             except commands.BadArgument:
                 continue
-            return ("category" if isinstance(obj, discord.CategoryChannel) else kind), obj.id
+            if isinstance(obj, discord.CategoryChannel):
+                kind = "category"
+            return canonical_target_type(kind, obj.id, ctx.guild.id), obj.id
         raise commands.BadArgument(f"{argument!r} is not a member, role, channel, category or `server`.")
 
 

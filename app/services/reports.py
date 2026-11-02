@@ -14,6 +14,7 @@ __all__ = (
     "NOT_SET_UP",
     "PAIR_COOLDOWN",
     "REPORT_ACTIONS",
+    "can_post_report",
     "check_report_rate",
     "report_channel_error",
     "report_meta",
@@ -63,3 +64,8 @@ def report_meta(
 def report_channel_error(*, configured: bool, exists: bool, can_post: bool) -> str | None:
     """The refusal shown to a reporter when there is nowhere to deliver the report, else ``None``."""
     return None if configured and exists and can_post else NOT_SET_UP
+
+
+def can_post_report(*, view_channel: bool, send_messages: bool, embed_links: bool) -> bool:
+    """Whether the bot may deliver a report (an embed with buttons) to the report channel."""
+    return view_channel and send_messages and embed_links

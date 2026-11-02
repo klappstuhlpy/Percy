@@ -59,3 +59,12 @@ def test_report_channel_required() -> None:
         {"configured": True, "exists": True, "can_post": False},
     ):
         assert report_channel_error(**kw) == NOT_SET_UP
+
+
+def test_can_post_report_needs_view_send_and_embed() -> None:
+    from app.services.reports import can_post_report
+
+    assert can_post_report(view_channel=True, send_messages=True, embed_links=True)
+    assert not can_post_report(view_channel=True, send_messages=True, embed_links=False)
+    assert not can_post_report(view_channel=False, send_messages=True, embed_links=True)
+    assert not can_post_report(view_channel=True, send_messages=False, embed_links=True)

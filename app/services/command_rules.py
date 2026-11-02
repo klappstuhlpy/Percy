@@ -14,9 +14,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
-__all__ = ('TARGET_TYPES', 'Decision', 'Invocation', 'Rule', 'resolve', 'subjects_for')
+__all__ = ('TARGET_TYPES', 'Decision', 'Invocation', 'Rule', 'canonical_target_type', 'resolve', 'subjects_for')
 
 TARGET_TYPES = ('user', 'role', 'channel', 'category', 'guild')
+
+
+def canonical_target_type(target_type: str, target_id: int, guild_id: int) -> str:
+    """``@everyone`` (the role whose id is the guild's) is stored as the ``guild`` target, the only one that matches."""
+    return 'guild' if target_type == 'role' and target_id == guild_id else target_type
 
 
 @dataclass(frozen=True)

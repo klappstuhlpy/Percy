@@ -256,9 +256,11 @@ async def delete_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep) -
 @router.put("/warn-policy/reasons/{name}")
 async def put_warn_reason(name: str, bot: BotDep, guild: GuildDep, body: WarnReasonBody) -> WarnPolicy:
     """Adds or replaces a reason preset (a name worth N points, with the text it records)."""
+    from app.cogs.modlog.warns import warn_reason_name_error
+
     name = name.strip().lower()
-    if not name or ' ' in name or len(name) > 32:
-        raise HTTPException(status_code=400, detail='name must be one word of at most 32 characters')
+    if error := warn_reason_name_error(name):
+        raise HTTPException(status_code=400, detail=error)
     if not 1 <= body.points <= 100:
         raise HTTPException(status_code=400, detail='points must be between 1 and 100')
     await bot.db.cases.set_warn_reason(guild.id, name, body.points, body.description.strip() or None)

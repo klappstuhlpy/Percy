@@ -313,7 +313,7 @@
             durationForever.hidden = !action.optionalDuration;
             duration.value = '3600';
             purgeField.hidden = !action.purgeDays;
-            purgeDays.value = '0';
+            purgeDays.value = '';
             limitField.hidden = !action.limit;
             limitInput.value = '100';
             nicknameField.hidden = !action.nickname;
@@ -336,7 +336,8 @@
         const action = ACTIONS[pending];
         const body = { action: pending, reason: reason.value.trim() || undefined };
         if (action.duration && duration.value) body.duration = parseInt(duration.value, 10);
-        if (action.purgeDays) body.delete_message_days = parseInt(purgeDays.value, 10);
+        // Blank = server default: sending a value would override mod_default_ban_delete_days.
+        if (action.purgeDays && purgeDays.value !== '') body.delete_message_days = parseInt(purgeDays.value, 10);
         if (action.limit) body.limit = parseInt(limitInput.value, 10);
         if (action.nickname) body.nickname = nicknameInput.value.trim();
         if (action.channel) body.channel_id = channelInput.value.trim();

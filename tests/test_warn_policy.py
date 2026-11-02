@@ -64,3 +64,11 @@ def test_unknown_or_missing_reason_is_one_point() -> None:
     assert resolve_warn_reason('spammer', PRESETS) == ('spammer', 1)  # whole word only
     assert resolve_warn_reason(None, PRESETS) == (None, 1)
     assert resolve_warn_reason('  ', PRESETS) == ('  ', 1)
+
+
+def test_warn_reason_name_error() -> None:
+    from app.cogs.modlog.warns import warn_reason_name_error
+
+    assert warn_reason_name_error('spam') is None
+    for bad in ('', 'two words', 'x' * 33):
+        assert warn_reason_name_error(bad)
