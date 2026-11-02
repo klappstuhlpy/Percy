@@ -1034,7 +1034,7 @@ mod tests {
         let fake = axum::Router::new()
             .route(
                 "/api/v1/users/42/guilds",
-                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "owner": false}])) }),
+                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "icon_url": null, "member_count": 1, "owner": false, "manageable": false, "music_playing": false}])) }),
             )
             .route(
                 "/api/v1/guilds/5/music/control",
@@ -1070,7 +1070,7 @@ mod tests {
         let fake = axum::Router::new()
             .route(
                 "/api/v1/users/42/guilds",
-                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "owner": false}])) }),
+                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "icon_url": null, "member_count": 1, "owner": false, "manageable": false, "music_playing": false}])) }),
             )
             .route(
                 "/api/v1/guilds/5/music/audio",
@@ -1131,7 +1131,7 @@ mod tests {
             )
             .route(
                 "/api/v1/users/42/guilds",
-                axum::routing::get(|| async { Json(json!([{"id": "7001", "name": "Home", "owner": false}])) }),
+                axum::routing::get(|| async { Json(json!([{"id": "7001", "name": "Home", "icon_url": null, "member_count": 1, "owner": false, "manageable": false, "music_playing": false}])) }),
             )
             .route(
                 "/api/v1/users/42/music",

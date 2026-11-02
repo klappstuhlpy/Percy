@@ -560,6 +560,7 @@ mod rank_card_tests {
     #[test]
     fn a_locked_server_hides_the_member_editor() {
         let card: percy_client::RankCard = serde_json::from_value(serde_json::json!({
+            "style": {}, "guild_default": {}, "effective": {},
             "locked": true,
             "options": {"theme": [{"value": "panel", "label": "Panel"}]},
         }))
@@ -567,6 +568,7 @@ mod rank_card_tests {
         assert!(CardField::from_rank_card(&card).is_empty());
 
         let open: percy_client::RankCard = serde_json::from_value(serde_json::json!({
+            "style": {}, "effective": {}, "locked": false,
             "guild_default": {"theme": "ink"},
             "options": {"theme": [{"value": "panel", "label": "Panel"}, {"value": "ink", "label": "Ink"}]},
         }))

@@ -132,8 +132,8 @@ small and self-contained first.
 | `leveling.py` | 12 | |
 | `economy.py` | 15 | |
 | `music.py` | 18 | |
-| `guild.py` | 20 | **done (typed: config, ai, ai/ask, roles, channels, sentinel GET, health; `{ok}`-style replies left as dict)** | biggest config surface; `Option` leniency matters most here |
-| `users.py` | 21 | includes PNG-preview and data-export routes (leave non-JSON alone) |
+| `guild.py` | 20 | biggest config surface; `Option` leniency matters most here |
+| `users.py` | 21 | **done**: guilds, avatar, settings GET, history, rank-card GET, reminders GET, playlist GET/PATCH/POST. Untyped: `{ok}`/`{liked}` replies, `GET /music` (`recent` needs music.py's history item), PNG preview, data export |
 | `content.py` | 37 | split by sub-domain (polls, giveaways, tags, commands, ...) |
 
 Routes can be migrated in any order and in parallel: the only shared files are `types.rs`/`lib.rs`
