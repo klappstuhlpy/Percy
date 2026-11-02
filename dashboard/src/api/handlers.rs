@@ -173,7 +173,7 @@ pub(crate) async fn guild(State(app): State<AppState>, Extension(c): Extension<C
     let p = percy(&app)?;
     let (info, economy) = tokio::join!(p.get_guild_api(c.guild_id), p.get_economy_api(c.guild_id));
     let (info, economy) = (info.map_err(from_percy)?, economy.map_err(from_percy)?);
-    let settings = economy.settings.unwrap_or_default();
+    let settings = economy.settings;
     ok(json!({
         "id": info.id.to_string(),
         "name": info.name,
@@ -362,7 +362,7 @@ pub(crate) async fn item(
 ) -> ApiResult {
     let id = ids(path, 2)?[0];
     let eco = percy(&app)?.get_economy_api(c.guild_id).await.map_err(from_percy)?;
-    match eco.items.into_iter().find(|i| i.id == id) {
+    match eco.items.into_iter().find(|i| i.id as u64 == id) {
         Some(i) => ok(json!(i)),
         None => Err(ApiError::new(
             StatusCode::NOT_FOUND,
@@ -418,7 +418,7 @@ pub(crate) async fn patch_item(
 
 async fn item_after(p: &PercyClient, guild: u64, id: u64) -> ApiResult {
     let eco = p.get_economy_api(guild).await.map_err(from_percy)?;
-    match eco.items.into_iter().find(|i| i.id == id) {
+    match eco.items.into_iter().find(|i| i.id as u64 == id) {
         Some(i) => ok(json!(i)),
         None => Err(ApiError::new(
             StatusCode::NOT_FOUND,

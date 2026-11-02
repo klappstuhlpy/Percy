@@ -300,8 +300,8 @@ impl MusicAppTemplate {
         self.viewer.as_ref().map_or("visitor", |v| v.role.as_str())
     }
     /// `m:ss` for a millisecond length.
-    pub(crate) fn dur(&self, ms: &Option<u64>) -> String {
-        ms.map_or_else(String::new, crate::music_app::fmt_ms)
+    pub(crate) fn dur<T: Copy + TryInto<u64>>(&self, ms: &Option<T>) -> String {
+        ms.map_or_else(String::new, |m| crate::music_app::fmt_ms(m.try_into().unwrap_or(0)))
     }
     pub(crate) fn guild_id(&self) -> &str {
         self.selected.as_ref().map_or("", |g| g.id.as_str())
@@ -319,8 +319,8 @@ impl MusicAppTemplate {
         }
     }
     /// `m:ss` for a plain millisecond count.
-    pub(crate) fn ms(&self, ms: &u64) -> String {
-        crate::music_app::fmt_ms(*ms)
+    pub(crate) fn ms(&self, ms: &i64) -> String {
+        crate::music_app::fmt_ms((*ms).max(0) as u64)
     }
     /// Gradient slot (0-7) for artwork fallbacks; `static/js/music/app.js` `grad()` mirrors it.
     pub(crate) fn grad(&self, seed: &str) -> u32 {
@@ -821,12 +821,12 @@ mod tests {
             name: name.into(),
             description: Some("desc".into()),
             price: 500,
-            effect: Some("none".into()),
+            effect: "none".into(),
             effect_value: None,
             duration_minutes: None,
             emoji: Some("\u{1f381}".into()),
-            rarity: Some("epic".into()),
-            category: Some("collectible".into()),
+            rarity: "epic".into(),
+            category: "collectible".into(),
             stock,
             max_per_user: Some(3),
             required_role_id: Some("7".into()),
@@ -849,7 +849,7 @@ mod tests {
                     item(2, "Padlock", Some("padlock"), None),
                 ],
                 lottery: None,
-                settings: None,
+                settings: EconomySettings::default(),
             },
             eco_settings: EconomySettings::default(),
             balances: BalancesResponse {

@@ -1034,7 +1034,7 @@ mod tests {
         let fake = axum::Router::new()
             .route(
                 "/api/v1/users/42/guilds",
-                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "owner": false}])) }),
+                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "icon_url": null, "member_count": 1, "owner": false, "manageable": false, "music_playing": false}])) }),
             )
             .route(
                 "/api/v1/guilds/5/music/control",
@@ -1070,13 +1070,13 @@ mod tests {
         let fake = axum::Router::new()
             .route(
                 "/api/v1/users/42/guilds",
-                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "owner": false}])) }),
+                axum::routing::get(|| async { Json(json!([{"id": "5", "name": "Home", "icon_url": null, "member_count": 1, "owner": false, "manageable": false, "music_playing": false}])) }),
             )
             .route(
                 "/api/v1/guilds/5/music/audio",
                 axum::routing::post(move |Json(v): Json<Value>| async move {
                     a.lock().unwrap().push(v);
-                    Json(json!({"active": true, "effects": ["8d"]}))
+                    Json(json!({"active": true, "equalizer": {"preset": null, "bands": []}, "filters": {}, "effects": ["8d"], "presets": {}}))
                 }),
             )
             .route(
@@ -1126,12 +1126,12 @@ mod tests {
                 "/api/v1/guilds/7001/music/album",
                 axum::routing::get(move || async move {
                     album_hits.fetch_add(1, SeqCst);
-                    Json(json!({"album": {"title": "Glass Tides", "artists": ["Nova Quill"]}, "tracks": []}))
+                    Json(json!({"album": {"title": "Glass Tides", "kind": "album", "year": null, "artists": ["Nova Quill"], "artwork": null, "url": null, "total_ms": 0}, "tracks": []}))
                 }),
             )
             .route(
                 "/api/v1/users/42/guilds",
-                axum::routing::get(|| async { Json(json!([{"id": "7001", "name": "Home", "owner": false}])) }),
+                axum::routing::get(|| async { Json(json!([{"id": "7001", "name": "Home", "icon_url": null, "member_count": 1, "owner": false, "manageable": false, "music_playing": false}])) }),
             )
             .route(
                 "/api/v1/users/42/music",
@@ -1148,7 +1148,7 @@ mod tests {
                     }
                     (
                         StatusCode::OK,
-                        Json(json!({"results": [{"title": "New", "author": "Band", "uri": "u1"}]})),
+                        Json(json!({"results": [track_json("New", "Band", "u1")]})),
                     )
                 }),
             );
@@ -1248,7 +1248,7 @@ mod tests {
         .unwrap();
         assert_eq!(top_artists(&top), vec!["The Quiet Hours", "Lumen & Vale"]);
         let t = |title: &str, uri: &str| -> percy_client::MusicTrack {
-            serde_json::from_value(json!({"title": title, "author": "x", "uri": uri})).unwrap()
+            serde_json::from_value(track_json(title, "x", uri)).unwrap()
         };
         let out = build_recommendations(
             &top,
@@ -1332,20 +1332,28 @@ mod render_tests {
         let queue: Vec<Value> = TRACKS[2..9]
             .iter()
             .enumerate()
-            .map(|(i, (t, a))| json!({"title": t, "author": a, "duration": 150_000 + i as u64 * 17_000, "autoplay": i >= 5, "artwork": fake_art(i + 2), "artist_url": format!("https://example.com/artist/{a}")}))
+            .map(|(i, (t, a))| {
+                let mut v = track_json(t, a, "u");
+                v["duration"] = json!(150_000 + i as u64 * 17_000);
+                v["autoplay"] = json!(i >= 5);
+                v["artwork"] = json!(fake_art(i + 2));
+                v["artist_url"] = json!(format!("https://example.com/artist/{a}"));
+                v
+            })
             .collect();
         let mut m = json!({
-            "active": playing, "equalizer": vec![0.0f64; 15], "filters": {}, "presets": ["Flat", "Bass boost", "Vocal"],
+            "active": playing, "equalizer": vec![0.0f64; 15], "filters": {"nightcore": false, "8d": false, "lowpass": null}, "presets": ["Flat", "Bass boost", "Vocal"],
             "queue": if playing { queue } else { vec![] },
-            "channel_name": "Lounge", "listeners": ["1", "2", "3", "4", "5"],
+            "channel": null, "channel_name": "Lounge", "history": [], "now_playing": null, "always_on": {"enabled": false, "mode": null, "source": null}, "listeners": ["1", "2", "3", "4", "5"],
             "setup": {"channel_id": null, "message_id": null, "use_panel": true, "dj_mode": 2},
         });
         if playing {
             m["now_playing"] = json!({
                 "title": TRACKS[0].0, "author": TRACKS[0].1, "duration": 214_000, "position": 81_000,
                 "uri": "https://example.com/track/paper-lanterns", "volume": 64, "loop": 0, "shuffle": false,
-                "requester": {"id": "7", "name": "Ferris"}, "artwork": fake_art(0),
+                "requester": {"id": "7", "name": "Ferris", "avatar": null}, "artwork": fake_art(0),
                 "artist_url": "https://example.com/artist/the-quiet-hours", "album": {"name": "Glass Tides", "url": "https://example.com/album/glass-tides"},
+                "is_stream": false, "source": null, "autoplay": 0, "playlist": null, "recommended": false, "isrc": null, "paused": false,
             });
         }
         serde_json::from_value(m).unwrap()
@@ -1360,7 +1368,7 @@ mod render_tests {
                 author: Some((*a).into()),
                 uri: Some(format!("https://example.com/track/{i}")),
                 artwork: (i % 3 != 2).then(|| fake_art(i)),
-                length_ms: Some(170_000 + i as u64 * 9_000),
+                length_ms: Some(170_000 + i as i64 * 9_000),
                 played_at: format!("2026-10-25T1{}:00:00", i % 10),
                 ..Default::default()
             })
@@ -1567,4 +1575,13 @@ mod render_tests {
             std::fs::write(dir.join(format!("{name}.html")), html).unwrap();
         }
     }
+}
+
+/// A complete track as Percy sends it (the generated `QueueTrack` has no lenient defaults).
+#[cfg(test)]
+fn track_json(title: &str, author: &str, uri: &str) -> serde_json::Value {
+    serde_json::json!({
+        "title": title, "author": author, "uri": uri, "artwork": null, "duration": 0, "is_stream": false,
+        "source": null, "requester": null, "autoplay": false, "artist_url": null, "album": null,
+    })
 }

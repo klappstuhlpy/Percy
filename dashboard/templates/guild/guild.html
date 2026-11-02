@@ -239,7 +239,7 @@
                 <label class="config-label" for="status-feed-channel">Announcement Channel</label>
                 <select id="status-feed-channel" class="config-select">
                     <option value="">Select a channel…</option>
-                    {% for ch in channels %}{% if ch.channel_type == "text" || ch.channel_type == "news" %}
+                    {% for ch in channels %}{% if ch.type_ == "text" || ch.type_ == "news" %}
                     <option value="{{ ch.id }}" {% if status_feed.channel.is_some() &&
                             status_feed.channel.as_ref().unwrap().id== ch.id %} selected{% endif %}>#{{ ch.name }}
                     </option>
@@ -334,7 +334,7 @@
                 <label class="config-label" for="ai-override-channel">Channel</label>
                 <select id="ai-override-channel" class="config-select">
                     <option value="">Select a channel…</option>
-                    {% for ch in channels %}{% if ch.channel_type == "text" || ch.channel_type == "news" %}
+                    {% for ch in channels %}{% if ch.type_ == "text" || ch.type_ == "news" %}
                     <option value="{{ ch.id }}">#{{ ch.name }}</option>
                     {% endif %}{% endfor %}
                 </select>
@@ -404,7 +404,7 @@
             <label class="quick-check"><input type="radio" name="qs_where" value="existing"> Use an existing channel</label>
             <select id="qs-channel" class="config-select" data-needs="post" disabled aria-label="Existing log channel">
                 <option value="">Pick a channel…</option>
-                {% for ch in channels %}{% if ch.channel_type == "text" %}
+                {% for ch in channels %}{% if ch.type_ == "text" %}
                 <option value="{{ ch.id }}">#{{ ch.name }}</option>
                 {% endif %}{% endfor %}
             </select>
@@ -589,7 +589,7 @@
                 {% for ent in guild.ignored_entities %}
                 <tr data-entity-id="{{ ent.id }}">
                     <td data-label="Name"><strong>{{ ent.name }}</strong></td>
-                    <td data-label="Type"><span class="pill pending">{{ ent.entity_type }}</span></td>
+                    <td data-label="Type"><span class="pill pending">{{ ent.type_ }}</span></td>
                     <td class="col-actions">
                         <button type="button" class="button small danger ignore-remove-btn"
                                 data-entity-id="{{ ent.id }}">Remove
@@ -613,7 +613,7 @@
         <div class="mod-lockdown-add">
             <select id="lockdown-select" class="config-select" multiple size="6" aria-label="Channels to lock" data-placeholder="Pick channels to lock…">
                 {% for ch in channels %}
-                {% if ch.channel_type == "text" || ch.channel_type == "voice" || ch.channel_type == "news" %}
+                {% if ch.type_ == "text" || ch.type_ == "voice" || ch.type_ == "news" %}
                 <option value="{{ ch.id }}">#{{ ch.name }}</option>
                 {% endif %}
                 {% endfor %}
@@ -691,7 +691,7 @@
                 <label class="quick-check"><input type="radio" name="qs_gk_channel" value="existing"> Use an existing channel</label>
                 <select id="qs-gk-channel" class="config-select" data-needs="post" disabled aria-label="Existing verification channel">
                     <option value="">Pick a channel…</option>
-                    {% for ch in channels %}{% if ch.channel_type == "text" %}
+                    {% for ch in channels %}{% if ch.type_ == "text" %}
                     <option value="{{ ch.id }}">#{{ ch.name }}</option>
                     {% endif %}{% endfor %}
                 </select>

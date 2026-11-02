@@ -383,6 +383,7 @@ pub async fn guild_overview(
     };
 
     let bot_stats = bot_stats.unwrap_or(BotStats {
+        ai: None,
         version: None,
         guild_count: 0,
         user_count: 0,
@@ -398,7 +399,7 @@ pub async fn guild_overview(
         equalizer: vec![0.0; 15],
         filters: MusicFiltersState {
             nightcore: false,
-            eight_d: false,
+            x8d: false,
             lowpass: None,
         },
         presets: vec![],
@@ -425,7 +426,7 @@ pub async fn guild_overview(
     let economy = economy.unwrap_or(EconomyInfo {
         items: Vec::new(),
         lottery: None,
-        settings: None,
+        settings: percy_client::EconomySettings::default(),
     });
     let games = games.unwrap_or_default();
     let balances = balances.unwrap_or(BalancesResponse {
@@ -560,6 +561,7 @@ mod rank_card_tests {
     #[test]
     fn a_locked_server_hides_the_member_editor() {
         let card: percy_client::RankCard = serde_json::from_value(serde_json::json!({
+            "style": {}, "guild_default": {}, "effective": {},
             "locked": true,
             "options": {"theme": [{"value": "panel", "label": "Panel"}]},
         }))
@@ -567,6 +569,7 @@ mod rank_card_tests {
         assert!(CardField::from_rank_card(&card).is_empty());
 
         let open: percy_client::RankCard = serde_json::from_value(serde_json::json!({
+            "style": {}, "effective": {}, "locked": false,
             "guild_default": {"theme": "ink"},
             "options": {"theme": [{"value": "panel", "label": "Panel"}, {"value": "ink", "label": "Ink"}]},
         }))

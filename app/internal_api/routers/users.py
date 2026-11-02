@@ -18,6 +18,7 @@ from app.rendering.card_style import clean_style, resolve_style, style_options
 from app.services.lyrics import display_title
 
 from ..dependencies import BotDep, verify_token
+from .leveling import CardOption  # noqa: TC001 - pydantic resolves it at runtime
 from .music import serialize_play
 
 if TYPE_CHECKING:
@@ -50,35 +51,128 @@ class RankCardPreviewBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response models — the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md). Class names are the Rust type names.
+# ---------------------------------------------------------------------------
+
+
+class UserGuild(BaseModel):
+    id: str
+    name: str
+    icon_url: str | None
+    member_count: int | None
+    owner: bool
+    manageable: bool
+    music_playing: bool
+
+
+class UserAvatar(BaseModel):
+    avatar_url: str
+    username: str
+
+
+class UserSettings(BaseModel):
+    timezone: str | None
+    track_presence: bool
+    track_history: bool
+
+
+class HistoryNameEntry(BaseModel):
+    name: str
+    changed_at: str | None
+
+
+class HistoryAvatarEntry(BaseModel):
+    image: str
+    changed_at: str | None
+
+
+class HistoryPresenceEntry(BaseModel):
+    status: str | None
+    status_before: str | None
+    changed_at: str | None
+
+
+class UserHistory(BaseModel):
+    usernames: list[HistoryNameEntry]
+    nicknames: list[HistoryNameEntry]
+    avatars: list[HistoryAvatarEntry]
+    presence: list[HistoryPresenceEntry]
+
+
+class RankCard(BaseModel):
+    style: dict[str, str]
+    guild_default: dict[str, str]
+    locked: bool
+    effective: dict[str, str]
+    options: dict[str, list[CardOption]]
+
+
+class Reminder(BaseModel):
+    id: int
+    expires: str
+    message: str
+    repeats: str | None
+    shared_with: int
+
+
+class RemindersResponse(BaseModel):
+    reminders: list[Reminder]
+
+
+class PlaylistTrack(BaseModel):
+    name: str
+    url: str
+    author: str | None
+    artwork: str | None
+
+
+class PlaylistSummary(BaseModel):
+    id: str
+    name: str
+    track_count: int
+    thumbnail: str | None
+    cover: str | None
+
+
+class PlaylistDetail(BaseModel):
+    id: str
+    name: str
+    thumbnail: str | None
+    cover: str | None
+    tracks: list[PlaylistTrack]
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.get("/guilds")
-async def get_user_guilds(discord_id: int, bot: BotDep) -> list[dict]:
+async def get_user_guilds(discord_id: int, bot: BotDep) -> list[UserGuild]:
     """Every guild the user shares with Percy, each with a ``manageable`` flag."""
-    guilds = []
+    guilds: list[UserGuild] = []
     for guild in bot.guilds:
         member = guild.get_member(discord_id)
         if member is None:
             continue
         perms = member.guild_permissions
-        guilds.append({
-            "id": str(guild.id),
-            "name": guild.name,
-            "icon_url": guild.icon.url if guild.icon else None,
-            "member_count": guild.member_count,
-            "owner": guild.owner_id == discord_id,
-            "manageable": perms.administrator or perms.manage_guild,
+        guilds.append(UserGuild(
+            id=str(guild.id),
+            name=guild.name,
+            icon_url=guild.icon.url if guild.icon else None,
+            member_count=guild.member_count,
+            owner=guild.owner_id == discord_id,
+            manageable=perms.administrator or perms.manage_guild,
             # The music app's server picker marks where Percy has a track loaded (paused counts).
-            "music_playing": isinstance(guild.voice_client, wavelink.Player) and guild.voice_client.current is not None,
-        })
+            music_playing=isinstance(guild.voice_client, wavelink.Player) and guild.voice_client.current is not None,
+        ))
 
     return guilds
 
 
 @router.get("/avatar")
-async def get_user_avatar(discord_id: int, bot: BotDep) -> dict:
+async def get_user_avatar(discord_id: int, bot: BotDep) -> UserAvatar:
     """Resolve the user's current avatar URL from Discord (fetch if not cached)."""
     user = bot.get_user(discord_id)
     if user is None:
@@ -87,22 +181,17 @@ async def get_user_avatar(discord_id: int, bot: BotDep) -> dict:
         except discord.HTTPException:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
 
-    return {
-        "avatar_url": user.display_avatar.url,
-        "username": user.name,
-    }
+    return UserAvatar(avatar_url=user.display_avatar.url, username=user.name)
 
 
 @router.get("/settings")
-async def get_user_settings(discord_id: int, bot: BotDep) -> dict:
+async def get_user_settings(discord_id: int, bot: BotDep) -> UserSettings:
     """User's personal bot settings (timezone, track_presence, track_history)."""
     config = await bot.db.get_user_config(discord_id)
 
-    return {
-        "timezone": config.timezone,
-        "track_presence": config.track_presence,
-        "track_history": config.track_history,
-    }
+    return UserSettings(
+        timezone=config.timezone, track_presence=config.track_presence, track_history=config.track_history
+    )
 
 
 @router.patch("/settings")
@@ -136,7 +225,7 @@ async def get_user_history(
     discord_id: int,
     bot: BotDep,
     avatar_limit: int = Query(default=24, ge=1, le=50),
-) -> dict:
+) -> UserHistory:
     """Consent-tracked history: usernames, nicknames, avatars (base64), presence over 30 days."""
     usernames = await bot.db.stats.get_item_history(discord_id, "name")
     nicknames = await bot.db.stats.get_item_history(discord_id, "nickname")
@@ -147,18 +236,15 @@ async def get_user_history(
         value = record["changed_at"]  # type: ignore[index]
         return value.isoformat() if value else None
 
-    return {
-        "usernames": [{"name": r["item_value"], "changed_at": _ts(r)} for r in usernames],
-        "nicknames": [{"name": r["item_value"], "changed_at": _ts(r)} for r in nicknames],
-        "avatars": [
-            {"image": base64.b64encode(r["avatar"]).decode(), "changed_at": _ts(r)}
-            for r in avatars
-        ],
-        "presence": [
-            {"status": r["status"], "status_before": r["status_before"], "changed_at": _ts(r)}
+    return UserHistory(
+        usernames=[HistoryNameEntry(name=r["item_value"], changed_at=_ts(r)) for r in usernames],
+        nicknames=[HistoryNameEntry(name=r["item_value"], changed_at=_ts(r)) for r in nicknames],
+        avatars=[HistoryAvatarEntry(image=base64.b64encode(r["avatar"]).decode(), changed_at=_ts(r)) for r in avatars],
+        presence=[
+            HistoryPresenceEntry(status=r["status"], status_before=r["status_before"], changed_at=_ts(r))
             for r in presence
         ],
-    }
+    )
 
 
 @router.get("/data-export")
@@ -212,19 +298,19 @@ def _clean(style: dict[str, Any]) -> dict[str, str]:
 
 
 @router.get("/rank-card")
-async def get_rank_card(discord_id: int, bot: BotDep, guild_id: int = Query(...)) -> dict:
+async def get_rank_card(discord_id: int, bot: BotDep, guild_id: int = Query(...)) -> RankCard:
     """The member's own style, the server default, the effective result and every preset.
 
     ``locked`` means the server fixes the style: clients hide the editor entirely.
     """
     guild_default, user_style, locked = await _leveling(bot).card_layers(_member(bot, guild_id, discord_id))
-    return {
+    return RankCard.model_validate({
         "style": user_style,
         "guild_default": guild_default,
         "locked": locked,
         "effective": resolve_style(guild_default, user_style, locked=locked).to_dict(),
         "options": style_options(),
-    }
+    })
 
 
 @router.put("/rank-card")
@@ -265,20 +351,14 @@ async def preview_rank_card(discord_id: int, bot: BotDep, body: RankCardPreviewB
 
 
 @router.get("/reminders")
-async def get_user_reminders(discord_id: int, bot: BotDep) -> dict:
+async def get_user_reminders(discord_id: int, bot: BotDep) -> RemindersResponse:
     rows = await bot.db.timers.get_user_reminders(discord_id)
-    return {
-        "reminders": [
-            {
-                "id": row[0],
-                "expires": row[1].isoformat() + "Z",
-                "message": row[2] or "",
-                "repeats": row[3],
-                "shared_with": row[4],
-            }
-            for row in rows
-        ]
-    }
+    return RemindersResponse(reminders=[
+        Reminder(
+            id=row[0], expires=row[1].isoformat() + "Z", message=row[2] or "", repeats=row[3], shared_with=row[4]
+        )
+        for row in rows
+    ])
 
 
 @router.delete("/reminders/{reminder_id}")
@@ -353,17 +433,17 @@ def _clean_track(body: TrackBody) -> tuple[str, str, str | None, str | None]:
     return name, url, author, _http_or_none(body.artwork, "artwork")
 
 
-async def _tracks_payload(bot: Any, rows: list[Any]) -> list[dict]:
+async def _tracks_payload(bot: Any, rows: list[Any]) -> list[PlaylistTrack]:
     """Saved tracks with artist and cover, recovering covers for rows saved before V61."""
     missing = [t["url"] for t in rows if t["url"] and not t["artwork"]]
     played = await bot.db.music_plays.artwork_for(missing) if missing else {}
     return [
-        {
-            "name": display_title(t["name"], t["author"]),
-            "url": t["url"],
-            "author": t["author"],
-            "artwork": t["artwork"] or _artwork(t["url"] or "", played),
-        }
+        PlaylistTrack(
+            name=display_title(t["name"], t["author"]),
+            url=t["url"],
+            author=t["author"],
+            artwork=t["artwork"] or _artwork(t["url"] or "", played),
+        )
         for t in rows
     ]
 
@@ -404,8 +484,8 @@ async def get_user_music(discord_id: int, bot: BotDep) -> dict:
     plays = bot.db.music_plays
     top = await plays.user_top_tracks(discord_id)
     recent = await plays.user_recent(discord_id)
-    liked: list[dict] = []
-    playlists: list[dict] = []
+    liked: list[PlaylistTrack] = []
+    playlists: list[PlaylistSummary] = []
     for p in await bot.db.playlists.get_user_playlists(discord_id):
         tracks = await bot.db.playlists.get_playlist_tracks(p["id"])
         if p["name"] == LIKED:
@@ -413,13 +493,13 @@ async def get_user_music(discord_id: int, bot: BotDep) -> dict:
         else:
             # A playlist without a custom cover shows its first saved song's.
             first = await _tracks_payload(bot, tracks[:1])
-            playlists.append({
-                "id": str(p["id"]),
-                "name": p["name"],
-                "track_count": len(tracks),
-                "thumbnail": p["thumbnail"],
-                "cover": p["thumbnail"] or (first[0]["artwork"] if first else None),
-            })
+            playlists.append(PlaylistSummary(
+                id=str(p["id"]),
+                name=p["name"],
+                track_count=len(tracks),
+                thumbnail=p["thumbnail"],
+                cover=p["thumbnail"] or (first[0].artwork if first else None),
+            ))
     return {
         "top_tracks": [
             {**{k: r[k] for k in ("author", "uri", "artwork", "length_ms", "plays")},
@@ -427,8 +507,8 @@ async def get_user_music(discord_id: int, bot: BotDep) -> dict:
             for r in top
         ],
         "recent": [serialize_play(r) for r in recent],
-        "liked": liked,
-        "playlists": playlists,
+        "liked": [t.model_dump() for t in liked],
+        "playlists": [p.model_dump() for p in playlists],
     }
 
 
@@ -457,29 +537,31 @@ async def unlike_track(discord_id: int, bot: BotDep, url: str = Query(...)) -> d
 
 
 @router.post("/music/playlists", status_code=status.HTTP_201_CREATED)
-async def create_user_playlist(discord_id: int, body: PlaylistCreateBody, bot: BotDep) -> dict:
+async def create_user_playlist(discord_id: int, body: PlaylistCreateBody, bot: BotDep) -> PlaylistSummary:
     name = _clean_name(body.name)
     await _check_name_free(bot, discord_id, name)
     pid = await bot.db.playlists.create_playlist(discord_id, name, discord.utils.utcnow())
     _invalidate_playlists(bot, discord_id)
-    return {"id": str(pid), "name": name, "track_count": 0, "thumbnail": None, "cover": None}
+    return PlaylistSummary(id=str(pid), name=name, track_count=0, thumbnail=None, cover=None)
 
 
 @router.get("/music/playlists/{playlist_id}")
-async def get_user_playlist(discord_id: int, playlist_id: int, bot: BotDep) -> dict:
+async def get_user_playlist(discord_id: int, playlist_id: int, bot: BotDep) -> PlaylistDetail:
     row = await _own_playlist(bot, discord_id, playlist_id)
     tracks = await _tracks_payload(bot, await bot.db.playlists.get_playlist_tracks(playlist_id))
-    return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "thumbnail": row["thumbnail"],
-        "cover": row["thumbnail"] or (tracks[0]["artwork"] if tracks else None),
-        "tracks": tracks,
-    }
+    return PlaylistDetail(
+        id=str(row["id"]),
+        name=row["name"],
+        thumbnail=row["thumbnail"],
+        cover=row["thumbnail"] or (tracks[0].artwork if tracks else None),
+        tracks=tracks,
+    )
 
 
 @router.patch("/music/playlists/{playlist_id}")
-async def patch_user_playlist(discord_id: int, playlist_id: int, body: PlaylistPatchBody, bot: BotDep) -> dict:
+async def patch_user_playlist(
+    discord_id: int, playlist_id: int, body: PlaylistPatchBody, bot: BotDep
+) -> PlaylistDetail:
     row = await _own_playlist(bot, discord_id, playlist_id)
     repo = bot.db.playlists
     if body.name is not None:

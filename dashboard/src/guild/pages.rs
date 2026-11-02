@@ -50,7 +50,7 @@ pub async fn guild_leveling(State(app): State<AppState>, session: Session, Path(
         percy.get_guild_channels(guild_id),
     );
 
-    let config = config.unwrap_or_default();
+    let config = config.unwrap_or_else(|_| LevelingConfig::unconfigured());
     let leaderboard = leaderboard.unwrap_or(LeaderboardResponse {
         entries: Vec::new(),
         total: 0,
@@ -159,7 +159,7 @@ pub async fn guild_leveling(State(app): State<AppState>, session: Session, Path(
     // Text channels for the level-up message destination; all channels for multiplier/blacklist pickers.
     let text_channels: Vec<Channel> = channels
         .iter()
-        .filter(|c| c.channel_type == "text" || c.channel_type == "news")
+        .filter(|c| c.type_ == "text" || c.type_ == "news")
         .cloned()
         .collect();
     let all_channels = channels.clone();
@@ -203,6 +203,7 @@ pub async fn guild_stats(State(app): State<AppState>, session: Session, Path(gui
         Err(_) => return Redirect::to(&format!("/dashboard/guild/{guild_id}")).into_response(),
     };
     let bot_stats = bot_stats.unwrap_or(BotStats {
+        ai: None,
         version: None,
         guild_count: 0,
         user_count: 0,
@@ -243,13 +244,13 @@ pub async fn guild_economy(State(app): State<AppState>, session: Session, Path(g
     let economy = economy.unwrap_or(EconomyInfo {
         items: Vec::new(),
         lottery: None,
-        settings: None,
+        settings: EconomySettings::default(),
     });
     let balances = balances.unwrap_or(BalancesResponse {
         entries: Vec::new(),
         total: 0,
     });
-    let eco_settings = economy.settings.clone().unwrap_or_default();
+    let eco_settings = economy.settings.clone();
 
     EconomyTemplate {
         account: Some(Viewer::from_session(&session)),

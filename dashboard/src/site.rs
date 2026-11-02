@@ -235,8 +235,8 @@ async fn load_home(app: &AppState) -> HomeData {
     let categories = commands.map(group_commands_by_category).unwrap_or_default();
     let commands_total: usize = categories.iter().map(|c| c.count).sum();
     let stats = stats.ok().map(|s| HomeStats {
-        servers: short_number(s.guild_count.into()),
-        members: short_number(s.user_count.into()),
+        servers: short_number(s.guild_count as u64),
+        members: short_number(s.user_count as u64),
         commands: if commands_total > 0 {
             commands_total.to_string()
         } else {

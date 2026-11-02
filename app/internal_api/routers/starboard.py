@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel
+from .guild_models import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
     from app.cogs.starboard.cog import Starboard
@@ -30,6 +31,38 @@ class PatchStarboardBody(BaseModel):
     ignored_channel_ids: list[int] | None = None
     max_age_hours: int | None = Field(default=None, ge=0, le=8760)
     allow_nsfw: bool | None = None
+
+
+# Response models: the source of truth for percy-client's generated types (GENERATION.md).
+
+
+class StarboardSettings(BaseModel):
+    configured: bool
+    enabled: bool
+    channel: ChannelRef | None
+    threshold: int
+    emoji: str
+    self_star: bool
+    ignored_channels: list[ChannelRef | None]
+    max_age_hours: int
+    allow_nsfw: bool
+
+
+class StarboardTop(BaseModel):
+    stars: int
+    author: str | None
+    channel: ChannelRef | None
+    jump_url: str
+
+
+class StarboardInfo(StarboardSettings):
+    """Settings plus the ten most-starred messages."""
+
+    top: list[StarboardTop]
+
+
+class StarboardSaved(StarboardSettings):
+    ok: bool
 
 
 def _cog(bot: Bot) -> Starboard:
@@ -61,7 +94,7 @@ def _serialize(guild: discord.Guild, config) -> dict:
 
 
 @router.get("/starboard")
-async def get_starboard(guild: GuildDep, bot: BotDep) -> dict:
+async def get_starboard(guild: GuildDep, bot: BotDep) -> StarboardInfo:
     """Settings plus the ten most-starred messages (with jump links)."""
     config = await _cog(bot).get_config(guild.id)
     top = []
@@ -73,11 +106,11 @@ async def get_starboard(guild: GuildDep, bot: BotDep) -> dict:
             "channel": resolve_channel(guild, row['channel_id']),
             "jump_url": f"https://discord.com/channels/{guild.id}/{row['channel_id']}/{row['message_id']}",
         })
-    return {**_serialize(guild, config), "top": top}
+    return StarboardInfo.model_validate({**_serialize(guild, config), "top": top})
 
 
 @router.patch("/starboard")
-async def patch_starboard(guild: GuildDep, bot: BotDep, body: PatchStarboardBody) -> dict:
+async def patch_starboard(guild: GuildDep, bot: BotDep, body: PatchStarboardBody) -> StarboardSaved:
     cog = _cog(bot)
     updates = body.model_dump(exclude_unset=True)
     if not updates:
@@ -100,4 +133,4 @@ async def patch_starboard(guild: GuildDep, bot: BotDep, body: PatchStarboardBody
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pick a starboard channel before turning it on.")
 
     config = await cog.update_config(guild.id, **updates)
-    return {"ok": True, **_serialize(guild, config)}
+    return StarboardSaved.model_validate({"ok": True, **_serialize(guild, config)})

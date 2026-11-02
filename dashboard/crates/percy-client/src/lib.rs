@@ -18,12 +18,54 @@ use serde::de::DeserializeOwned;
 mod types;
 pub use types::*;
 
-// Generated from Percy's OpenAPI schema (see GENERATION.md). Only the domains already migrated
-// are re-exported, by name, so the hand-written `types` and the generated types never collide and
-// the dashboard keeps importing `percy_client::AnalyticsSummary` unchanged.
+// Generated from Percy's OpenAPI schema (see GENERATION.md): every response model, re-exported by
+// name so the dashboard imports `percy_client::AnalyticsSummary` as before. The list is exactly
+// the `pub struct`/`pub enum` names in generated.rs (none is also defined in `types`).
 #[rustfmt::skip]
+#[allow(dead_code)]
 pub mod generated;
-pub use generated::{AnalyticsMetric, AnalyticsPoint, AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand};
+#[rustfmt::skip]
+pub use generated::{
+    ActionRequest, ActionRequestList, ActiveTempChannel, ActivityDay, ActivityResponse, AiAskResponse,
+    AiChannelOverride, AiConfig, AiFlags, AiSuggestion, AlwaysOnState, AnalyticsMetric, AnalyticsPoint,
+    AnalyticsSeries, AnalyticsSummary, AnalyticsTopCommand, AvatarEntry, AvatarHistoryResponse, BalanceEntry,
+    BalancesResponse, BotStats, BulkActionFailure, BulkActionResponse, CardOption, CardSubject, CaseActionResponse,
+    CaseDeleteResponse, CaseEntry, CasesResponse, ChangelogEntry, ChangelogResponse, ChangelogSection, Channel,
+    ChannelRef, ComicBrowseFilters, ComicBrowsePage, ComicCharacter, ComicCredit, ComicDetail, ComicDetailSeries,
+    ComicFeedEntry, ComicNameEntry, ComicNamesResponse, ComicRelease, ComicSeriesList, ComicSeriesPage,
+    ComicSeriesSummary, ComicsResponse, CommandUsage, CustomBotAck, CustomBotProfile, EconomyInfo, EconomySettings,
+    EmojiStatEntry, EmojiStatsResponse, GalleryDeleteResult, GalleryImage, GalleryResponse, GalleryUploadResult,
+    GameOverviewEntry, GamePlayerEntry, GamesStats, GiveawayInfo, GiveawaysResponse, GuildFlags, GuildHealth,
+    GuildInfo, GuildOverview, GuildOverviewBot, GuildOverviewFeatures, GuildOverviewGuild, GuildOverviewStats,
+    GuildStats, HealthFeature, HistoryAvatarEntry, HistoryNameEntry, HistoryPresenceEntry, IgnoredEntity,
+    InventoryChange, InventoryItem, LeaderboardEntry, LeaderboardResponse, LevelingConfig, LockdownEntry,
+    LockdownsResponse, LotteryInfo, LyricLine, Member, MemberActionResult, MemberBalance, MemberCase,
+    MemberCommandStats, MemberDetail, MemberEconomy, MemberInventory, MemberLevel, MemberLeveling, MemberMessage,
+    MemberMessages, MemberNameHistory, MemberOwnedTag, MemberRoleBadge, MemberRolesResult, MemberSelf,
+    MemberSelfLeveling, MemberTopCommand, MembersResponse, MusicAck, MusicAlbum, MusicAlbumInfo,
+    MusicAlwaysOnApplied, MusicArtist, MusicArtistInfo, MusicAudio, MusicAudioApplied, MusicChannelRef,
+    MusicControlResult, MusicDjModeApplied, MusicEqualizer, MusicEqualizerApplied, MusicFiltersState, MusicHistory,
+    MusicHistoryItem, MusicInfo, MusicLyrics, MusicPlayResult, MusicRelease, MusicSearch, MusicSetup,
+    MusicSetupResponse, MusicTrackFull, MusicTrending, MusicViewer, NameHistoryEntry, NewsFilters, NewsItem,
+    NewsItemSource, NewsPage, NewsRelated, NewsSource, NewsSourcesResponse, NewsSubject, Notification,
+    NotificationList, NotificationSummary, NotificationsReadResult, NowPlaying, OverviewWindow, PlaylistDetail,
+    PlaylistSummary, PlaylistTrack, PollInfo, PollsResponse, ProgressMark, ProgressResponse, QueueTrack, RankCard,
+    RecentCasesResponse, ReleaseCard, ReleaseProgressDeleted, ReleasesOverview, Reminder, RemindersResponse,
+    RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings, Role, RoleMenu, RoleMenuCreated,
+    RoleMenuNotice, RoleMenuRole, RoleMenusResponse, RoleRef, SentinelInfo, ShopItem, StarboardInfo, StarboardSaved,
+    StarboardTop, Subject, SubjectsResponse, Subscription, SubscriptionDeleted, SubscriptionsResponse, TagCreator,
+    TagDetail, TagInfo, TagsResponse, TempChannelEntry, TempChannelsResponse, TemplateEntry, TemplateVariable,
+    TemplatesResponse, TrackLink, TrackRequester, TrendingTrack, UserAvatar, UserGuild, UserHistory, UserSettings,
+    WarnPolicy, WarnThreshold, WatchCredit, WatchEra, WatchPath, WatchPeopleResponse, WatchPerson,
+    WatchPersonCredit, WatchPersonPage, WatchPersonSummary, WatchPrefs, WatchProgressDeleted, WatchProgressEntry,
+    WatchProgressResponse, WatchProvider, WatchStats, WatchTitle, WatchTitleDetail, WatchTrailer, WatchUniverse,
+    WatchUniversePage, WatchUniverseSummary, WatchUniversesResponse, WebhookCreateResponse,
+    WebhookDeliveriesResponse, WebhookDelivery, WebhookEventsResponse, WebhookSubscription,
+    WebhookSubscriptionsResponse, WebhookTestResponse, XpHistoryPoint, XpHistoryResponse
+};
+
+/// A track as Percy's `_serialize_track` sends it; the live queue uses the same shape.
+pub type MusicTrack = QueueTrack;
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]
@@ -3411,19 +3453,20 @@ mod tests {
     }
 
     #[test]
-    fn the_overview_carries_progress_beside_the_cards_and_defaults_to_empty() {
+    fn the_overview_carries_progress_beside_the_cards() {
+        let card = serde_json::json!({
+            "media": "comic", "key": "MARVEL/asm-12", "name": "ASM #12", "subtitle": null,
+            "release_date": null, "cover_url": null, "url": null, "subjects": []
+        });
         let overview: ReleasesOverview = serde_json::from_value(serde_json::json!({
-            "comics": [{"media": "comic", "key": "MARVEL/asm-12"}],
-            "progress": {"comic": {"MARVEL/asm-12": {"status": "read"}}, "title": {}}
+            "window": {"start": "2026-10-25", "end": "2026-11-08"},
+            "comics": [card], "titles": [], "followed": [],
+            "progress": {"comic": {"MARVEL/asm-12": {"status": "read", "updated_at": null}}, "title": {}}
         }))
         .unwrap();
         assert_eq!(overview.progress["comic"]["MARVEL/asm-12"].status, "read");
-        // ...and `updated_at` is nullable in the database, so it must not be required.
+        // `updated_at` is nullable in the database, so a mark may carry none.
         assert!(overview.progress["comic"]["MARVEL/asm-12"].updated_at.is_none());
-
-        // A signed-out overview (and an older Percy) omits the key entirely.
-        let signed_out: ReleasesOverview = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert!(signed_out.progress.is_empty());
     }
 
     #[test]
@@ -3494,28 +3537,41 @@ mod tests {
         );
     }
 
+    /// A complete title as Percy sends it (every key present, nullable ones null).
+    fn title_json(slug: &str, trailer: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "id": 1, "universe": "mcu", "tmdb_type": "movie", "tmdb_id": 1726, "slug": slug, "title": "Iron Man",
+            "kind": "movie", "runtime": 126, "episodes": null, "release_date": null, "poster_path": null,
+            "backdrop_path": null, "overview": null, "tmdb_rating": null, "tmdb_votes": null, "era": null,
+            "era_order": 0, "story_order": 1, "release_order": 1, "milestone": false, "instruction": null,
+            "context": null, "spoiler": null, "credits_of": null, "sub_universe": null, "importance": null,
+            "providers": [], "trailer": trailer, "season_number": null, "season_name": null, "parent_id": null
+        })
+    }
+
     #[test]
     fn a_title_detail_carries_its_place_in_the_ordering_and_its_trailer() {
         // The four fields the detail page's "position N of M" strip is made of, plus the
         // V44 trailer — both URLs arrive pre-built, so the renderer never assembles one.
+        let trailer = serde_json::json!({
+            "site": "YouTube",
+            "key": "8ugaeA-nMTc",
+            "name": "Official Trailer",
+            "url": "https://www.youtube.com/watch?v=8ugaeA-nMTc",
+            "embed_url": "https://www.youtube.com/embed/8ugaeA-nMTc"
+        });
         let detail: WatchTitleDetail = serde_json::from_value(serde_json::json!({
-            "title": {
-                "slug": "iron-man",
-                "title": "Iron Man",
-                "trailer": {
-                    "site": "YouTube",
-                    "key": "8ugaeA-nMTc",
-                    "name": "Official Trailer",
-                    "url": "https://www.youtube.com/watch?v=8ugaeA-nMTc",
-                    "embed_url": "https://www.youtube.com/embed/8ugaeA-nMTc"
-                }
-            },
+            "title": title_json("iron-man", trailer),
+            "credits_of": null, "parent": null, "seasons": [], "previous": null, "next": null,
             "credits": [],
             "position": 3,
             "total": 42,
             "path": "complete",
             "sort": "story",
-            "universe": {"slug": "mcu", "name": "Marvel Cinematic Universe"}
+            "universe": {
+                "slug": "mcu", "name": "Marvel Cinematic Universe", "short_name": "MCU", "tagline": null,
+                "accent": "#E62429", "logo_url": null, "backdrop_url": null, "published": true, "synced_at": null
+            }
         }))
         .unwrap();
 
@@ -3531,23 +3587,11 @@ mod tests {
 
     #[test]
     fn a_title_without_a_trailer_is_none_rather_than_a_deserialisation_failure() {
-        // `null` and "the key is absent entirely" (a row read before V44) must both land
-        // as None — the common case, not an error.
-        let with_null: WatchTitle = serde_json::from_value(serde_json::json!({
-            "slug": "avengers-doomsday",
-            "trailer": null
-        }))
-        .unwrap();
+        // `null` is the common case (an unreleased film), not an error. The key itself is
+        // required now that the schema is generated from Percy's response model.
+        let with_null: WatchTitle =
+            serde_json::from_value(title_json("avengers-doomsday", serde_json::Value::Null)).unwrap();
         assert!(with_null.trailer.is_none());
-
-        let legacy: WatchTitle = serde_json::from_value(serde_json::json!({"slug": "iron-man"})).unwrap();
-        assert!(legacy.trailer.is_none());
-
-        // ...and a detail payload missing the ordering fields still shapes, so a dashboard
-        // built against this crate survives an older Percy.
-        let bare: WatchTitleDetail = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert_eq!((bare.position, bare.total), (0, 0));
-        assert_eq!(bare.path, None);
     }
 
     #[test]

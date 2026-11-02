@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import inspect
 from typing import Any
 
 import pytest
 from fastapi import HTTPException
+from pydantic import BaseModel
 
-from app.internal_api.routers import watchlist as api
+from app.internal_api.routers import watchlist as _api_module
 from app.services.watchlist.payload import (
     credit_payloads,
     era_payloads,
@@ -48,6 +50,26 @@ PATHS = [
     {'slug': 'complete', 'name': 'Complete', 'description': 'Everything', 'is_default': True, 'sort_order': 0},
     {'slug': 'essentials', 'name': 'Essentials', 'description': None, 'is_default': False, 'sort_order': 1},
 ]
+
+
+class _JsonApi:
+    """Handlers return pydantic response models now; these tests assert on the wire JSON."""
+
+    def __init__(self, module: Any) -> None:
+        self._module = module
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._module, name)
+        if not inspect.iscoroutinefunction(attr):
+            return attr
+
+        async def call(*args: Any, **kwargs: Any) -> Any:
+            result = await attr(*args, **kwargs)
+            return result.model_dump(mode='json') if isinstance(result, BaseModel) else result
+
+        return call
+
+api = _JsonApi(_api_module)
 
 
 def _title(**overrides: Any) -> dict[str, Any]:
@@ -538,8 +560,8 @@ async def test_search_people_returns_summaries(bot: Any) -> None:
 
 
 async def test_put_progress_writes_naive_utc(bot: Any, repo: FakeWatchlistRepository) -> None:
-    body = api.ProgressBody(entries=[
-        api.ProgressEntry(title_id=1, status='watched',
+    body = api.WatchProgressPutBody(entries=[
+        api.WatchProgressPutEntry(title_id=1, status='watched',
                           updated_at=datetime.datetime(2026, 8, 2, 14, 0, tzinfo=datetime.UTC)),
     ])
     result = await api.put_progress(bot, 42, body)
@@ -553,8 +575,8 @@ async def test_put_progress_writes_naive_utc(bot: Any, repo: FakeWatchlistReposi
 
 async def test_put_progress_converts_a_non_utc_offset(bot: Any, repo: FakeWatchlistRepository) -> None:
     plus_two = datetime.timezone(datetime.timedelta(hours=2))
-    body = api.ProgressBody(entries=[
-        api.ProgressEntry(title_id=1, status='skipped',
+    body = api.WatchProgressPutBody(entries=[
+        api.WatchProgressPutEntry(title_id=1, status='skipped',
                           updated_at=datetime.datetime(2026, 8, 2, 16, 0, tzinfo=plus_two)),
     ])
     await api.put_progress(bot, 42, body)
@@ -562,7 +584,7 @@ async def test_put_progress_converts_a_non_utc_offset(bot: Any, repo: FakeWatchl
 
 
 async def test_put_progress_defaults_a_missing_timestamp_to_now(bot: Any, repo: FakeWatchlistRepository) -> None:
-    body = api.ProgressBody(entries=[api.ProgressEntry(title_id=1, status='watched')])
+    body = api.WatchProgressPutBody(entries=[api.WatchProgressPutEntry(title_id=1, status='watched')])
     await api.put_progress(bot, 42, body)
     stamped = repo.bulk_calls[0][0][2]
     assert stamped.tzinfo is None
@@ -570,9 +592,9 @@ async def test_put_progress_defaults_a_missing_timestamp_to_now(bot: Any, repo: 
 
 
 async def test_put_progress_rejects_an_unknown_status(bot: Any, repo: FakeWatchlistRepository) -> None:
-    body = api.ProgressBody(entries=[
-        api.ProgressEntry(title_id=1, status='watched'),
-        api.ProgressEntry(title_id=2, status='pending'),
+    body = api.WatchProgressPutBody(entries=[
+        api.WatchProgressPutEntry(title_id=1, status='watched'),
+        api.WatchProgressPutEntry(title_id=2, status='pending'),
     ])
     with pytest.raises(HTTPException) as exc:
         await api.put_progress(bot, 42, body)

@@ -176,8 +176,8 @@ pub async fn guild_notifications(
         guild_name: guild.name,
         nav_active: "notifications",
         page_title: "Notifications",
-        unread: feed.unread,
-        newest_id: feed.items.first().map(|n| n.id.clone()).unwrap_or_default(),
+        unread: feed.unread.max(0) as u32,
+        newest_id: feed.items.first().map(|n| n.id.to_string()).unwrap_or_default(),
         feed: feed
             .items
             .into_iter()
@@ -205,7 +205,7 @@ pub async fn guild_notifications(
         channels: channels
             .unwrap_or_default()
             .into_iter()
-            .filter(|c| c.channel_type == "text")
+            .filter(|c| c.type_ == "text")
             .collect(),
         roles: roles
             .unwrap_or_default()

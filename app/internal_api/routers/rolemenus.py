@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_moderator
+from .guild_models import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
     from app.cogs.rolemenu.cog import RoleMenus
@@ -44,6 +45,46 @@ class AddRoleMenuRoleBody(BaseModel):
     user_id: str | int
 
 
+# Response models: the source of truth for percy-client's generated types (GENERATION.md).
+
+
+class RoleMenuRole(BaseModel):
+    role_id: str
+    #: ``None`` when the role was deleted.
+    name: str | None
+    color: int
+    emoji: str | None
+    label: str | None
+    assignable: bool
+
+
+class RoleMenu(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    unique: bool
+    #: ``None`` when the menu has no channel id.
+    channel: ChannelRef | None
+    jump_url: str | None
+    roles: list[RoleMenuRole]
+
+
+class RoleMenusResponse(BaseModel):
+    menus: list[RoleMenu]
+    max_roles: int
+
+
+class RoleMenuCreated(BaseModel):
+    ok: bool
+    id: int
+    message: str
+
+
+class RoleMenuNotice(BaseModel):
+    ok: bool
+    message: str
+
+
 def _cog(bot: Bot) -> RoleMenus:
     cog = bot.get_cog('RoleMenus')
     if cog is None:
@@ -56,7 +97,7 @@ def _refused(exc: Exception) -> HTTPException:
 
 
 @router.get("/rolemenus")
-async def list_role_menus(guild: GuildDep, bot: BotDep) -> dict:
+async def list_role_menus(guild: GuildDep, bot: BotDep) -> RoleMenusResponse:
     """Every menu with its roles, each role resolved and flagged when Percy can no longer give it."""
     menus = []
     for menu in await bot.db.rolemenu.get_guild_menus(guild.id):
@@ -84,11 +125,11 @@ async def list_role_menus(guild: GuildDep, bot: BotDep) -> dict:
             "jump_url": jump,
             "roles": roles,
         })
-    return {"menus": menus, "max_roles": 25}
+    return RoleMenusResponse.model_validate({"menus": menus, "max_roles": 25})
 
 
 @router.post("/rolemenus")
-async def create_role_menu(guild: GuildDep, bot: BotDep, body: CreateRoleMenuBody) -> dict:
+async def create_role_menu(guild: GuildDep, bot: BotDep, body: CreateRoleMenuBody) -> RoleMenuCreated:
     from app.cogs.rolemenu.cog import RoleMenuError
 
     channel = guild.get_channel(body.channel_id)
@@ -98,7 +139,7 @@ async def create_role_menu(guild: GuildDep, bot: BotDep, body: CreateRoleMenuBod
         menu = await _cog(bot).create_menu(channel, body.title.strip(), body.description or None, unique=body.unique)
     except RoleMenuError as exc:
         raise _refused(exc) from None
-    return {"ok": True, "id": menu['id'], "message": f"Role menu posted in #{channel.name}. Add roles to it next."}
+    return RoleMenuCreated(ok=True, id=menu["id"], message=f"Role menu posted in #{channel.name}. Add roles to it next.")
 
 
 @router.patch("/rolemenus/{menu_id}")
@@ -113,7 +154,7 @@ async def patch_role_menu(guild: GuildDep, bot: BotDep, menu_id: int, body: Patc
 
 
 @router.post("/rolemenus/{menu_id}/roles")
-async def add_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, body: AddRoleMenuRoleBody) -> dict:
+async def add_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, body: AddRoleMenuRoleBody) -> RoleMenuNotice:
     from app.cogs.rolemenu.cog import RoleMenuError
 
     role = guild.get_role(body.role_id)
@@ -127,7 +168,7 @@ async def add_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, body: A
         await _cog(bot).add_role(guild, menu_id, role, body.emoji, body.label)
     except RoleMenuError as exc:
         raise _refused(exc) from None
-    return {"ok": True, "message": f"Added @{role.name}."}
+    return RoleMenuNotice(ok=True, message=f"Added @{role.name}.")
 
 
 @router.delete("/rolemenus/{menu_id}/roles/{role_id}")

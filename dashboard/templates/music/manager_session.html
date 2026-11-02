@@ -16,7 +16,7 @@
             <div class="config-field">
                 <label class="config-label" for="ao-channel">Voice channel</label>
                 <select id="ao-channel" class="config-select">
-                    {% for ch in channels %}{% if ch.channel_type == "voice" || ch.channel_type == "stage_voice" %}
+                    {% for ch in channels %}{% if ch.type_ == "voice" || ch.type_ == "stage_voice" %}
                     <option value="{{ ch.id }}">#{{ ch.name }}</option>
                     {% endif %}{% endfor %}
                 </select>

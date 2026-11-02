@@ -30,6 +30,17 @@ from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
 from ..helpers import naive_utc
+from .watchlist_models import (
+    WatchPeopleResponse,
+    WatchPersonPage,
+    WatchPrefs,
+    WatchProgressDeleted,
+    WatchProgressResponse,
+    WatchStats,
+    WatchTitleDetail,
+    WatchUniversePage,
+    WatchUniversesResponse,
+)
 
 if TYPE_CHECKING:
     from app.core.bot import Bot
@@ -44,7 +55,7 @@ _SORTS = ('story', 'release')
 _STATUSES = ('watched', 'skipped')
 
 
-class ProgressEntry(BaseModel):
+class WatchProgressPutEntry(BaseModel):
     """One title's watch state, as the client last saw it."""
 
     title_id: int
@@ -52,10 +63,10 @@ class ProgressEntry(BaseModel):
     updated_at: datetime.datetime | None = None
 
 
-class ProgressBody(BaseModel):
+class WatchProgressPutBody(BaseModel):
     """A bulk progress merge: the client's full local set, or a single debounced toggle."""
 
-    entries: list[ProgressEntry] = Field(default_factory=list)
+    entries: list[WatchProgressPutEntry] = Field(default_factory=list)
 
 
 class PrefsBody(BaseModel):
@@ -132,10 +143,10 @@ async def get_universe_payload(bot: Bot, slug: str, path: str | None, region: st
 async def list_universes(
     bot: BotDep,
     include_unpublished: Annotated[bool, Query(description="Include universes not yet published")] = False,
-) -> dict:
+) -> WatchUniversesResponse:
     """Every universe with its title count and total runtime, in display order."""
     rows = await bot.db.watchlist.list_universes(published_only=not include_unpublished)
-    return {'universes': [universe_summary(row) for row in rows]}
+    return WatchUniversesResponse.model_validate({'universes': [universe_summary(row) for row in rows]})
 
 
 @router.get("/universes/{slug}")
@@ -145,9 +156,10 @@ async def get_universe(
     path: Annotated[str | None, Query(description="Curated path slug (defaults to the universe's)")] = None,
     region: Annotated[str, Query(description="ISO 3166-1 two-letter region for providers")] = "US",
     sort: Annotated[str, Query(description="story or release")] = "story",
-) -> dict:
+) -> WatchUniversePage:
     """Universe, paths, eras and every title -- one call renders the whole watch-order page."""
-    return await get_universe_payload(bot, slug, path, _check_region(region), _check_sort(sort))
+    return WatchUniversePage.model_validate(
+        await get_universe_payload(bot, slug, path, _check_region(region), _check_sort(sort)))
 
 
 @router.get("/universes/{slug}/stats")
@@ -155,13 +167,13 @@ async def get_universe_statistics(
     bot: BotDep,
     slug: str,
     path: Annotated[str | None, Query(description="Curated path slug (defaults to the universe's)")] = None,
-) -> dict:
+) -> WatchStats:
     """Totals for one path: title/movie/show counts, importance breakdown, runtime and hours."""
     if await bot.db.watchlist.get_universe(slug) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown universe {slug!r}")
     _, path_slug = await _resolve_path(bot, slug, path)
     titles = await bot.db.watchlist.list_titles(slug, path_slug=path_slug)
-    return {'universe': slug, 'path': path_slug, **universe_stats(titles)}
+    return WatchStats.model_validate({'universe': slug, 'path': path_slug, **universe_stats(titles)})
 
 
 @router.get("/titles/{universe}/{slug}")
@@ -171,7 +183,7 @@ async def get_title(
     slug: str,
     region: Annotated[str, Query(description="ISO 3166-1 two-letter region for providers")] = "US",
     sort: Annotated[str, Query(description="Ordering the previous/next neighbours follow")] = "story",
-) -> dict:
+) -> WatchTitleDetail:
     """One title in detail: providers, the title it plays the credits of, and its neighbours.
 
     Neighbours come from the same ordering the page uses, so "next" on a detail page always
@@ -199,7 +211,7 @@ async def get_title(
 
     current = titles[index]
     credits_of = next((row for row in titles if row['id'] == current['credits_of']), None)
-    return {
+    return WatchTitleDetail.model_validate({
         'title': current,
         'credits_of': credits_of,
         'parent': next((row for row in titles if row['id'] == current['parent_id']), None),
@@ -218,7 +230,7 @@ async def get_title(
         'path': payload['path'],
         'sort': sort,
         'universe': payload['universe'],
-    }
+    })
 
 
 # -- People -------------------------------------------------------------------
@@ -229,18 +241,18 @@ async def search_people(
     bot: BotDep,
     q: Annotated[str, Query(description="Name to match, trigram-similarity")],
     limit: Annotated[int, Query(ge=1, le=50, description="Maximum matches to return")] = 25,
-) -> dict:
+) -> WatchPeopleResponse:
     """Person search, best match first -- backs autocomplete on both surfaces.
 
     Deliberately not cached: it is a per-keystroke query against one GIN index, and caching it
     would fill the shared TTL cache with one entry per prefix anybody ever typed.
     """
     rows = await bot.db.watchlist.search_people(q, limit=limit)
-    return {'people': [person_summary(row) for row in rows]}
+    return WatchPeopleResponse.model_validate({'people': [person_summary(row) for row in rows]})
 
 
 @router.get("/people/{slug}")
-async def get_person(bot: BotDep, slug: str) -> dict:
+async def get_person(bot: BotDep, slug: str) -> WatchPersonPage:
     """One person and their whole filmography, undated titles first, then newest.
 
     An unknown slug is a real 404 -- the dashboard turns that into a not-found page, and it
@@ -249,7 +261,8 @@ async def get_person(bot: BotDep, slug: str) -> dict:
     person = await bot.db.watchlist.get_person(slug)
     if person is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown person {slug!r}")
-    return person_payload(person, await bot.db.watchlist.list_person_credits(person['tmdb_person_id']))
+    return WatchPersonPage.model_validate(
+        person_payload(person, await bot.db.watchlist.list_person_credits(person['tmdb_person_id'])))
 
 
 # -- Progress / prefs ---------------------------------------------------------
@@ -260,19 +273,19 @@ async def get_progress(
     bot: BotDep,
     discord_id: int,
     universe: Annotated[str | None, Query(description="Scope to one universe")] = None,
-) -> dict:
+) -> WatchProgressResponse:
     """A user's watch progress as ``{title_id: {status, updated_at}}``."""
     rows = await bot.db.watchlist.get_progress(discord_id, universe=universe)
-    return {
+    return WatchProgressResponse.model_validate({
         'entries': {
             str(row['title_id']): {'status': row['status'], 'updated_at': row['updated_at'].isoformat()}
             for row in rows
         },
-    }
+    })
 
 
 @router.put("/users/{discord_id}/progress")
-async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBody, Body()]) -> dict:
+async def put_progress(bot: BotDep, discord_id: int, body: Annotated[WatchProgressPutBody, Body()]) -> WatchProgressResponse:
     """Merges a batch of progress entries, last-write-wins, and returns the merged set.
 
     The client sends its own ``updated_at`` per entry; the server keeps whichever side is
@@ -294,19 +307,19 @@ async def delete_progress(
     bot: BotDep,
     discord_id: int,
     universe: Annotated[str | None, Query(description="Scope the reset to one universe")] = None,
-) -> dict:
+) -> WatchProgressDeleted:
     """Resets a user's progress, optionally for one universe only."""
-    return {'deleted': await bot.db.watchlist.clear_progress(discord_id, universe=universe)}
+    return WatchProgressDeleted(deleted=await bot.db.watchlist.clear_progress(discord_id, universe=universe))
 
 
-def _prefs_payload(row: Any) -> dict[str, Any]:
+def _prefs_payload(row: Any) -> WatchPrefs:
     """Shapes a ``watch_prefs`` row, or the defaults for a user who has never set any."""
     if row is None:
-        return {
+        return WatchPrefs.model_validate({
             'region': 'US', 'path_slug': None, 'sort_mode': 'story', 'show_spoiler': False,
             'with_credits': True, 'hide_sub': False, 'weekly_hours': None, 'target_date': None,
-        }
-    return {
+        })
+    return WatchPrefs.model_validate({
         'region': row['region'],
         'path_slug': row['path_slug'],
         'sort_mode': row['sort_mode'],
@@ -315,17 +328,17 @@ def _prefs_payload(row: Any) -> dict[str, Any]:
         'hide_sub': row['hide_sub'],
         'weekly_hours': row['weekly_hours'],
         'target_date': row['target_date'].isoformat() if row['target_date'] else None,
-    }
+    })
 
 
 @router.get("/users/{discord_id}/prefs")
-async def get_prefs(bot: BotDep, discord_id: int) -> dict:
+async def get_prefs(bot: BotDep, discord_id: int) -> WatchPrefs:
     """A user's watchlist preferences, or the defaults if they have never saved any."""
     return _prefs_payload(await bot.db.watchlist.get_prefs(discord_id))
 
 
 @router.patch("/users/{discord_id}/prefs")
-async def patch_prefs(bot: BotDep, discord_id: int, body: Annotated[PrefsBody, Body()]) -> dict:
+async def patch_prefs(bot: BotDep, discord_id: int, body: Annotated[PrefsBody, Body()]) -> WatchPrefs:
     """Updates the given preference fields, leaving the rest untouched."""
     values = body.model_dump(exclude_unset=True, exclude_none=True)
     if 'region' in values:
