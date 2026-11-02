@@ -1906,7 +1906,9 @@ class Music(Cog):
         """Connect (if needed) and switch a guild's player into 24/7 mode.
 
         Shared by the ``/music 247`` command and the dashboard internal API so both
-        behave identically. Resets the queue and starts the configured endless source.
+        behave identically. Resets the queue and starts the configured endless source --
+        except autoplay over a playing track, which keeps the track and queue and only
+        adds recommendations.
         """
         from .ui import PlayerPanel
 
@@ -1950,10 +1952,17 @@ class Music(Cog):
         if mode == "autoplay":
             player.autoplay = wavelink.AutoPlayMode.enabled
 
-        player.queue.reset()
-        if player.playing:
-            await player.stop()
-        await player.refill_always_on()
+        if mode == "autoplay" and player.playing and player.current is not None:
+            # Already playing: keep the song and the queue, only seed recommendations from
+            # the current track (they play once the manual queue drains). Restarting here
+            # replayed the very song that was already on.
+            # ponytail: private wavelink API (same call play(populate=True) makes); recheck on upgrade.
+            await player._do_recommendation(populate_track=player.current, max_population=10)
+        else:
+            player.queue.reset()
+            if player.playing:
+                await player.stop()
+            await player.refill_always_on()
         # Render the panel immediately so it reflects the now-playing track right away
         # (don't rely solely on the track-start event, which may race with this).
         if player.panel is not MISSING:
