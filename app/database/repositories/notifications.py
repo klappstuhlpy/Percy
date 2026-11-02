@@ -97,6 +97,11 @@ class NotificationsRepository(BaseRepository):
         meta = json.dumps({'handled_by': str(handler_id), 'outcome': outcome})
         return await self.fetchval(query, report_id, guild_id, meta) is True
 
+    async def release_report_claim(self, guild_id: int, report_id: int) -> None:
+        """Undoes :meth:`claim_report` after the action failed, so another moderator can retry."""
+        query = "UPDATE guild_notifications SET meta = meta - 'handled_by' - 'outcome' WHERE id = $1 AND guild_id = $2 AND kind = 'report'"
+        await self.execute(query, report_id, guild_id)
+
     async def delete(self, notification_id: int) -> bool:
         return await self.fetchval('DELETE FROM guild_notifications WHERE id = $1 RETURNING true', notification_id) is True
 

@@ -175,7 +175,6 @@ class ReportButton(
             await interaction.followup.send("This report was already handled.", ephemeral=True)
             return
 
-        result = "done"
         if action:
             try:
                 await apply_member_action(
@@ -187,13 +186,15 @@ class ReportButton(
                     reason=f"Report #{self.report_id}: {truncate(meta['reason'], 200)}",
                     duration=TIMEOUT_SECONDS if action == "timeout" else None,
                 )
-            except MemberActionError as exc:
-                result = f"failed: {exc.detail}"
-            except Exception:
-                log.exception("Report %s action failed unexpectedly.", self.report_id)
-                result = "failed: unexpected error"
+            except Exception as exc:  # release the claim: the report stays open with its buttons
+                if not isinstance(exc, MemberActionError):
+                    log.exception("Report %s action failed unexpectedly.", self.report_id)
+                await repo.release_report_claim(guild.id, self.report_id)
+                why = exc.detail if isinstance(exc, MemberActionError) else "unexpected error"
+                await interaction.followup.send(f"Report #{self.report_id}: {self.verb} failed ({why}). It is still open.", ephemeral=True)
+                return
         outcome = "Dismissed" if action is None else self.verb.title()
-        handled = f"{outcome} by {moderator.mention}" + ("" if result == "done" else f" ({result})")
+        handled = f"{outcome} by {moderator.mention}"
         with suppress(discord.HTTPException):
             if interaction.message is not None:
                 await interaction.message.edit(
@@ -209,4 +210,4 @@ class ReportButton(
             body=handled,
             link=f"/dashboard/guild/{guild.id}/notifications",
         )
-        await interaction.followup.send(f"Report #{self.report_id}: {result}.", ephemeral=True)
+        await interaction.followup.send(f"Report #{self.report_id}: done.", ephemeral=True)

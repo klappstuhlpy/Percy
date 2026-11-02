@@ -33,3 +33,12 @@ def test_meta_shaping() -> None:
     assert meta["reporter_id"] == "1" and meta["target_id"] == "2" and meta["channel_id"] == "3"
     assert len(meta["excerpt"]) == EXCERPT_LIMIT
     assert "excerpt" not in report_meta(reporter_id=1, target_id=2, reason="r")
+
+
+def test_report_permissions_match_action_permissions() -> None:
+    from app.services.notifications import ACTION_PERMISSIONS
+    from app.services.reports import REPORT_ACTIONS
+
+    for action, permission in REPORT_ACTIONS.values():
+        if action:
+            assert ACTION_PERMISSIONS[action] == permission
