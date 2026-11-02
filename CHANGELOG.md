@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-11-02
+
 ### Added
+- Help menu: large categories are split into sections with a "Jump to a section..." select, and every help page has a **Search** button that finds commands by name, alias or description across all categories.
 - Internal API: `GET /music/trending` also returns `charts`, Deezer's key-less worldwide chart (cached 1 h, empty when Deezer is unreachable).
+
+### Changed
+- The voice, nickname, channel-mute and sticky-role commands are now part of the **Moderation** category, and `ask` moved from the removed Automation category to **Misc**. Command rules that target `cog:Restrictions` or `cog:Automation` must be re-created for `cog:Moderation` or `cog:Misc`.
+
+### Fixed
+- Music: enabling autoplay no longer restarts the song that is playing.
 
 ## [2.27.0] - 2026-11-02
 
