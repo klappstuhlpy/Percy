@@ -121,16 +121,16 @@ small and self-contained first.
 | `webhooks.py` (vote webhooks) | 2 | no dashboard consumer; skip unless wanted |
 | `rolemenus.py` | 6 | |
 | `backup.py` | 6 | export blob is intentionally free-form JSON: leave as `dict` |
-| `notifications.py` | 7 | |
-| `members.py` | 7 | |
+| `notifications.py` | 7 | **done** |
+| `members.py` | 7 | **done** |
 | `subscriptions.py` (outbound webhooks) | 7 | |
 | `comics.py` | 5 | shaping in `app/services/comics/payload.py` |
 | `stats.py` | 9 | mixed scope |
 | `releases.py` | 9 | `progress` map: `dict[str, dict[str, Row]]` |
 | `watchlist.py` | 11 | large nested payloads |
-| `moderation.py` | 12 | 1 route has no JSON body |
-| `leveling.py` | 12 | **done (read routes; `{ok}`/`{ok,message}` actions left as dict)** |
-| `economy.py` | 15 | **done (read routes + inventory change; `{ok}` actions left as dict)** |
+| `moderation.py` | 12 | **done** 1 route has no JSON body |
+| `leveling.py` | 12 | |
+| `economy.py` | 15 | |
 | `music.py` | 18 | |
 | `guild.py` | 20 | biggest config surface; `Option` leniency matters most here |
 | `users.py` | 21 | includes PNG-preview and data-export routes (leave non-JSON alone) |

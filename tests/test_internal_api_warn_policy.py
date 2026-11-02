@@ -49,7 +49,7 @@ def test_threshold_error(count: int, action: str, seconds: int | None, ok: bool)
 async def test_get_payload_shape() -> None:
     bot = _bot([{'warn_count': 3, 'action': 'kick', 'duration_seconds': None}], days=30)
     out = await api.get_warn_policy(bot, _guild())
-    assert out == {
+    assert out.model_dump() == {
         'expiry_days': 30,
         'thresholds': [{'warn_count': 3, 'action': 'kick', 'duration_seconds': None}],
         'actions': ['timeout', 'mute', 'kick', 'ban'],
@@ -106,5 +106,5 @@ async def test_pardon_returns_the_case(monkeypatch: pytest.MonkeyPatch) -> None:
     guild.get_member.return_value = None
     bot.get_user.return_value = None
     out = await api.pardon_case(5, bot, guild, api.PardonBody(moderator_id=9))
-    assert out['case_index'] == 5
-    assert out['action'] == 'warn'
+    assert out.case_index == 5
+    assert out.action == 'warn' and out.pardoned

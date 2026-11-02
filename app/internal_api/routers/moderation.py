@@ -81,11 +81,83 @@ class BulkActionBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response models — the source of truth for percy-client's generated types
+# (dashboard/crates/percy-client/GENERATION.md). Class names are the Rust type names.
+# ---------------------------------------------------------------------------
+
+
+class CaseEntry(BaseModel):
+    case_index: int
+    action: str
+    target_id: str
+    target_name: str
+    moderator_id: str | None
+    moderator_name: str | None
+    reason: str | None
+    created_at: str | None
+    #: A pardoned warn stays in the history but no longer counts.
+    pardoned: bool = False
+
+
+class CasesResponse(BaseModel):
+    cases: list[CaseEntry]
+    total: int
+
+
+class RecentCasesResponse(BaseModel):
+    cases: list[CaseEntry]
+
+
+class CaseActionResponse(BaseModel):
+    ok: bool
+    case: CaseEntry
+
+
+class CaseDeleteResponse(BaseModel):
+    ok: bool
+    case_index: int
+
+
+class BulkActionFailure(BaseModel):
+    user_id: str
+    error: str
+
+
+class BulkActionResponse(BaseModel):
+    ok: bool
+    successes: int
+    failures: list[BulkActionFailure]
+
+
+class ActivityDay(BaseModel):
+    #: ISO date.
+    day: str
+    count: int
+
+
+class ActivityResponse(BaseModel):
+    activity: list[ActivityDay]
+    days: int
+
+
+class WarnThreshold(BaseModel):
+    warn_count: int
+    action: str
+    duration_seconds: int | None
+
+
+class WarnPolicy(BaseModel):
+    expiry_days: int | None
+    thresholds: list[WarnThreshold]
+    actions: list[str]
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> dict:
+def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> CaseEntry:
     """Serialize a ModerationCase with moderator/target names resolved against the guild."""
     moderator_name = None
     if case.moderator_id is not None:
@@ -95,7 +167,7 @@ def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> dict:
     target = guild.get_member(case.target_id) or bot.get_user(case.target_id)
     target_name = target.display_name if target else f'Unknown ({case.target_id})'
 
-    return {
+    return CaseEntry.model_validate({
         'case_index': case.index,
         'action': case.action,
         'target_id': str(case.target_id),
@@ -104,7 +176,8 @@ def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> dict:
         'moderator_name': moderator_name,
         'reason': case.reason,
         'created_at': case.created_at.isoformat() if case.created_at else None,
-    }
+        'pardoned': case.pardoned_at is not None,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -112,28 +185,28 @@ def _case_payload(guild: discord.Guild, case: ModerationCase, bot) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def _warn_policy_payload(bot, guild_id: int) -> dict:
+async def _warn_policy_payload(bot, guild_id: int) -> WarnPolicy:
     from app.cogs.modlog.warns import THRESHOLD_ACTIONS
 
     rows = await bot.db.cases.get_warn_thresholds(guild_id)
-    return {
+    return WarnPolicy.model_validate({
         'expiry_days': await bot.db.cases.get_warn_expiry_days(guild_id),
         'thresholds': [
             {'warn_count': r['warn_count'], 'action': r['action'], 'duration_seconds': r['duration_seconds']}
             for r in rows
         ],
         'actions': list(THRESHOLD_ACTIONS),
-    }
+    })
 
 
 @router.get("/warn-policy")
-async def get_warn_policy(bot: BotDep, guild: GuildDep) -> dict:
+async def get_warn_policy(bot: BotDep, guild: GuildDep) -> WarnPolicy:
     """Warn expiry and the escalation rules (the data behind ``warnpolicy show``)."""
     return await _warn_policy_payload(bot, guild.id)
 
 
 @router.patch("/warn-policy")
-async def patch_warn_policy(bot: BotDep, guild: GuildDep, body: WarnExpiryBody) -> dict:
+async def patch_warn_policy(bot: BotDep, guild: GuildDep, body: WarnExpiryBody) -> WarnPolicy:
     """Sets after how many days new warns stop counting; ``null``/``0`` means never."""
     from app.cogs.modlog.warns import MAX_EXPIRY_DAYS
 
@@ -145,7 +218,7 @@ async def patch_warn_policy(bot: BotDep, guild: GuildDep, body: WarnExpiryBody) 
 
 
 @router.put("/warn-policy/thresholds/{warn_count}")
-async def put_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep, body: WarnThresholdBody) -> dict:
+async def put_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep, body: WarnThresholdBody) -> WarnPolicy:
     """Adds or replaces the rule for a warn count, under the rules `warnpolicy set` enforces."""
     from app.cogs.modlog.warns import threshold_error
 
@@ -163,7 +236,7 @@ async def delete_warn_threshold(warn_count: int, bot: BotDep, guild: GuildDep) -
 
 
 @router.post("/cases/{case_index}/pardon")
-async def pardon_case(case_index: int, bot: BotDep, guild: GuildDep, body: PardonBody) -> dict:
+async def pardon_case(case_index: int, bot: BotDep, guild: GuildDep, body: PardonBody) -> CaseEntry:
     """Pardons one warn (kept in the history, no longer counts). Needs the moderator to hold Kick Members."""
     from app.cogs.modlog.models import ModerationCase
 
@@ -189,7 +262,7 @@ async def get_cases(
     target_id: int | None = Query(default=None),
     after: str | None = Query(default=None),
     before: str | None = Query(default=None),
-) -> dict:
+) -> CasesResponse:
     """Paginated, filterable list of moderation cases for a guild."""
     from app.cogs.modlog.models import ModerationCase
 
@@ -214,7 +287,7 @@ async def get_cases(
     )
 
     cases = [_case_payload(guild, ModerationCase.from_record(record), bot) for record in records]
-    return {'cases': cases, 'total': total}
+    return CasesResponse.model_validate({'cases': cases, 'total': total})
 
 
 @router.get("/cases/recent")
@@ -222,7 +295,7 @@ async def get_recent_cases(
     bot: BotDep,
     guild: GuildDep,
     since: str = Query(...),
-) -> dict:
+) -> RecentCasesResponse:
     """Cases created strictly after a timestamp (for event polling/streaming).
 
     The poller passes the newest ``created_at`` it already has, so that case is not repeated.
@@ -235,7 +308,7 @@ async def get_recent_cases(
     records = await bot.db.cases.get_recent_cases(guild.id, since=since_dt)
 
     cases = [_case_payload(guild, ModerationCase.from_record(record), bot) for record in records]
-    return {'cases': cases}
+    return RecentCasesResponse.model_validate({'cases': cases})
 
 
 @router.post("/cases")
@@ -243,7 +316,7 @@ async def create_case(
     bot: BotDep,
     guild: GuildDep,
     body: CreateCaseBody,
-) -> dict:
+) -> CaseActionResponse:
     """Manually open a moderation case (records only, does not perform the action)."""
     from app.cogs.modlog.models import CaseType, ModerationCase
 
@@ -267,7 +340,7 @@ async def create_case(
         record = await bot.db.cases.create_case(guild.id, body.action, target_id, moderator_id, reason)
         case = ModerationCase.from_record(record)
 
-    return {'ok': True, 'case': _case_payload(guild, case, bot)}
+    return CaseActionResponse(ok=True, case=_case_payload(guild, case, bot))
 
 
 @router.patch("/cases/{case_index}")
@@ -276,7 +349,7 @@ async def patch_case(
     bot: BotDep,
     guild: GuildDep,
     body: PatchCaseBody,
-) -> dict:
+) -> CaseActionResponse:
     """Update a case's reason (and its modlog channel post)."""
     from app.cogs.modlog.models import ModerationCase
 
@@ -295,7 +368,7 @@ async def patch_case(
 
     if case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='case not found')
-    return {'ok': True, 'case': _case_payload(guild, case, bot)}
+    return CaseActionResponse(ok=True, case=_case_payload(guild, case, bot))
 
 
 @router.delete("/cases/{case_index}")
@@ -304,7 +377,7 @@ async def delete_case(
     bot: BotDep,
     guild: GuildDep,
     moderator_id: str | None = Query(default=None),
-) -> dict:
+) -> CaseDeleteResponse:
     """Close (delete) a case and remove its modlog channel post.
 
     With ``moderator_id`` the deleting dashboard user must hold Manage Server.
@@ -323,7 +396,7 @@ async def delete_case(
 
     if case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='case not found')
-    return {'ok': True, 'case_index': case.index}
+    return CaseDeleteResponse(ok=True, case_index=case.index)
 
 
 @router.post("/members/bulk-action")
@@ -331,7 +404,7 @@ async def bulk_member_action(
     bot: BotDep,
     guild: GuildDep,
     body: BulkActionBody,
-) -> dict:
+) -> BulkActionResponse:
     """Apply a moderation action to multiple members at once.
 
     ``moderator_id`` is required and checked once (permission) and per member (hierarchy). Every
@@ -367,7 +440,7 @@ async def bulk_member_action(
         try:
             if body.action == 'unban':
                 if error := hierarchy_error(moderator, discord.Object(id=uid_int), guild.me, action='unban'):
-                    failures.append({'user_id': uid, 'error': error})
+                    failures.append({'user_id': str(uid), 'error': error})
                     continue
                 await guild.unban(discord.Object(id=uid_int), reason=reason)
                 # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
@@ -375,14 +448,14 @@ async def bulk_member_action(
             else:
                 member = guild.get_member(uid_int)
                 if member is None:
-                    failures.append({'user_id': uid, 'error': 'member not found'})
+                    failures.append({'user_id': str(uid), 'error': 'member not found'})
                     continue
                 if body.action not in BULK_ROLE_ACTIONS and (
                     error := hierarchy_error(
                         moderator, member, guild.me, action=body.action, check_bot=body.action in BULK_HIERARCHY_ACTIONS
                     )
                 ):
-                    failures.append({'user_id': uid, 'error': error})
+                    failures.append({'user_id': str(uid), 'error': error})
                     continue
 
                 if body.action == 'kick':
@@ -396,13 +469,13 @@ async def bulk_member_action(
                     if not await softban(bot, guild, member, reason=reason):
                         # The ban stands: record it as one and report it apart from a plain failure.
                         bot.dispatch('mod_action', guild.id, 'ban', uid_int, moderator_id, reason)
-                        failures.append({'user_id': uid, 'error': 'banned, but lifting the ban failed: still banned'})
+                        failures.append({'user_id': str(uid), 'error': 'banned, but lifting the ban failed: still banned'})
                         continue
                 elif body.action == 'timeout':
                     await member.timeout(timeout_for, reason=reason)
                 elif body.action == 'warn':
                     if member.bot:
-                        failures.append({'user_id': uid, 'error': 'cannot warn a bot'})
+                        failures.append({'user_id': str(uid), 'error': 'cannot warn a bot'})
                         continue
                 elif body.action == 'add_roles':
                     await member.add_roles(*roles, reason=reason or 'Dashboard bulk role update')
@@ -417,13 +490,13 @@ async def bulk_member_action(
                 bot.dispatch('mod_action', guild.id, body.action, uid_int, moderator_id, reason, *expiry)
             successes.append(uid)
         except Exception as e:
-            failures.append({'user_id': uid, 'error': str(e)})
+            failures.append({'user_id': str(uid), 'error': str(e)})
 
-    return {
+    return BulkActionResponse.model_validate({
         'ok': True,
         'successes': len(successes),
         'failures': failures,
-    }
+    })
 
 
 @router.get("/members/{user_id}/activity")
@@ -432,7 +505,7 @@ async def get_member_activity(
     bot: BotDep,
     guild: GuildDep,
     days: int = Query(default=365, ge=1, le=365),
-) -> dict:
+) -> ActivityResponse:
     """Daily command counts for a member (activity heatmap data)."""
     records = await bot.db.stats.get_member_daily_activity(guild.id, user_id, days=days)
 
@@ -440,4 +513,4 @@ async def get_member_activity(
         {'day': record['day'].isoformat(), 'count': record['count']}
         for record in records
     ]
-    return {'activity': activity, 'days': days}
+    return ActivityResponse.model_validate({'activity': activity, 'days': days})

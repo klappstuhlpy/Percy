@@ -40,6 +40,14 @@ pub use generated::{
     CardOption, LeaderboardEntry, LeaderboardResponse, LevelingConfig, MemberLevel, TemplateVariable, XpHistoryPoint,
     XpHistoryResponse,
 }; // leveling domain
+    ActionRequest, ActionRequestList, ActivityDay, ActivityResponse, AvatarEntry, AvatarHistoryResponse, BulkActionFailure,
+    BulkActionResponse, CaseActionResponse, CaseEntry, CaseDeleteResponse, CasesResponse, Member, MemberCase,
+    MemberCommandStats, MemberDetail, MemberEconomy, MemberLeveling, MemberMessage, MemberMessages, MemberNameHistory,
+    MemberRoleBadge, MemberSelf, MemberSelfLeveling, MemberTopCommand, MemberOwnedTag, MemberActionResult,
+    MemberRolesResult, MembersResponse, NameHistoryEntry, Notification, NotificationList, NotificationSummary,
+    NotificationsReadResult, RecentCasesResponse, RequestChannelRef, RequestDecision, RequestRoleRef, RequestSettings,
+    WarnPolicy, WarnThreshold,
+}; // members + moderation + notifications domains
 
 /// A typed client for Percy's internal API.
 #[derive(Clone)]
