@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import io
 import logging
 import random
 import re
@@ -35,6 +36,7 @@ from app.services import (
     track_artist,
 )
 from app.services.music_audio import EQ_PRESETS
+from app.services.playlist_io import MAX_BYTES, PlaylistImportError, parse_playlist, serialize_playlist
 from app.utils import (
     ProgressBar,
     WrapList,
@@ -2443,6 +2445,60 @@ class Music(Cog):
             await player.play(player.queue.get(), volume=70)
         else:
             await player.refresh_panel()
+
+    @playlist.command(name="export", description="Export one of your playlists as a JSON file.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.describe(name_or_id="The playlist to export.")
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
+    async def playlist_export(
+        self, ctx: Context, name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)]
+    ) -> None:
+        """Export one of your playlists as a JSON file."""
+        playlist = await self.get_playlist(ctx, name_or_id)
+        if playlist is None:
+            await ctx.send_error("There is no playlist with that name.")
+            return
+        # ponytail: lengths are not stored per playlist track, so export 0.
+        text = serialize_playlist(playlist.name, [(t.name, t.author, t.url, 0) for t in playlist.tracks if t.url])
+        file = discord.File(io.BytesIO(text.encode("utf-8")), filename=f"{playlist.name[:50] or 'playlist'}.json")
+        await ctx.send(file=file, ephemeral=True)
+
+    @playlist.command(name="import", description="Create a playlist from an exported JSON file.")
+    @app_commands.describe(file="A playlist JSON file (Percy or Red export).", name="Name for the new playlist.")
+    async def playlist_import(self, ctx: Context, file: discord.Attachment, *, name: str | None = None) -> None:
+        """Create a playlist from an exported JSON file."""
+        if file.size > MAX_BYTES:
+            await ctx.send_error(f"The file is larger than {MAX_BYTES // 1024} KB.")
+            return
+        try:
+            parsed = parse_playlist(await file.read())
+        except PlaylistImportError as exc:
+            await ctx.send_error(str(exc))
+            return
+        except discord.HTTPException:
+            await ctx.send_error("I could not download that file.")
+            return
+
+        name = (name or parsed.name or "Imported playlist").strip()
+        if len(name) > 100:
+            await ctx.send_error("The name of the playlist must be 100 characters or less.")
+            return
+        playlists = await self.get_playlists(user_id=ctx.author.id)
+        if len(playlists) >= 3 and not await self.bot.is_owner(ctx.author):
+            await ctx.send_error("You can only have `3` playlists at the same time.")
+            return
+        if any(p.name.lower() == name.lower() for p in playlists):
+            await ctx.send_error("There is already a playlist with this name, please choose another name.")
+            return
+
+        playlist_id = await self.bot.db.playlists.create_playlist(ctx.author.id, name, discord.utils.utcnow())
+        if playlist_id is None:
+            await ctx.send_error("Could not create the playlist.")
+            return
+        for track in parsed.tracks:
+            await self.bot.db.playlists.add_track(playlist_id, track.title, track.uri, author=track.author)
+        self.get_playlists.invalidate(ctx.author.id)
+        await ctx.send_success(f"Imported **{name}** [`{playlist_id}`] with **{len(parsed.tracks)}** tracks.")
 
     @playlist.command(name="add", description="Adds the current playing track or a track via a direct-url to your playlist.")
     @app_commands.rename(name_or_id="name-or-id")

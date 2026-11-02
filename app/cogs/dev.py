@@ -131,6 +131,16 @@ class Dev(Cog):
             return
         await stats.send_bot_health(ctx)
 
+    @dev.command(name="serverlock", description="Leave every newly joined server while on; no argument shows it.")
+    async def dev_serverlock(self, ctx: Context, state: bool | None = None) -> None:
+        """Turns the server lock on or off. Servers already joined are unaffected."""
+        if state is not None:
+            await self.bot.server_lock.put('on', state)
+        if self.bot.server_lock.get('on'):
+            await ctx.send_info("Server lock is **on**: new servers are left on join.")
+        else:
+            await ctx.send_info("Server lock is **off**.")
+
     # -- owner bypass -----------------------------------------------------------
 
     @dev.command(name="bypass", description="Toggles whether owners skip permission checks and cooldowns.")

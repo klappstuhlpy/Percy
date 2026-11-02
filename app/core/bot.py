@@ -132,6 +132,7 @@ class Bot(commands.Bot):
 
     if TYPE_CHECKING:
         blacklist: Config[int, bool]
+        server_lock: Config[str, bool]
         temp_channels: Config[int, bool]
         doc_links: Config[str, dict[str, str | list[str]] | list[str]]
 
@@ -256,6 +257,7 @@ class Bot(commands.Bot):
         self.prepare_jishaku_flags()
 
         self.blacklist = Config('blacklist')
+        self.server_lock = Config('server_lock.json')
         self.temp_channels = Config('temp_channels.json')
         self.doc_links = Config('doc_links.json')
 
@@ -525,6 +527,9 @@ class Bot(commands.Bot):
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         if guild.id in self.blacklist:
+            await guild.leave()
+        elif self.server_lock.get('on'):
+            self.log.warning('Server lock is on; leaving new guild %s (%s)', guild.name, guild.id)
             await guild.leave()
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
