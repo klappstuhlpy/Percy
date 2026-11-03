@@ -347,11 +347,9 @@ class Colour(discord.Colour):
     consistent with the web UI.
     """
 
-    # --- klappstuhl.me dashboard palette ---
-
     @classmethod
     def brand(cls) -> Self:
-        return cls(0xD97757)
+        return None # cls(0xD97757)  # noqa
 
     @classmethod
     def brand_bright(cls) -> Self:
