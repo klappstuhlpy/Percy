@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from app.cogs.moderation.member_actions import HIERARCHY_ACTIONS, MemberActionError, apply_member_action
-from app.services.notifications import ACTION_PERMISSIONS
+from app.services.guild.notifications import ACTION_PERMISSIONS
 from app.utils.checks import hierarchy_error
 
 from .ui import request_embed

@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 from discord.flags import flag_value
 
-from app.services.command_rules import Decision, Invocation, resolve
+from app.services.guild.command_rules import Decision, Invocation, resolve
 
 log = logging.getLogger(__name__)
 

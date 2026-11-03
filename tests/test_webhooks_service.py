@@ -1,4 +1,4 @@
-"""Tests for the pure outbound-webhook helpers in :mod:`app.services.webhooks`."""
+"""Tests for the pure outbound-webhook helpers in :mod:`app.services.guild.webhooks`."""
 
 import hashlib
 import hmac
@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from app.services import webhooks
-from app.services.webhooks import check_destination
+from app.services.guild import webhooks
+from app.services.guild.webhooks import check_destination
 
 
 class TestValidEvents:

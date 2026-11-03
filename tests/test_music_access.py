@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.music_access import resolve_viewer
+from app.services.music.access import resolve_viewer
 
 
 @pytest.mark.parametrize(
@@ -25,7 +25,7 @@ def test_resolve_viewer(has_dj, user_ch, bot_ch, mode, expected) -> None:
 
 def test_dj_mode_constants_match_enum() -> None:
     from app.cogs.music.models import DJMode
-    from app.services import music_access as m
+    from app.services.music import access as m
 
     assert (DJMode.everyone, DJMode.dj_only, DJMode.hybrid) == (0, 1, 2)
     assert (DJMode.everyone, DJMode.dj_only) == (m.DJ_MODE_EVERYONE, m.DJ_MODE_DJ_ONLY)

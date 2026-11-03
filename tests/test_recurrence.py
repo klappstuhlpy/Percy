@@ -1,4 +1,4 @@
-"""Tests for :mod:`app.services.recurrence`."""
+"""Tests for :mod:`app.services.infra.recurrence`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import datetime
 import pytest
 from dateutil.relativedelta import relativedelta
 
-from app.services.recurrence import (
+from app.services.infra.recurrence import (
     MIN_INTERVAL,
     advance_recurrence,
     describe_interval,
@@ -114,7 +114,7 @@ def test_describe_interval_singular_and_plural() -> None:
 def test_monthly_anchor_does_not_drift_past_short_month() -> None:
     import datetime
 
-    from app.services.recurrence import next_occurrence
+    from app.services.infra.recurrence import next_occurrence
 
     jan = datetime.datetime(2026, 1, 31, 9)
     feb = next_occurrence(jan, {'months': 1}, now=jan, anchor_day=31)

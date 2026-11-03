@@ -1,7 +1,7 @@
 """Member restrictions: voice kick/ban, nicknames (set and freeze) and per-channel mutes.
 
 Controller only: every command runs through ``apply_member_action`` (the path the dashboard and the
-case log share), the Discord work is in :mod:`.restriction_actions`, the rules in :mod:`app.services.restrictions`.
+case log share), the Discord work is in :mod:`.restriction_actions`, the rules in :mod:`app.services.moderation.restrictions`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from app.cogs.moderation.member_actions import MemberActionError, apply_member_a
 from app.core import Bot, Cog, Context, command, describe, group
 from app.core.converter import ActionReason
 from app.core.models import PermissionTemplate
-from app.services.restrictions import is_current
+from app.services.moderation.restrictions import is_current
 from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
 
 from . import restriction_actions as actions

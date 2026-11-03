@@ -4,7 +4,7 @@ The subscription CRUD lives in the internal API (``app/internal_api/routers/subs
 this cog is the delivery half. It listens to a curated set of gateway events — plus an internal
 ``percy_event`` seam any other cog can dispatch to — and POSTs a signed JSON envelope to every
 enabled subscription that asked for that event. The pure envelope/signing helpers live in
-``app.services.webhooks`` (Discord-free); turning Discord objects into payloads happens here.
+``app.services.guild.webhooks`` (Discord-free); turning Discord objects into payloads happens here.
 
 To emit a domain event from elsewhere::
 
@@ -21,7 +21,7 @@ import aiohttp
 
 from app.core import Cog
 from app.services import SIGNATURE_HEADER, build_envelope, serialize_envelope, sign_body
-from app.services.webhooks import check_destination
+from app.services.guild.webhooks import check_destination
 
 if TYPE_CHECKING:
     import asyncpg

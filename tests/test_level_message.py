@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.level_message import render_level_up
+from app.services.guild.level_message import render_level_up
 
 VALUES = {'user': 'klapp', 'user.mention': '<@1>', 'level': '7', 'server': 'Percy HQ'}
 

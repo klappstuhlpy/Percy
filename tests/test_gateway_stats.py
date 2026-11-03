@@ -1,4 +1,4 @@
-"""Tests for :mod:`app.services.gateway_stats`."""
+"""Tests for :mod:`app.services.stats.gateway_stats`."""
 
 from __future__ import annotations
 

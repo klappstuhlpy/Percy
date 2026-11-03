@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 
     from app.core import Bot
     from app.core.permissions import CommandOverride
-    from app.services.command_rules import Rule
+    from app.services.guild.command_rules import Rule
 
     DatabaseT = TypeVar("DatabaseT", bound="_Database")
 

@@ -13,8 +13,8 @@ from contextlib import suppress
 import discord
 
 from app.cogs.moderation.infractions import announce, reinvite_if_enabled, softban
-from app.services.moderation_settings import reason_missing
-from app.services.restrictions import RESTRICTION_ACTIONS
+from app.services.moderation.restrictions import RESTRICTION_ACTIONS
+from app.services.moderation.settings import reason_missing
 from app.utils.checks import hierarchy_error
 
 # Percy keeps no message archive (the gateway cache holds 10 messages), so both the message

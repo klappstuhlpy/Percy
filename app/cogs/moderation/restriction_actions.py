@@ -3,7 +3,7 @@
 Each function either succeeds or raises :class:`MemberActionError`; the callers
 (:func:`app.cogs.moderation.member_actions.apply_member_action`, hence the commands, the dashboard and
 the listeners) own permissions, hierarchy and the case. The pure rules are in
-:mod:`app.services.restrictions`, the SQL in ``bot.db.restrictions``.
+:mod:`app.services.moderation.restrictions`, the SQL in ``bot.db.restrictions``.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from app.cogs.moderation.member_actions import MemberActionError, validate_mute_duration
-from app.services.moderation_settings import sticky_to_restore
-from app.services.restrictions import CHANNEL_MUTE_DENIALS, normalize_nickname
+from app.services.moderation.restrictions import CHANNEL_MUTE_DENIALS, normalize_nickname
+from app.services.moderation.settings import sticky_to_restore
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping

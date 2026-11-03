@@ -25,7 +25,17 @@ __all__ = (
     "track_artist",
 )
 
-import discord
+# Mirrors ``discord.utils.escape_markdown`` (stock mode, links left intact) so this module stays Discord-free.
+_ESCAPE_MARKDOWN = re.compile(
+    r"(?P<url><[^: >]+:\/[^ >]+>|(?:https?|steam):\/\/[^\s<]+[^<.,:;\"'\]\s])"
+    r"|(?P<markdown>[_\\~|\*`]|^>(?:>>)?\s|\[.+\]\(.+\)|^#{1,3}|^\s*-)",
+    re.MULTILINE,
+)
+
+
+def _escape_markdown(text: str) -> str:
+    return _ESCAPE_MARKDOWN.sub(lambda m: m.group("url") or "\\" + m.group("markdown"), text)
+
 
 # Matches a single LRC time tag, e.g. ``[01:23.45]`` or ``[01:23]`` (also ``:``
 # as the fractional separator that some providers emit). Metadata tags such as
@@ -72,11 +82,11 @@ def parse_lrc(raw: str | None) -> list[LyricLine]:
         tags = list(_TIME_TAG.finditer(raw_line))
         if not tags:
             continue
-        text = raw_line[tags[-1].end():].strip()
+        text = raw_line[tags[-1].end() :].strip()
         for tag in tags:
             minutes, seconds = int(tag.group(1)), int(tag.group(2))
             total_ms = (minutes * 60 + seconds) * 1000 + _fraction_to_ms(tag.group(3))
-            lines.append(LyricLine(total_ms, discord.utils.escape_markdown(text)))
+            lines.append(LyricLine(total_ms, _escape_markdown(text)))
 
     lines.sort(key=lambda line: line.timestamp)
     return lines

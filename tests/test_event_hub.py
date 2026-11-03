@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 
 from app.internal_api.routers.events import event_stream
-from app.services.event_hub import QUEUE_SIZE, EventHub, format_sse, parse_topics
+from app.services.infra.event_hub import QUEUE_SIZE, EventHub, format_sse, parse_topics
 
 T = 2.0
 

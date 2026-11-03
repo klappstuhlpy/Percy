@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from typing import Any
 
-from app.services.notifications import (
+from app.services.guild.notifications import (
     ACTION_PERMISSIONS,
     REQUESTABLE_ACTIONS,
     check_request,

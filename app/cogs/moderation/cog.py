@@ -20,7 +20,7 @@ from app.core.pagination import LinePaginator
 from app.core.views import View
 from app.database.base import GuildConfig
 from app.services import ModerationAssessor, build_purge_predicate
-from app.services.moderation_settings import MOD_SWITCHES
+from app.services.moderation.settings import MOD_SWITCHES
 from app.utils import (
     checks,
     fuzzy,

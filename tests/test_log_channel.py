@@ -1,4 +1,4 @@
-"""Tests for :mod:`app.services.log_channel` (what the private log channel posts)."""
+"""Tests for :mod:`app.services.moderation.log_channel` (what the private log channel posts)."""
 
 from __future__ import annotations
 

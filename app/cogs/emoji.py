@@ -14,7 +14,7 @@ from app.core import Bot, Cog, Context
 from app.core.models import PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import TextSource
 from app.rendering import get_dominant_color
-from app.services.webhooks import check_destination
+from app.services.guild.webhooks import check_destination
 from app.utils import helpers, usage_per_day
 from app.utils.lock import lock
 from config import Emojis

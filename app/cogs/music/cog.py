@@ -35,8 +35,8 @@ from app.services import (
     pick_genius_hit,
     track_artist,
 )
-from app.services.music_audio import EQ_PRESETS
-from app.services.playlist_io import MAX_BYTES, PlaylistImportError, parse_playlist, serialize_playlist
+from app.services.music.audio import EQ_PRESETS
+from app.services.music.playlist_io import MAX_BYTES, PlaylistImportError, parse_playlist, serialize_playlist
 from app.utils import (
     ProgressBar,
     WrapList,

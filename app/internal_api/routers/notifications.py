@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.cogs.notifications.decide import decide_request
-from app.services.notifications import notification_payload, request_payload
+from app.services.guild.notifications import notification_payload, request_payload
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_role

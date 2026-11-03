@@ -11,7 +11,7 @@ from wavelink import Playable
 
 from app.core.pagination import TextSource
 from app.database import BaseRecord
-from app.services.lyrics import display_title
+from app.services.music.lyrics import display_title
 from app.utils import merge, pluralize
 
 if TYPE_CHECKING:

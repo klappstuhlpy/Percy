@@ -132,7 +132,7 @@ class NumberRange(commands.Range):
 
         Returns ``None`` if ``converter`` is neither, so callers can leave other annotations alone.
         """
-        if isinstance(converter, commands.Range):  # noqa
+        if isinstance(converter, commands.Range):
             return cls(annotation=converter.annotation, min=converter.min, max=converter.max)
 
         if isinstance(converter, app_commands.transformers.RangeTransformer):

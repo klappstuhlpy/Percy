@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 
-from app.services.reports import (
+from app.services.moderation.reports import (
     EXCERPT_LIMIT,
     HOURLY_LIMIT,
     NOT_SET_UP,
@@ -43,8 +43,8 @@ def test_meta_shaping() -> None:
 
 
 def test_report_permissions_match_action_permissions() -> None:
-    from app.services.notifications import ACTION_PERMISSIONS
-    from app.services.reports import REPORT_ACTIONS
+    from app.services.guild.notifications import ACTION_PERMISSIONS
+    from app.services.moderation.reports import REPORT_ACTIONS
 
     for action, permission in REPORT_ACTIONS.values():
         if action:
@@ -62,7 +62,7 @@ def test_report_channel_required() -> None:
 
 
 def test_can_post_report_needs_view_send_and_embed() -> None:
-    from app.services.reports import can_post_report
+    from app.services.moderation.reports import can_post_report
 
     assert can_post_report(view_channel=True, send_messages=True, embed_links=True)
     assert not can_post_report(view_channel=True, send_messages=True, embed_links=False)

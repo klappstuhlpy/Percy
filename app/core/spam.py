@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
-from app.services.spam_penalty import LOOKBACK_WINDOW, compute_spam_penalty
+from app.services.moderation.spam_penalty import LOOKBACK_WINDOW, compute_spam_penalty
 from app.utils import helpers
 from app.utils.webhooks import send_webhook
 
@@ -84,7 +84,7 @@ class SpamControl:
 
         Escalates from a day up to a week — and ultimately a permanent block — the more
         often and more recently the user has tripped the spam filter. The actual curve
-        lives in :func:`~app.services.spam_penalty.compute_spam_penalty`.
+        lives in :func:`~app.services.moderation.spam_penalty.compute_spam_penalty`.
 
         Returns
         --------

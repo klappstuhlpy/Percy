@@ -339,7 +339,7 @@ class Stats(Cog):
             self.daily_summary,
         ]
 
-        # What the private log channel posts: see app/services/log_channel.py.
+        # What the private log channel posts: see app/services/moderation/log_channel.py.
         self._gateway_burst = BurstCollapser(window=GATEWAY_WINDOW)
         self._disconnected_at: float | None = None
         self._health = HealthTracker()

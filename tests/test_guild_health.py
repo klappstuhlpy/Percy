@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.guild_health import ChannelState, FeatureFacts, RoleState, assess, humanize_permission, summarize
+from app.services.guild.health import ChannelState, FeatureFacts, RoleState, assess, humanize_permission, summarize
 
 
 def test_off_feature_reports_nothing_even_with_broken_facts() -> None:

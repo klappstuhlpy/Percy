@@ -1,4 +1,4 @@
-"""Tests for :mod:`app.services.purge`."""
+"""Tests for :mod:`app.services.moderation.purge`."""
 
 from __future__ import annotations
 

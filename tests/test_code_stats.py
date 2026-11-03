@@ -1,4 +1,4 @@
-"""Tests for :mod:`app.services.code_stats`.
+"""Tests for :mod:`app.services.stats.code_stats`.
 
 Drives the pure source-tree counter against a temporary directory so the logic
 extracted from the ``stats`` cog can be verified without a bot or the real repo.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.moderation_settings import (
+from app.services.moderation.settings import (
     DISABLED_MESSAGE_LIMIT,
     REASON_REQUIRED_ACTIONS,
     action_notice,

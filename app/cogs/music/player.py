@@ -14,7 +14,7 @@ from discord.utils import MISSING
 from wavelink import ChannelTimeoutException, Playable, Playlist
 
 from app.core import Context
-from app.services.lyrics import display_title
+from app.services.music.lyrics import display_title
 from app.utils import convert_duration, helpers
 from config import Emojis
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.database.repositories.base import BaseRepository
-from app.services.command_rules import Rule
+from app.services.guild.command_rules import Rule
 
 __all__ = ('CommandRulesRepository',)
 

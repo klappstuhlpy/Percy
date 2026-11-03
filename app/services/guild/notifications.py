@@ -9,7 +9,7 @@ import datetime
 import json
 from typing import TYPE_CHECKING, Any
 
-from app.services.restrictions import RESTRICTION_ACTIONS
+from app.services.moderation.restrictions import RESTRICTION_ACTIONS
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -48,7 +48,7 @@ ACTION_PERMISSIONS: dict[str, str] = {
     'timeout': 'moderate_members',
     'untimeout': 'moderate_members',
     'purge': 'manage_messages',
-    # Member restrictions (app/services/restrictions.py). Channel mutes additionally need Manage Channels,
+    # Member restrictions (app/services/moderation/restrictions.py). Channel mutes additionally need Manage Channels,
     # checked against the channel by the executor.
     'voicekick': 'move_members',
     'voiceban': 'manage_roles',

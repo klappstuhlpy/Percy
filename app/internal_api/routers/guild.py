@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 
 import config
 from app.services import ModelTier, build_dashboard_assistant_system
-from app.services.guild_health import ChannelState, FeatureFacts, RoleState, summarize
-from app.services.moderation_settings import check_disabled_message
+from app.services.guild.health import ChannelState, FeatureFacts, RoleState, summarize
+from app.services.moderation.settings import check_disabled_message
 from app.utils import truncate
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 from app.utils.webhooks import send_webhook

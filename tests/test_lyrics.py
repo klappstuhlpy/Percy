@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.lyrics import LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
+from app.services.music.lyrics import LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
 
 SAMPLE_LRC = """[ar:Some Artist]
 [ti:Some Song]
@@ -100,7 +100,7 @@ def _hit(title: str, artist: str, kind: str = "song") -> dict:
 
 
 def test_pick_genius_hit_skips_list_pages_that_mention_the_artist() -> None:
-    from app.services.lyrics import pick_genius_hit
+    from app.services.music.lyrics import pick_genius_hit
 
     ranking = _hit("2010 Albums Ranked", "Some User")
     song = _hit("Electric Feel", "MGMT")
@@ -109,7 +109,7 @@ def test_pick_genius_hit_skips_list_pages_that_mention_the_artist() -> None:
 
 
 def test_pick_genius_hit_matches_youtube_style_uploads() -> None:
-    from app.services.lyrics import pick_genius_hit
+    from app.services.music.lyrics import pick_genius_hit
 
     song = _hit("Electric Feel", "MGMT")
     assert pick_genius_hit([song], title="MGMT - Electric Feel (Official Video)", artist="Random Uploader") is song["result"]
@@ -118,7 +118,7 @@ def test_pick_genius_hit_matches_youtube_style_uploads() -> None:
 
 
 def test_display_title_drops_credits_and_noise_but_keeps_versions() -> None:
-    from app.services.lyrics import display_title
+    from app.services.music.lyrics import display_title
 
     assert display_title("Flower In A Hurricane [from GTAVI] (feat. King Gizzard & the Lizard Wizard)") == "Flower In A Hurricane"
     assert display_title("MGMT - Electric Feel (Official Video)", "MGMTVEVO") == "Electric Feel"
@@ -130,7 +130,7 @@ def test_display_title_drops_credits_and_noise_but_keeps_versions() -> None:
 
 
 def test_track_artist_takes_first_artist_without_channel_noise() -> None:
-    from app.services.lyrics import track_artist
+    from app.services.music.lyrics import track_artist
 
     assert track_artist("MGMT - Topic") == "MGMT"
     assert track_artist("Daft Punk, Pharrell Williams") == "Daft Punk"

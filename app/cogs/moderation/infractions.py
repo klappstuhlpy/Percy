@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from app.services.moderation_settings import action_notice, reason_missing
+from app.services.moderation.settings import action_notice, reason_missing
 from app.utils import merge_perms
 from app.utils.checks import hierarchy_error
 from config import Emojis

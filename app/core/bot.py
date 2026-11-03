@@ -41,7 +41,7 @@ from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand, format_duration
-from app.services.event_hub import EventHub
+from app.services.infra.event_hub import EventHub
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,

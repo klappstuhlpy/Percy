@@ -1,10 +1,10 @@
-"""Tests for the pure time-series helpers in :mod:`app.services.analytics`."""
+"""Tests for the pure time-series helpers in :mod:`app.services.stats.analytics`."""
 
 from datetime import UTC, datetime
 
 import pytest
 
-from app.services import analytics
+from app.services.stats import analytics
 
 
 class TestResolveRange:

@@ -15,7 +15,7 @@ import discord
 from discord.ext import commands, tasks
 
 from app.core import Bot, Cog, Context, command, cooldown, describe, group
-from app.services.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS, SEVERITIES, check_request
+from app.services.guild.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS, SEVERITIES, check_request
 from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
 
 from .decide import edit_request_message, notify

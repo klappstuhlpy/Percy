@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.cogs.moderation.member_actions import MemberActionError, apply_member_action
-from app.services.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS
-from app.services.restrictions import MAX_NICK_LENGTH, RESTRICTION_ACTIONS, is_current, normalize_nickname
+from app.services.guild.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS
+from app.services.moderation.restrictions import MAX_NICK_LENGTH, RESTRICTION_ACTIONS, is_current, normalize_nickname
 
 
 @pytest.mark.parametrize(('raw', 'expected'), [('  Bob ', 'Bob'), ('', None), ('   ', None), (None, None)])

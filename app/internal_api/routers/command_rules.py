@@ -2,7 +2,7 @@
 
 Writes go through ``bot.db.command_rules`` whose repository busts the cached rule list, so the
 Config cog's ``bot_check`` sees a change on the next invocation. Resolution order is documented in
-``app/services/command_rules.py``.
+``app/services/guild/command_rules.py``.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.core.permissions import custom_command_name, normalize_rule_subject
-from app.services.command_rules import TARGET_TYPES, canonical_target_type
+from app.services.guild.command_rules import TARGET_TYPES, canonical_target_type
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id

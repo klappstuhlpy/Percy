@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.cogs.moderation.member_actions import MemberActionError, apply_member_action, scan_member_messages
-from app.services.notifications import ACTION_PERMISSIONS
+from app.services.guild.notifications import ACTION_PERMISSIONS
 from app.utils.checks import hierarchy_error
 
 from ..dependencies import BotDep, GuildDep, verify_token

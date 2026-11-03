@@ -1,7 +1,7 @@
 """Server-sent event stream the dashboard's live pages subscribe to (through the BFF).
 
 ``GET /guilds/{guild_id}/events?topics=music,case,stats`` -> ``text/event-stream`` of
-``{type, data}`` JSON messages from the in-process :class:`~app.services.event_hub.EventHub`
+``{type, data}`` JSON messages from the in-process :class:`~app.services.infra.event_hub.EventHub`
 (``bot.events``). Events are hints; the page refetches the real payload over its existing HTTP
 endpoint. The ``stats`` topic is not published by anyone: the stream itself emits a bot-stats
 snapshot every :data:`STATS_INTERVAL` seconds, only while a client asked for it.
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
-from app.services.event_hub import format_sse, parse_topics
+from app.services.infra.event_hub import format_sse, parse_topics
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from .stats import get_bot_stats

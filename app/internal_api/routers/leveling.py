@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
 from app.rendering.card_style import clean_style, style_options
-from app.services.level_message import LEVEL_UP_VARIABLES, level_up_values, render_level_up
+from app.services.guild.level_message import LEVEL_UP_VARIABLES, level_up_values, render_level_up
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import invalidate_cog_cache

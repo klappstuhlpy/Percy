@@ -12,7 +12,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from app.database.repositories.base import BaseRepository
-from app.services.notifications import DEDUPE_WINDOW, REQUEST_TTL, RETENTION
+from app.services.guild.notifications import DEDUPE_WINDOW, REQUEST_TTL, RETENTION
 
 if TYPE_CHECKING:
     import asyncpg

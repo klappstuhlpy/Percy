@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands
 
 from app.database import BaseRecord
-from app.services.level_message import level_up_values, render_level_up
+from app.services.guild.level_message import level_up_values, render_level_up
 from app.utils import fnumb, sanitize_snowflakes
 
 if TYPE_CHECKING:

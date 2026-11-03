@@ -1,6 +1,6 @@
-"""Tests for the pure backup/template helpers in :mod:`app.services.backup`."""
+"""Tests for the pure backup/template helpers in :mod:`app.services.guild.backup`."""
 
-from app.services import backup
+from app.services.guild import backup
 
 
 class TestBuildBackup:

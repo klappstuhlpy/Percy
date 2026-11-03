@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from app.cogs.moderation.member_actions import HIERARCHY_ACTIONS, MemberActionError, apply_member_action
-from app.services.reports import REPORT_ACTIONS, can_post_report, check_report_rate, report_channel_error, report_meta
+from app.services.moderation.reports import (
+    REPORT_ACTIONS,
+    can_post_report,
+    check_report_rate,
+    report_channel_error,
+    report_meta,
+)
 from app.utils import truncate
 from app.utils.checks import hierarchy_error
 

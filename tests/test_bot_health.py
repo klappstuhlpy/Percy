@@ -1,9 +1,9 @@
-"""Tests for :mod:`app.services.bot_health`."""
+"""Tests for :mod:`app.services.stats.bot_health`."""
 
 from __future__ import annotations
 
 from app.services import BotHealthReport, ConnectionState, HealthLevel, assess_bot_health
-from app.services.bot_health import parse_lavalink_metrics, parse_prometheus_samples
+from app.services.stats.bot_health import parse_lavalink_metrics, parse_prometheus_samples
 
 GEN = 5
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.command_rules import Invocation, Rule, resolve, subjects_for
+from app.services.guild.command_rules import Invocation, Rule, resolve, subjects_for
 
 G, U, R_HI, R_LO, CH, CAT = 1, 10, 21, 22, 30, 40
 

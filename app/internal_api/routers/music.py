@@ -12,9 +12,9 @@ from discord.ui.view import LayoutView
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.services.lyrics import display_title
-from app.services.music_access import MusicViewer, resolve_viewer
-from app.services.music_audio import EFFECTS, EQ_PRESETS, audio_state
+from app.services.music.access import MusicViewer, resolve_viewer
+from app.services.music.audio import EFFECTS, EQ_PRESETS, audio_state
+from app.services.music.lyrics import display_title
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id

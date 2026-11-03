@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.services.playlist_io import MAX_TRACKS, PlaylistImportError, parse_playlist, serialize_playlist
+from app.services.music.playlist_io import MAX_TRACKS, PlaylistImportError, parse_playlist, serialize_playlist
 
 
 def test_roundtrip() -> None:

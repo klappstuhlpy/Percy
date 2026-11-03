@@ -1,8 +1,8 @@
-"""Tests for :mod:`app.services.spam_penalty`."""
+"""Tests for :mod:`app.services.moderation.spam_penalty`."""
 
 from __future__ import annotations
 
-from app.services.spam_penalty import (
+from app.services.moderation.spam_penalty import (
     BURST_WINDOW,
     LOOKBACK_WINDOW,
     ONE_DAY,

@@ -33,35 +33,6 @@ from app.services.ai import (
     build_tag_find_prompt,
     json_instruction,
 )
-from app.services.analytics import (
-    GRANULARITIES,
-    METRICS,
-    RANGES,
-    default_granularity,
-    fill_buckets,
-    floor_bucket,
-    resolve_granularity,
-    resolve_range,
-)
-from app.services.backup import (
-    BACKUP_KIND,
-    BACKUP_VERSION,
-    PORTABLE_SECTIONS,
-    build_backup,
-    select_sections,
-    summarize_sections,
-    validate_backup,
-)
-from app.services.bot_health import (
-    BotHealthReport,
-    ConnectionState,
-    HealthLevel,
-    LavalinkMetrics,
-    assess_bot_health,
-    parse_lavalink_metrics,
-)
-from app.services.char_info import MAX_CHARACTERS, CharInfo, get_char_info
-from app.services.code_stats import CodeStats, count_code_stats
 from app.services.comics import (
     DEFAULT_PER_PAGE,
     MAX_PER_PAGE,
@@ -106,8 +77,45 @@ from app.services.economy import (
     sell_price,
     validate_item_effect,
 )
-from app.services.gateway_stats import GatewayTraffic, summarize_gateway_traffic
-from app.services.log_channel import (
+from app.services.guild.backup import (
+    BACKUP_KIND,
+    BACKUP_VERSION,
+    PORTABLE_SECTIONS,
+    build_backup,
+    select_sections,
+    summarize_sections,
+    validate_backup,
+)
+from app.services.guild.notifications import (
+    ACTION_PERMISSIONS,
+    DEDUPE_WINDOW,
+    KINDS,
+    REQUEST_STATUSES,
+    REQUEST_TTL,
+    REQUESTABLE_ACTIONS,
+    RETENTION,
+    SEVERITIES,
+    check_request,
+    notification_payload,
+    request_payload,
+)
+from app.services.guild.webhooks import (
+    SIGNATURE_HEADER,
+    WEBHOOK_EVENTS,
+    build_envelope,
+    serialize_envelope,
+    sign_body,
+    valid_events,
+)
+from app.services.infra.recurrence import (
+    RecurrenceResult,
+    advance_recurrence,
+    describe_interval,
+    interval_too_short,
+    next_occurrence,
+    normalize_interval,
+)
+from app.services.moderation.log_channel import (
     BurstCollapser,
     DailyNumbers,
     HealthChange,
@@ -120,7 +128,10 @@ from app.services.log_channel import (
     rewrite_gateway_line,
     startup_fields,
 )
-from app.services.lyrics import (
+from app.services.moderation.purge import PurgeMessage, PurgePlan, build_purge_predicate
+from app.services.moderation.spam_penalty import compute_spam_penalty
+from app.services.music.access import MusicViewer, resolve_viewer
+from app.services.music.lyrics import (
     LyricLine,
     LyricsResult,
     SyncedLyrics,
@@ -130,7 +141,6 @@ from app.services.lyrics import (
     pick_genius_hit,
     track_artist,
 )
-from app.services.music_access import MusicViewer, resolve_viewer
 from app.services.news import (
     COMMON_WORDS,
     DEFAULT_SOURCES,
@@ -162,29 +172,6 @@ from app.services.news import (
     tags_as_rows,
     truncate,
 )
-from app.services.notifications import (
-    ACTION_PERMISSIONS,
-    DEDUPE_WINDOW,
-    KINDS,
-    REQUEST_STATUSES,
-    REQUEST_TTL,
-    REQUESTABLE_ACTIONS,
-    RETENTION,
-    SEVERITIES,
-    check_request,
-    notification_payload,
-    request_payload,
-)
-from app.services.presence_stats import PRESENCE_STATUSES, PresenceBreakdown, summarize_presence
-from app.services.purge import PurgeMessage, PurgePlan, build_purge_predicate
-from app.services.recurrence import (
-    RecurrenceResult,
-    advance_recurrence,
-    describe_interval,
-    interval_too_short,
-    next_occurrence,
-    normalize_interval,
-)
 from app.services.releases import (
     BRAND_LABELS,
     COMIC_SUBJECT_TYPES,
@@ -210,7 +197,28 @@ from app.services.releases import (
     title_entry,
     title_releasable,
 )
-from app.services.spam_penalty import compute_spam_penalty
+from app.services.stats.analytics import (
+    GRANULARITIES,
+    METRICS,
+    RANGES,
+    default_granularity,
+    fill_buckets,
+    floor_bucket,
+    resolve_granularity,
+    resolve_range,
+)
+from app.services.stats.bot_health import (
+    BotHealthReport,
+    ConnectionState,
+    HealthLevel,
+    LavalinkMetrics,
+    assess_bot_health,
+    parse_lavalink_metrics,
+)
+from app.services.stats.char_info import MAX_CHARACTERS, CharInfo, get_char_info
+from app.services.stats.code_stats import CodeStats, count_code_stats
+from app.services.stats.gateway_stats import GatewayTraffic, summarize_gateway_traffic
+from app.services.stats.presence_stats import PRESENCE_STATUSES, PresenceBreakdown, summarize_presence
 from app.services.watchlist import (
     DiscoverSeed,
     EraSeed,
@@ -230,14 +238,6 @@ from app.services.watchlist import (
     universe_payload,
     universe_stats,
     universe_summary,
-)
-from app.services.webhooks import (
-    SIGNATURE_HEADER,
-    WEBHOOK_EVENTS,
-    build_envelope,
-    serialize_envelope,
-    sign_body,
-    valid_events,
 )
 
 __all__ = (

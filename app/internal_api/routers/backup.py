@@ -4,7 +4,7 @@ Export produces a portable JSON snapshot of a guild's ID-free configuration (por
 guild scalars, tags); import applies one back — into the same guild
 (disaster recovery) or a different one (cloning). Publishing a backup as a *template*
 lets other servers apply the same setup by slug. Portability rules live in
-``app.services.backup``; the actual repo reads/writes live here (they need bot + guild).
+``app.services.guild.backup``; the actual repo reads/writes live here (they need bot + guild).
 """
 from __future__ import annotations
 
