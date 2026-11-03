@@ -16,6 +16,7 @@ from ..helpers import resolve_channel
 from .models.guild import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
+    from app.cogs.starboard.cog import Starboard
     from app.core import Bot
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Starboard"], dependencies=[Depends(verify_token)])
@@ -64,11 +65,11 @@ class StarboardSaved(StarboardSettings):
     ok: bool
 
 
-def _cog(bot: Bot) -> Any:
+def _cog(bot: Bot) -> Starboard:
     cog = bot.get_cog('Starboard')
     if cog is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="the starboard is not loaded")
-    return cog
+    return cog  # type: ignore[return-value]
 
 
 def _serialize(guild: discord.Guild, config) -> dict:

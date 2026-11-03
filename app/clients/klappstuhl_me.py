@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 # A non-empty sentinel handed to the base client when the hoster is unconfigured
 # (the base client requires *some* token). It is never sent: every guild call
-# checks :attr:`KlappstuhlMeClient.available` first.
+# checks :attr:`KlappstuhlInternalClient.available` first.
 _UNCONFIGURED = "unconfigured"
 
 
@@ -87,7 +87,7 @@ class KlappstuhlInternalClient(Client):
         self._guild_lock: asyncio.Lock = asyncio.Lock()
 
     def __repr__(self) -> str:
-        return f"<KlappstuhlMeClient base_url={self._http.base_url!r} available={self.available}>"
+        return f"<KlappstuhlInternalClient base_url={self._http.base_url!r} available={self.available}>"
 
     @property
     def available(self) -> bool:

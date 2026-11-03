@@ -123,7 +123,7 @@ def browse_payload(
 ) -> dict[str, Any]:
     """Builds the ``GET /comics`` page: items plus pagination maths and the echoed filters.
 
-    ``total_pages`` is clamped to at least 1 (matching ``app/cogs/tags.py``'s paginator), so an
+    ``total_pages`` is clamped to at least 1 (matching ``app/cogs/tags/``'s paginator), so an
     empty result still reports one (empty) page rather than zero.
     """
     total_pages = max(1, -(-total // per_page)) if per_page else 1

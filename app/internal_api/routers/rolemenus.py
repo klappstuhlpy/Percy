@@ -17,6 +17,7 @@ from ..helpers import resolve_channel, resolve_moderator
 from .models.guild import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
+    from app.cogs.rolemenu.cog import RoleMenus
     from app.core import Bot
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Role menus"], dependencies=[Depends(verify_token)])
@@ -84,11 +85,11 @@ class RoleMenuNotice(BaseModel):
     message: str
 
 
-def _cog(bot: Bot) -> Any:
+def _cog(bot: Bot) -> RoleMenus:
     cog = bot.get_cog('RoleMenus')
     if cog is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="role menus are not loaded")
-    return cog
+    return cog  # type: ignore[return-value]
 
 
 def _refused(exc: Exception) -> HTTPException:

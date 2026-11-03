@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from ..dependencies import BotDep, GuildDep, verify_token
 
 if TYPE_CHECKING:
-    from app.clients.klappstuhl_me import KlappstuhlMeClient
+    from app.clients.klappstuhl_me import KlappstuhlInternalClient
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class GalleryDeleteResult(BaseModel):
     failed: bool
 
 
-def _client_or_503(bot) -> KlappstuhlMeClient:
+def _client_or_503(bot) -> KlappstuhlInternalClient:
     """Return the configured klappstuhl.me client, or 503 when the hoster is off."""
     client = bot.klappstuhlme_internal_client
     if client is None or not client.available:

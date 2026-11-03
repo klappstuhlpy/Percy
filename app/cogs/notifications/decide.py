@@ -13,8 +13,6 @@ from app.cogs.moderation.member_actions import HIERARCHY_ACTIONS, MemberActionEr
 from app.services.guild.notifications import ACTION_PERMISSIONS
 from app.utils.checks import hierarchy_error
 
-from .ui import request_embed
-
 if TYPE_CHECKING:
     from app.core import Bot
 
@@ -136,6 +134,8 @@ async def _announce(bot: Bot, guild: discord.Guild, request: dict, decider: disc
 
 async def edit_request_message(guild: discord.Guild, request: dict, *, expired: bool = False) -> None:
     """Rewrites the approval message to show the outcome and drops its buttons."""
+    from .ui import request_embed  # lazy: the API imports this module and must not load ui
+
     if not request.get('channel_id') or not request.get('message_id'):
         return
     channel = guild.get_channel(request['channel_id'])

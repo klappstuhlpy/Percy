@@ -24,8 +24,8 @@ from .starboard import router as starboard_router
 from .stats import router as stats_router
 from .subscriptions import router as subscriptions_router
 from .users import router as users_router
+from .votes import router as votes_router
 from .watchlist import router as watchlist_router
-from .webhooks import router as webhooks_router
 
 ALL_ROUTERS = [
     guild_router,
@@ -40,7 +40,7 @@ ALL_ROUTERS = [
     profile_router,
     stats_router,
     users_router,
-    webhooks_router,
+    votes_router,
     analytics_router,
     backup_router,
     subscriptions_router,

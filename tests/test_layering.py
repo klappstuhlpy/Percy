@@ -9,9 +9,6 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / 'app'
 
-# Existing violations of "no discord in services/engine" that need logic changes, not a move.
-ALLOWLIST: set[str] = set()
-
 
 def imports(path: Path, *, runtime_only: bool = False) -> list[str]:
     """Dotted names imported by a module; ``runtime_only`` skips ``if TYPE_CHECKING:`` blocks."""
@@ -44,22 +41,52 @@ def test_no_discord_in_services_or_engines() -> None:
     bad = {
         rel(f) for f in files
         if any(m == 'discord' or m.startswith('discord.') for m in imports(f, runtime_only=True))
-    } - ALLOWLIST
+    }
     assert not bad, f'services/engine modules must not import discord: {sorted(bad)}'
 
 
+def _forbidden_cog_module(m: str) -> bool:
+    """``app.cogs.<x>.cog`` / ``.ui``, a flat cog module (``app/cogs/<name>.py``) or ``app.cogs.misc.*``."""
+    parts = m.split('.')
+    if parts[:2] != ['app', 'cogs'] or len(parts) < 3:
+        return False
+    return (parts[2] == 'misc' and len(parts) > 3) or (APP / 'cogs' / f'{parts[2]}.py').is_file() or parts[3:4] in (['cog'], ['ui'])
+
+
 def test_internal_api_avoids_cog_and_ui_modules() -> None:
+    """Runtime imports only: ``if TYPE_CHECKING:`` imports create no edge."""
     bad = {
-        f'{rel(f)} -> {m}' for f in APP.glob('internal_api/**/*.py') for m in imports(f)
-        if m.startswith('app.cogs.') and m.split('.')[3:4] and m.split('.')[3] in ('cog', 'ui')
+        f'{rel(f)} -> {m}' for f in APP.glob('internal_api/**/*.py') for m in imports(f, runtime_only=True)
+        if _forbidden_cog_module(m)
     }
-    assert not bad, f'internal_api must not import a cog.py/ui.py: {sorted(bad)}'
+    assert not bad, f'internal_api must not import a cog.py/ui.py/flat cog: {sorted(bad)}'
+
+
+def test_importing_routers_loads_no_cog_or_ui_module() -> None:
+    code = """
+import pathlib, sys
+import app.internal_api.routers
+flat = {p.stem for p in pathlib.Path('app/cogs').glob('*.py') if p.stem != '__init__'}
+bad = sorted(
+    m for m in sys.modules
+    if m.startswith('app.cogs.') and (m.endswith(('.cog', '.ui')) or m.startswith('app.cogs.misc.') or m.split('.')[2] in flat)
+)
+print(*bad, sep=chr(10))
+sys.exit(1 if bad else 0)
+"""
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=60, cwd=APP.parent)
+    assert r.returncode == 0, f'routers import loads cog/ui modules: {r.stdout} {r.stderr[-800:]}'
 
 
 def test_clients_live_only_in_clients() -> None:
-    assert not list(APP.glob('cogs/**/client.py')), 'HTTP clients belong in app/clients/'
-    bad = [rel(f) for f in APP.glob('services/**/*.py') if 'BaseHTTPClient' in f.read_text(encoding='utf-8')]
-    assert not bad, f'services must not define HTTP clients: {bad}'
+    bad = [
+        rel(f) for f in APP.glob('**/*.py')
+        if not rel(f).startswith('clients/') and any(
+            isinstance(n, ast.ClassDef) and any('BaseHTTPClient' in ast.unparse(b) for b in n.bases)
+            for n in ast.walk(ast.parse(f.read_text(encoding='utf-8')))
+        )
+    ]
+    assert not bad, f'HTTP clients (BaseHTTPClient subclasses) belong in app/clients/: {bad}'
 
 
 def test_clients_do_not_import_cogs_and_import_cleanly() -> None:
