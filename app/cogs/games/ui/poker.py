@@ -14,8 +14,8 @@ from app.utils import fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
+    from app.cogs.games.bridge.poker import PokerSession
     from app.cogs.games.engine.poker import Player, TexasHoldem
-    from app.cogs.games.poker_bridge import PokerSession
     from app.core import Bot
     from app.database.base import Balance
 
@@ -139,7 +139,7 @@ class RunItTwiceView(discord.ui.View):
 class TableView(LayoutView):
     """The Components V2 view for a poker table.
 
-    Holds a reference to the :class:`~app.cogs.games.poker_bridge.PokerSession` bridge.
+    Holds a reference to the :class:`~app.cogs.games.bridge.poker.PokerSession` bridge.
     Button callbacks trigger actions on the pure engine (``self.engine``); :meth:`render`
     recomposes the table card (from the session) plus the state-appropriate control rows.
     """

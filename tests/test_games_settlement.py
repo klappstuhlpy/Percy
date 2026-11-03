@@ -9,10 +9,13 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 
-from app.cogs.games import higherlower_ui, models, slot_ui, tower_ui
+from app.cogs.games import models
 from app.cogs.games.engine.blackjack import MAX_HANDS, BlackjackGame
 from app.cogs.games.engine.cards import BaseCard
-from app.cogs.games.slot_ui import Fruits, grid_multiplier
+from app.cogs.games.ui import higherlower as higherlower_ui
+from app.cogs.games.ui import slot as slot_ui
+from app.cogs.games.ui import tower as tower_ui
+from app.cogs.games.ui.slot import Fruits, grid_multiplier
 
 
 def _player() -> tuple[MagicMock, MagicMock]:

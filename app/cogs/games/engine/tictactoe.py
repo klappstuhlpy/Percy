@@ -2,7 +2,7 @@
 
 Holds the board representation and win/draw detection with **zero** Discord (or any
 presentation) dependencies, mirroring the ``poker`` engine. The Discord-facing binding
-(players, buttons, embeds, economy) lives in ``app/cogs/games/tictactoe_ui.py``.
+(players, buttons, embeds, economy) lives in ``app/cogs/games/ui/tictactoe.py``.
 """
 
 from __future__ import annotations

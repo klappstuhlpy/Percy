@@ -80,7 +80,7 @@ def test_blackjack_surrender_is_void_against_dealer_blackjack() -> None:
 
 
 async def test_blackjack_natural_pays_three_to_two() -> None:
-    from app.cogs.games import blackjack_bridge
+    from app.cogs.games.bridge import blackjack as blackjack_bridge
 
     table = blackjack_bridge.Blackjack(MagicMock(), bet=100)
     table.engine.player_hands[0].card_arr = np.array([[14, 0], [13, 0]])
@@ -95,7 +95,7 @@ async def test_blackjack_natural_pays_three_to_two() -> None:
 
 
 def test_tower_has_no_positive_expectation_strategy() -> None:
-    from app.cogs.games.tower_ui import Tower
+    from app.cogs.games.ui.tower import Tower
 
     survive = 1 - Tower.CRASH_CHANCE
     for stacks in range(1, 30):
@@ -104,7 +104,7 @@ def test_tower_has_no_positive_expectation_strategy() -> None:
 
 @pytest.mark.parametrize("amount", ["-500", "1000"])
 async def test_roulette_modal_bet_must_be_paid(monkeypatch: pytest.MonkeyPatch, amount: str) -> None:
-    from app.cogs.games import roulette_ui
+    from app.cogs.games.ui import roulette as roulette_ui
 
     table = roulette_ui.Table(MagicMock())
     table.message = MagicMock(edit=AsyncMock())
@@ -131,7 +131,7 @@ async def test_roulette_modal_bet_must_be_paid(monkeypatch: pytest.MonkeyPatch, 
 
 
 async def test_russian_roulette_cylinder_reloads_after_a_bang() -> None:
-    from app.cogs.games import russianroulette_ui as rr
+    from app.cogs.games.ui import russianroulette as rr
 
     game = rr.RussianRoulette(MagicMock(), MagicMock(), 100)
     players = [rr.RRPlayer(MagicMock(id=i)) for i in range(3)]

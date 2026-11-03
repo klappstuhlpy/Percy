@@ -2,7 +2,7 @@
 
 Owns the board, mine placement, the iterative flood-fill reveal and win detection with
 **zero** Discord dependencies. The Discord-facing binding (the view, the per-cell buttons
-and the embeds) lives in ``app/cogs/games/minesweeper_ui.py``.
+and the embeds) lives in ``app/cogs/games/ui/minesweeper.py``.
 """
 
 from __future__ import annotations

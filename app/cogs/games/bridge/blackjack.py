@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from app.cogs.games.blackjack_ui import TableView
 from app.cogs.games.engine.blackjack import BlackjackGame, WinningType
+from app.cogs.games.ui.blackjack import TableView
 from app.utils import fnumb, helpers
 from config import Emojis
 

@@ -9,7 +9,7 @@ IO -- mirroring the ``poker`` engine, it builds on the discord-free card primiti
 ``Hand.message`` is an opaque slot the :class:`~app.cogs.games._blackjack.Blackjack`
 bridge uses to remember which Discord message renders the hand; the engine never touches
 it. Rendering (embeds), the economy payouts and the views live in that bridge / the
-``app.cogs.games.blackjack_ui`` module.
+``app.cogs.games.ui.blackjack`` module.
 """
 
 from __future__ import annotations

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import discord
 
-from app.cogs.tags import TAG_MENTIONS, TagListPaginator, TagPageEntry, content_payload
+from app.cogs.tags.models import TAG_MENTIONS, TagPageEntry, content_payload
+from app.cogs.tags.ui import TagListPaginator
 
 
 async def test_list_paginator_builds_within_limits() -> None:

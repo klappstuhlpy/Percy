@@ -7,7 +7,7 @@ import datetime
 import discord
 
 from app.cogs.games.models import Game
-from app.cogs.stats import MAX_COMPONENTS, MAX_TEXT, _fit, _ranking, _since, chart_card, game_stats_card, stats_card
+from app.cogs.stats.ui import MAX_COMPONENTS, MAX_TEXT, _fit, _ranking, _since, chart_card, game_stats_card, stats_card
 
 
 def _within_limits(view: discord.ui.LayoutView) -> None:
@@ -78,7 +78,7 @@ async def test_game_stats_card_every_game_fits() -> None:
 
 
 async def test_chart_data_helpers() -> None:
-    from app.cogs.stats import activity_grid, daily_series, failure_ranking, hour_totals
+    from app.cogs.stats.ui import activity_grid, daily_series, failure_ranking, hour_totals
 
     rows = [{"dow": 0, "hour": 3, "count": 2}, {"dow": 1, "hour": 3, "count": 5}]
     grid = activity_grid(rows)

@@ -15,30 +15,8 @@ from discord.ext import commands
 from expiringdict import ExpiringDict
 
 from app.cogs.economy.risk import resolve_death
-from app.cogs.games import (
-    blackjack_bridge,
-    coinflip_ui,
-    crash_ui,
-    fight_ui,
-    hangman_ui,
-    heist_ui,
-    higherlower_ui,
-    horserace_ui,
-    keno_ui,
-    mines_ui,
-    minesweeper_ui,
-    overview_ui,
-    plinko_ui,
-    poker_bridge,
-    roulette_ui,
-    russianroulette_ui,
-    scratch_ui,
-    slot_ui,
-    tictactoe_ui,
-    tower_ui,
-    trivia_ui,
-    wordle_ui,
-)
+from app.cogs.games.bridge import blackjack as blackjack_bridge
+from app.cogs.games.bridge import poker as poker_bridge
 from app.cogs.games.engine import crash as crash_engine
 from app.cogs.games.engine import dice as dice_engine
 from app.cogs.games.engine import heist as heist_engine
@@ -50,7 +28,27 @@ from app.cogs.games.engine.cards import MinimumBet, Payouts
 from app.cogs.games.engine.trivia import RawQuestion, build_round
 from app.cogs.games.engine.wordle import WORD_LENGTH, daily_index
 from app.cogs.games.models import Game, GameResult
-from app.cogs.games.roulette_ui import Payout, Space
+from app.cogs.games.ui import coinflip as coinflip_ui
+from app.cogs.games.ui import crash as crash_ui
+from app.cogs.games.ui import fight as fight_ui
+from app.cogs.games.ui import hangman as hangman_ui
+from app.cogs.games.ui import heist as heist_ui
+from app.cogs.games.ui import higherlower as higherlower_ui
+from app.cogs.games.ui import horserace as horserace_ui
+from app.cogs.games.ui import keno as keno_ui
+from app.cogs.games.ui import mines as mines_ui
+from app.cogs.games.ui import minesweeper as minesweeper_ui
+from app.cogs.games.ui import overview as overview_ui
+from app.cogs.games.ui import plinko as plinko_ui
+from app.cogs.games.ui import roulette as roulette_ui
+from app.cogs.games.ui import russianroulette as russianroulette_ui
+from app.cogs.games.ui import scratch as scratch_ui
+from app.cogs.games.ui import slot as slot_ui
+from app.cogs.games.ui import tictactoe as tictactoe_ui
+from app.cogs.games.ui import tower as tower_ui
+from app.cogs.games.ui import trivia as trivia_ui
+from app.cogs.games.ui import wordle as wordle_ui
+from app.cogs.games.ui.roulette import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.services.economy import GuildEconomySettings, roll_death

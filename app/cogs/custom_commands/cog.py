@@ -22,7 +22,7 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.view import StringView
 
-from app.cogs.config import parse_permission_names
+from app.cogs.config.cog import parse_permission_names
 from app.cogs.custom_commands.ui import CustomCommandManager
 from app.core import Cog, Context, Flags, flag, store_true
 from app.core.errors import CommandDisabled

@@ -18,7 +18,7 @@ import discord
 
 from app.cogs.games.engine.poker import Card, OddsMode, TableState, TexasHoldem, deciding_card
 from app.cogs.games.models import Game, GameResult
-from app.cogs.games.poker_ui import RunItTwiceView, TableView
+from app.cogs.games.ui.poker import RunItTwiceView, TableView
 from app.utils import helpers, number_suffix
 from config import Emojis
 

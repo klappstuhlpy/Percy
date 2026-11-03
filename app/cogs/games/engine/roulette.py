@@ -6,7 +6,7 @@ presentation) dependencies, mirroring the ``poker`` and ``tictactoe`` engines.
 
 The Discord-facing binding -- the ``Space`` converter enum, ``Bet`` (which carries a
 ``discord.Member``), the table view, the modal and the embed rendering -- lives in
-``app/cogs/games/roulette_ui.py``.
+``app/cogs/games/ui/roulette.py``.
 """
 
 from __future__ import annotations

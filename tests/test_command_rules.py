@@ -161,7 +161,7 @@ async def test_rule_target_everyone_role_maps_to_guild() -> None:
     import discord
     from discord.ext import commands
 
-    from app.cogs.config import RuleTarget
+    from app.cogs.config.cog import RuleTarget
 
     ctx = MagicMock()
     ctx.guild.id = G
