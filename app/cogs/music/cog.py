@@ -1094,9 +1094,7 @@ class Music(Cog):
 
         if amount is None:
             embed = discord.Embed(title="Current Volume", color=helpers.Colour.white())
-            embed.add_field(
-                name="Volume:", value=f"```swift\n{ProgressBar(0, 100, player.volume)} [ {player.volume}% ]```", inline=False
-            )
+            embed.add_field(name="Volume:", value=f"{ProgressBar(0, 100, player.volume)} `{player.volume}%`", inline=False)
             await ctx.send(embed=embed, delete_after=15)
             return
 
@@ -1108,9 +1106,7 @@ class Music(Cog):
             color=helpers.Colour.white(),
             description="*It may takes a while for the changes to apply.*",
         )
-        embed.add_field(
-            name="Volume:", value=f"```swift\n{ProgressBar(0, 100, player.volume)} [ {player.volume}% ]```", inline=False
-        )
+        embed.add_field(name="Volume:", value=f"{ProgressBar(0, 100, player.volume)} `{player.volume}%`", inline=False)
         await ctx.send(embed=embed, delete_after=15)
 
     @command(description="Removes all songs from users that are not in the voice channel.", guild_only=True)

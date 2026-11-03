@@ -127,7 +127,7 @@ class Player(wavelink.Player):
         self.announce()
 
     async def set_volume(self, value: int = 100, /) -> None:
-        await super().set_volume(value)
+        await super().set_volume(max(0, min(value, 100)))
         self.announce()
 
     async def skip(self, *, force: bool = True) -> Playable | None:  # ``stop`` is wavelink's alias of this

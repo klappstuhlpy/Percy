@@ -16,13 +16,13 @@ from app.core.pagination import BasePaginator, BasePaginatorV2
 from app.core.views import ConfirmationView
 from app.services import LyricsResult, display_title
 from app.utils import (
+    ProgressBar,
     convert_duration,
     helpers,
     letter_emoji,
     pluralize,
     truncate,
 )
-from app.utils.formats import ProgressBar
 from config import Emojis
 
 from .models import DJMode, PlayerState, Playlist, ShuffleMode, is_dj

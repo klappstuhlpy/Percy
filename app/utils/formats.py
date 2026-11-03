@@ -627,12 +627,15 @@ def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: in
     """Render a styled Discord progress bar using custom emojis with an indicator."""
     emojis = Emojis.ProgressBar
 
-    span = key_max - key_min
-    if span <= 0 or key_full < 2:
+    if key_full < 2:
         return emojis.empty * key_full
 
-    ratio = max(0.0, min((key_current - key_min) / span, 1.0))
+    span = key_max - key_min
+    ratio = max(0.0, min((key_current - key_min) / span, 1.0)) if span > 0 else 0.0
     idx = round(ratio * (key_full - 1))
+    # Only exactly 0% and 100% may look like the ends of the bar.
+    if 0.0 < ratio < 1.0 and key_full > 2:
+        idx = max(1, min(idx, key_full - 2))
 
     if idx <= 0:
         return emojis.leftindicator + emojis.empty * (key_full - 2) + emojis.rightempty

@@ -73,3 +73,21 @@ async def test_playlist_import_is_one_transaction() -> None:
     pid = await repo.create_playlist_with_tracks(1, 'n', datetime.datetime(2026, 1, 1), [('t', 'u', 'a')])
     assert pid == 9 and events == ['begin', 'commit']
     assert conn.executemany.await_args.args[1] == [(9, 't', 'u', 'a')]
+
+
+@pytest.mark.parametrize(('requested', 'applied'), [(-5, 0), (0, 0), (50, 50), (100, 100), (105, 100), (999, 100)])
+async def test_set_volume_clamps_to_percent_range(monkeypatch: pytest.MonkeyPatch, requested: int, applied: int) -> None:
+    import wavelink
+
+    from app.cogs.music.player import Player
+
+    sent: list[int] = []
+
+    async def fake_set_volume(_self: object, value: int = 100, /) -> None:
+        sent.append(value)
+
+    monkeypatch.setattr(wavelink.Player, 'set_volume', fake_set_volume)
+    monkeypatch.setattr(Player, 'announce', lambda _self: None)
+
+    await Player.set_volume(Player.__new__(Player), requested)
+    assert sent == [applied]

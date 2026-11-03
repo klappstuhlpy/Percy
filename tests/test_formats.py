@@ -249,3 +249,24 @@ def test_append_lists_keeps_two_long_lists_under_the_message_limit() -> None:
     assert len(out) < 2000
     assert "… and" in out.split("Already muted:")[0] and "… and" in out.split("Already muted:")[1]
     assert formats.append_lists("hi", ("Empty:", [])) == "hi"
+
+
+class TestProgressBar:
+    def test_length_and_end_caps_hold_at_every_value(self) -> None:
+        bar = formats.Emojis.ProgressBar
+        for length in range(2, 30):
+            for current in range(-20, 141):
+                rendered = formats.ProgressBar(0, 100, current, key_full=length)
+                assert rendered.count('<:') == length
+                assert rendered.startswith((bar.leftfull, bar.leftindicator))
+                assert rendered.endswith((bar.full, bar.rightempty))
+
+    def test_only_exact_ends_look_like_ends(self) -> None:
+        bar = formats.Emojis.ProgressBar
+        assert formats.ProgressBar(0, 100, 0).startswith(bar.leftindicator)
+        assert formats.ProgressBar(0, 100, 1).startswith(bar.leftfull + bar.indicator)
+        assert formats.ProgressBar(0, 100, 99).endswith(bar.indicator + bar.rightempty)
+        assert formats.ProgressBar(0, 100, 100).endswith(bar.full)
+
+    def test_zero_span_renders_as_empty_bar_with_caps(self) -> None:
+        assert formats.ProgressBar(0, 0, 0) == formats.ProgressBar(0, 100, 0)
