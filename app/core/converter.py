@@ -10,6 +10,7 @@ from discord.app_commands import Choice
 from discord.ext import commands
 
 from app.core.context import Context
+from app.core.models import AppBadArgument
 from app.utils import Colour, fuzzy
 from app.utils.constants import get_colour_dict
 
@@ -189,33 +190,26 @@ class MemberID(commands.Converter[discord.Member], app_commands.Transformer):
 class BannedMember(commands.Converter[discord.BanEntry], app_commands.Transformer):
     """A Converter that resolves a member by either its id or name and checks if the member is banned."""
 
-    async def convert(self, ctx: Context, argument: str) -> discord.BanEntry:
+    @staticmethod
+    async def _find(guild: discord.Guild, argument: str) -> discord.BanEntry | None:
         if argument.isdigit():
-            member_id = int(argument, base=10)
             try:
-                return await ctx.guild.fetch_ban(discord.Object(id=member_id))
+                return await guild.fetch_ban(discord.Object(id=int(argument)))
             except discord.NotFound:
-                raise commands.BadArgument("This member has not been banned before.") from None
+                return None
+        return await discord.utils.find(lambda u: str(u.user) == argument, guild.bans(limit=None))
 
-        entity = await discord.utils.find(lambda u: str(u.user) == argument, ctx.guild.bans(limit=None))
-
-        if entity is None:
+    async def convert(self, ctx: Context, argument: str) -> discord.BanEntry:
+        if (entry := await self._find(ctx.guild, argument)) is None:
             raise commands.BadArgument("This member has not been banned before.")
-        return entity
+        return entry
 
     async def transform(self, interaction: discord.Interaction, value: str) -> discord.BanEntry:
-        if value.isdigit():
-            member_id = int(value, base=10)
-            try:
-                return await interaction.guild.fetch_ban(discord.Object(id=member_id))
-            except discord.NotFound:
-                raise commands.BadArgument("This member has not been banned before.") from None
-
-        entity = await discord.utils.find(lambda u: str(u.user) == value, interaction.guild.bans(limit=None))
-
-        if entity is None:
-            raise commands.BadArgument("This member has not been banned before.")
-        return entity
+        # An AppCommandError passes through the transformer untouched; anything else is wrapped
+        # in a TransformerError, which the error handler can't point at a parameter (panic reply).
+        if (entry := await self._find(interaction.guild, value)) is None:  # type: ignore[arg-type]
+            raise AppBadArgument("This member has not been banned before.")
+        return entry
 
 
 class ActionReason(commands.Converter[str], app_commands.Transformer):

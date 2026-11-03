@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, NoReturn, TypeVar, Un
 from discord import AppCommandOptionType, Interaction, app_commands
 from discord.ext import commands
 from discord.ext.commands import BadArgument, Converter, MissingRequiredArgument, TooManyFlags, run_converters
-from discord.ext.commands.flags import convert_flag, validate_flag_name
+from discord.ext.commands.flags import validate_flag_name
 from discord.ext.commands.view import StringView
 from discord.utils import MISSING, maybe_coroutine, resolve_annotation
 
@@ -48,9 +48,6 @@ class MockFlags:
 
     def __init__(self, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
-
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
     def __repr__(self) -> str:
         return f"<MockFlags {self.__dict__}>"
@@ -125,8 +122,6 @@ class Flag[T]:
     description: str | None = MISSING  # type: ignore[assignment]
     required: bool = False
     default: T = MISSING
-
-    cast_to_dict: bool = False
 
     @property
     def attribute(self) -> str:
@@ -391,25 +386,16 @@ def _resolve_flag_annotation(flag: Flag[Any], annotation: Any, *args: Any) -> No
             if annotation.__args__[-1] is type(None) and flag.default is MISSING:
                 # typing.Optional
                 flag.default = None
-        elif origin is tuple:
-            # typing.Tuple
-            # tuple parsing is e.g. `flag: peter 20`
-            # for Tuple[str, int] would give you flag: ('peter', 20)
-            if flag.max_args is MISSING:
-                flag.max_args = 1
         elif origin is list:
-            # typing.List
+            # ``--tags a b "c d"`` -> ['a', 'b', 'c d'] (prefix only: slash options can't be lists)
             if flag.max_args is MISSING:
                 flag.max_args = -1
-        elif origin is dict:
-            # typing.Dict[K, V]
-            # Equivalent to:
-            # typing.List[typing.Tuple[K, V]]
-            flag.cast_to_dict = True
-            if flag.max_args is MISSING:
-                flag.max_args = -1
-            if flag.override is MISSING:
-                flag.override = True
+        elif origin in (tuple, dict):
+            # Never parsed: the whole value ran through e.g. tuple("ab") -> ('a', 'b'). Fail at import.
+            raise TypeError(
+                f"Annotation {annotation!r} for {flag.name!r} flag is not supported; "
+                "use a single value or list[X]."
+            )
         elif origin is Literal:
             if flag.max_args is MISSING:
                 flag.max_args = 1
@@ -498,10 +484,6 @@ class FlagMeta[T](type):
             if base.__dict__.get("__commands_is_flag__", False):
                 flags.update(base.__dict__["__commands_flags__"])
                 aliases.update(base.__dict__["__commands_flag_aliases__"])
-                if delimiter is MISSING:
-                    attrs["__commands_flag_delimiter__"] = base.__dict__["__commands_flag_delimiter__"]
-                if prefix is MISSING:
-                    attrs["__commands_flag_prefix__"] = base.__dict__["__commands_flag_prefix__"]
 
         attrs["__commands_flag_delimiter__"] = delimiter
         attrs["__commands_flag_prefix__"] = prefix
@@ -517,11 +499,12 @@ class FlagMeta[T](type):
         for alias_name in aliases:
             validate_flag_name(alias_name, forbidden)
 
-        attrs["__doc__"] = __doc__ = inspect.cleandoc(inspect.getdoc(mcs) or "")
+        # The class's own docstring (inspect.getdoc(mcs) read the metaclass's and wiped it).
+        doc = attrs["__doc__"] = inspect.cleandoc(attrs.get("__doc__") or "")
         attrs["__commands_flags__"] = flags
         attrs["__commands_flag_aliases__"] = aliases
 
-        parser = ArgumentParser(description=__doc__)
+        parser = ArgumentParser(description=doc)
 
         for flag in flags.values():
             flag.add_to(parser)
@@ -741,7 +724,7 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
         commands.MissingRequiredFlag
             A required flag was not passed.
         commands.TooManyFlags
-            Too many flags were passed.
+            A list flag got more values than its ``max_args``.
         commands.BadArgument
             An argument is parsed that does not exist.
 
@@ -782,66 +765,36 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
         for name, v in ns.__dict__.items():
             flag = flags.get_flag(name)
 
+            is_list = getattr(flag.converter, "__origin__", None) is list
             if isinstance(v, list):
                 v = "".join(v)
             if isinstance(v, str):
-                v = v.strip()
-                if getattr(flag.converter, "__origin__", None) is not list:
-                    v = _strip_quotes(v)
+                v = v.strip() if is_list else _strip_quotes(v.strip())
 
-            converter = flag.converter
-            if converter and v is not None and not flag.store_true:
+            if flag.converter and v is not None and not flag.store_true:
                 current_param = ctx.current_parameter
                 if current_param is None:
                     raise TypeError("Missing current parameter context.")
                 param: inspect.Parameter = current_param.replace(name=_FI(f"{current_param.name}.{name}"))
 
-                is_list: bool = False
-                try:
-                    origin = converter.__origin__  # type: ignore[union-attr]
-                    args = converter.__args__  # type: ignore[union-attr]
-                except AttributeError:
-                    pass
-                else:
-                    if origin is list:
-                        is_list = True
-
                 if is_list:
-                    converter = args[0]  # type: ignore[index]
+                    # Each quoted word converted once (it ran through the converter twice, which
+                    # broke any non-idempotent one such as list[discord.Member]).
+                    item_converter = flag.converter.__args__[0]  # type: ignore[union-attr]
                     view = StringView(v)
-                    v = []
-
+                    items = []
                     while not view.eof:
                         view.skip_ws()
                         if view.eof:
                             break
-
-                        word = view.get_quoted_word()
-                        v.append(await run_converters(ctx, converter, word or "", param))
-
-                    if 0 < flag.max_args < len(v):
-                        if flag.override:
-                            v = v[-flag.max_args :]
-                        else:
-                            raise TooManyFlags(flag, v)  # type: ignore[arg-type]
-
-                    # skip the reset and convert only the first value
-                    if flag.max_args == 1:
-                        v = await convert_flag(ctx, v[0], flag)  # type: ignore[arg-type]
-                        setattr(ns, name, v)
-                        continue
-
-                    # Another special case, tuple parsing.
-                    # Tuple parsing is basically converting arguments within the flag
-                    # So, the given flag: hello 20 as the input and Tuple[str, int] as the type hint
-                    # We would receive ('hello', 20) as the resulting value
-                    # This uses the same whitespace and quoting rules as regular parameters.
-                    v = [await convert_flag(ctx, value, flag) for value in v]  # type: ignore[arg-type]
-
-                    if flag.cast_to_dict:
-                        v = dict(v)
+                        items.append(await run_converters(ctx, item_converter, view.get_quoted_word() or "", param))
+                    if 0 < flag.max_args < len(items):
+                        if not flag.override:
+                            raise TooManyFlags(flag, items)  # type: ignore[arg-type]
+                        items = items[-flag.max_args:]
+                    v = items
                 else:
-                    v = await run_converters(ctx, converter, v, param)  # type: ignore[arg-type]
+                    v = await run_converters(ctx, flag.converter, v, param)  # type: ignore[arg-type]
 
             elif v is None and flag.required:
                 raise commands.MissingRequiredFlag(flag)  # type: ignore[arg-type]

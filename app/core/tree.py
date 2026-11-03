@@ -82,8 +82,10 @@ class CommandTree(app_commands.CommandTree):
             cog = getattr(command, "binding", None)
             cog_name = cog.qualified_name if isinstance(cog, commands.Cog) else None
             if flags.is_disabled(command.qualified_name, cog_name):
-                with suppress(discord.HTTPException):
-                    await interaction.response.send_message("This command is temporarily disabled.", ephemeral=True)
+                # Autocomplete runs through this check too, and it cannot carry a message reply.
+                if interaction.type is not discord.InteractionType.autocomplete:
+                    with suppress(discord.HTTPException):
+                        await interaction.response.send_message("This command is temporarily disabled.", ephemeral=True)
                 return False
         return True
 

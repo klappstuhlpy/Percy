@@ -20,7 +20,6 @@ impl AiChannelOverride {
     pub fn summary(&self) -> Vec<AiFeatureState> {
         let pairs = [
             ("Assistant", self.controlled.assistant, self.enabled.assistant),
-            ("Router", self.controlled.router, self.enabled.router),
             ("Moderation", self.controlled.moderation, self.enabled.moderation),
             ("Sentinel", self.controlled.sentinel, self.enabled.sentinel),
             ("Music", self.controlled.music, self.enabled.music),

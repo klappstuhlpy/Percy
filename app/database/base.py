@@ -1000,7 +1000,10 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
 
         @flag_value
         def router(self) -> int:
-            """Natural-language command routing for unmatched messages."""
+            """Retired: AI command routing was removed (typos get a plain fuzzy suggestion now).
+
+            The bit stays reserved so stored values never collide with a future feature.
+            """
             return 2
 
         @flag_value

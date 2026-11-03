@@ -12,7 +12,6 @@
     // Must match Percy's GuildConfig.AIFlags / the internal API flag names.
     var FEATURES = [
         { key: 'assistant', label: 'Assistant' },
-        { key: 'router', label: 'Command Router' },
         { key: 'moderation', label: 'Moderation' },
         { key: 'sentinel', label: 'Sentinel Screening' },
         { key: 'music', label: 'Music' },

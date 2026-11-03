@@ -2,19 +2,18 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, AnyStr, Literal, NamedTuple, Self, TypeVar, override
+from typing import TYPE_CHECKING, Any, AnyStr, Literal, Self, TypeVar, override
 
 import discord
-import numpy as np
 from discord.utils import MISSING
 
 from app.core.context import Context
 from app.core.views import LayoutView, View
-from app.utils import aenumerate, fuzzy, helpers
+from app.utils import helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Collection, Generator
+    from collections.abc import Collection
 
 __all__ = (
     "BasePaginator",
@@ -30,7 +29,7 @@ __all__ = (
 T = TypeVar("T")
 BasePaginatorT = TypeVar("BasePaginatorT", bound="BasePaginator")  # kept for external callers
 
-TYPE_MAPPING = {discord.Embed: "embed", discord.File: "file", str: "content"}
+TYPE_MAPPING: tuple[tuple[type, str], ...] = ((discord.Embed, "embed"), (discord.File, "file"), (str, "content"))
 
 
 class TextSource:
@@ -185,37 +184,9 @@ class JumpToModal(discord.ui.Modal, title="Jump to"):
             )
             return
 
-        value = int(self.page_number.value) - 1
-        count = value - self.paginator._current_page
-        entries = self.paginator.switch_page(abs(count) if value > self.paginator._current_page else -abs(count))
+        entries = self.paginator.switch_page(int(self.page_number.value) - 1 - self.paginator._current_page)
         page = await self.paginator.format_page(entries)
         await interaction.response.edit_message(**self.paginator.resolve_msg_kwargs(page))
-
-
-class SearchForModal(discord.ui.Modal, title="Search for Similarity"):
-    """Modal that prompts users to search in all embeds for query similarities"""
-
-    query = discord.ui.TextInput(label="Query", style=discord.TextStyle.short)
-
-    def __init__(self, paginator: BasePaginator) -> None:
-        super().__init__(timeout=60)
-        self.paginator: BasePaginator = paginator
-        self.query.min_length = 3
-
-    async def on_submit(self, interaction: discord.Interaction, /) -> None:
-        await self.paginator.search_for_query(self.query.value, interaction)
-        self.stop()
-
-
-class SearchForButton(discord.ui.Button):
-    def __init__(self, paginator: BasePaginator) -> None:
-        super().__init__(
-            label="Search for …", emoji="\N{RIGHT-POINTING MAGNIFYING GLASS}", style=discord.ButtonStyle.grey, row=1
-        )
-        self.paginator: BasePaginator = paginator
-
-    async def callback(self, interaction: discord.Interaction) -> Any:
-        await interaction.response.send_modal(SearchForModal(self.paginator))
 
 
 class BasePaginator[T](View, metaclass=ABCMeta):
@@ -252,10 +223,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
 
         self._current_page: int = 0
 
-        try:
-            self.pages: list[list[T]] = [self.entries[i : i + per_page] for i in range(0, len(self.entries), per_page)]
-        except KeyError:
-            self.pages = [self.entries]  # type: ignore[list-item]
+        self.pages: list[list[T]] = [self.entries[i : i + per_page] for i in range(0, len(self.entries), per_page)]
 
         self.msg: discord.Message = MISSING
         self._ctx: Context | discord.Interaction = MISSING
@@ -293,33 +261,12 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         """:class:`str`: Returns the middle text for the paginator."""
         return f"{self.current_page}/{self.total_pages}"
 
-    async def to_array(self) -> np.ndarray:
-        """Returns a 2D array of the pages, their index and the page content."""
-
-        def resolve_entries(e: T) -> Generator[str | Any, Any]:
-            if isinstance(e, discord.Embed):
-                if e.fields:
-                    for field in e.fields:
-                        yield f"{field.name}: {field.value}"
-                if e.description:
-                    yield e.description
-                if e.title:
-                    yield e.title
-            elif isinstance(e, str):
-                yield e
-            else:
-                yield str(e)
-
-        result = [(i, list(resolve_entries(page))) async for i, page in aenumerate(self._paged_embeds())]
-        return np.array(result, dtype=object)
-
     def resolve_msg_kwargs(self, page: T) -> dict[str, Any]:
         """:class:`dict`: The kwargs to edit/send the message with."""
-        try:
-            payload = {"view": self, TYPE_MAPPING[page.__class__]: page}
-        except KeyError:
+        key = next((key for kind, key in TYPE_MAPPING if isinstance(page, kind)), None)
+        if key is None:
             raise TypeError(f"Unsupported type {page.__class__} for pagination.")
-        return payload
+        return {"view": self, key: page}
 
     async def on_timeout(self) -> None:
         """|coro|
@@ -399,45 +346,6 @@ class BasePaginator[T](View, metaclass=ABCMeta):
     def update_buttons(self) -> None:
         self.on_middle.label = self.middle
 
-    async def _paged_embeds(self) -> AsyncGenerator[discord.Embed]:
-        """Returns an async generator of the pages."""
-        for page in self.pages:
-            yield await self.format_page(page)  # type: ignore[misc]
-
-    async def search_for_query(self, query: str, interaction: discord.Interaction) -> None:
-        """|coro|
-
-        Search for a query in all embeds and return the matches.
-        This uses a fuzzy search algorithm to find the best match by comparing the previous ratio.
-
-        Parameters
-        ----------
-        query: :class:`str`
-            The query to search for.
-        interaction: :class:`discord.Interaction`
-            The interaction to respond to.
-        """
-
-        class SearchResult(NamedTuple):
-            ratio: float
-            page_index: int  # named page_index to avoid conflict with NamedTuple.index()
-
-        current_result: SearchResult | None = None
-        arr = await self.to_array()
-        for index, item in arr:
-            for entry in item:
-                ratio = fuzzy.ratio(query, entry)
-                if current_result is None or ratio > current_result.ratio:
-                    current_result = SearchResult(ratio, index)
-
-        if current_result is None:
-            await self._send(interaction, content=f"{Emojis.error} No matches found.", ephemeral=True)
-            return
-
-        entries = self.switch_page(current_result.page_index - self._current_page)
-        page = await self.format_page(entries)
-        await self._edit(interaction, **self.resolve_msg_kwargs(page))
-
     @classmethod
     async def start(
         cls,
@@ -448,7 +356,6 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         per_page: int = 10,
         timeout: int = 180,
         clamp_pages: bool = True,
-        search_for: bool = False,
         ephemeral: bool = False,
         **kwargs: Any,
     ) -> Self:
@@ -469,8 +376,6 @@ class BasePaginator[T](View, metaclass=ABCMeta):
             Whether to clamp the pages to the amount of entries.
         timeout: :class:`int`
             How long to wait before the paginator closes due to inactivity.
-        search_for: :class:`bool`
-            Whether to enable the search feature.
         ephemeral: :class:`bool`
             Whether to make the message ephemeral.
         **kwargs: :class:`Any`
@@ -491,9 +396,6 @@ class BasePaginator[T](View, metaclass=ABCMeta):
 
         page = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(page)
-
-        if search_for and self.total_pages > 3:
-            self.add_item(SearchForButton(self))
 
         if self.total_pages <= 1:
             object_kwargs.pop("view")
@@ -519,20 +421,6 @@ class BasePaginator[T](View, metaclass=ABCMeta):
                 message = await interaction.original_response()
         return message
 
-    @classmethod
-    async def _edit(cls, ctx: Context | discord.Interaction, **kwargs: Any) -> discord.Message | None:
-        kwargs.pop("ephemeral", None)
-
-        if isinstance(ctx, discord.Interaction):
-            if ctx.response.is_done():
-                message = await ctx.edit_original_response(**kwargs)
-            else:
-                await ctx.response.edit_message(**kwargs)
-                message = None
-        else:
-            message = await ctx.message.edit(**kwargs)
-        return message
-
 
 class EmbedPaginator(BasePaginator[discord.Embed]):
     """Subclass of :class:`BasePaginator` that is used to paginate :class:`discord.Embed`'s."""
@@ -553,7 +441,6 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
         per_page: int = 1,
         clamp_pages: bool = True,
         timeout: int = 180,
-        search_for: bool = False,
         ephemeral: bool = False,
         **kwargs: None,
     ) -> EmbedPaginator:
@@ -616,7 +503,6 @@ class LinePaginator(BasePaginator[T]):
         per_page: int = 15,
         clamp_pages: bool = True,
         timeout: int = 180,
-        search_for: bool = False,
         ephemeral: bool = False,
         location: Literal["field", "description"] = "field",
         embed: discord.Embed = discord.Embed(colour=helpers.Colour.white()),
@@ -661,7 +547,6 @@ class TextPaginator(BasePaginator[str]):
         per_page: int = 1,
         clamp_pages: bool = True,
         timeout: int = 180,
-        search_for: bool = False,
         ephemeral: bool = False,
         **kwargs: None,
     ) -> TextPaginator:
@@ -700,7 +585,6 @@ class FilePaginator(BasePaginator[discord.File]):
         per_page: int = 1,
         clamp_pages: bool = True,
         timeout: int = 180,
-        search_for: bool = False,
         ephemeral: bool = False,
         **kwargs: None,
     ) -> FilePaginator:
@@ -743,7 +627,6 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
     async def start(
         self,
         *,
-        search_for: bool = False,
         ephemeral: bool = False,
     ) -> TextSourcePaginator[AnyStr]:
         """
@@ -751,8 +634,6 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
 
         Parameters
         ----------
-        search_for: bool
-            Whether to search for the message to edit.
         ephemeral: bool
             Whether to make the message ephemeral.
 

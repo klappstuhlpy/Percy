@@ -403,9 +403,14 @@ class Command(commands.Command):
 
         # A keyword-only parameter was rewritten into positional-or-keyword above; wrap the callback so the
         # consume-rest argument is passed back as a keyword, matching the original signature the author wrote.
+        # A command copied after it was added rebuilds its params from the original signature
+        # (``wraps`` exposes it via __wrapped__), so the rewrite above runs again: re-wrap the
+        # original callback, never the wrapper, or the inner wrapper re-maps the arguments a
+        # second time against a stale command and scrambles them.
         if first_consume_rest and self.custom_flags:
+            original = getattr(self.callback, "__percy_flags_original__", self.callback)
 
-            @wraps(original := self.callback)
+            @wraps(original)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 """Re-map the positional consume-rest argument back to its keyword-only parameter."""
                 # Skip the leading ``self``/``ctx`` (or just ``ctx`` for cog-less commands) positionals.
@@ -419,6 +424,7 @@ class Command(commands.Command):
 
                 return await original(*args, **kwargs)
 
+            wrapper.__percy_flags_original__ = original  # type: ignore[attr-defined]
             self._callback = wrapper
 
     @classmethod
@@ -1031,51 +1037,8 @@ def group(
     return commands.group(**kwargs, **other_kwargs)
 
 
-class _ModBypassCooldownMapping(commands.CooldownMapping):
-    """A cooldown mapping that bypasses cooldowns for users with manage_guild permission."""
-
-    def _bucket_key(self, message: discord.Message) -> Any:
-        if (
-            message.guild
-            and isinstance(message.author, discord.Member)
-            and message.author.guild_permissions.manage_guild
-        ):
-            return None
-        return super()._bucket_key(message)
-
-    def get_bucket(self, message: discord.Message, current: float | None = None) -> commands.Cooldown | None:
-        if self._bucket_key(message) is None:
-            return None
-        return super().get_bucket(message, current)
-
-
-@discord.utils.copy_doc(commands.cooldown)
-def cooldown(
-    rate: int,
-    per: float,
-    bucket: commands.BucketType = commands.BucketType.user,
-    *,
-    bypass_moderators: bool = False,
-) -> Any:
-    """Apply a cooldown to a command.
-
-    Parameters
-    ----------
-    bypass_moderators: bool
-        If True, users with ``manage_guild`` permission skip this cooldown.
-    """
-    if bypass_moderators:
-        mapping = _ModBypassCooldownMapping.from_cooldown(rate, per, bucket)
-
-        def decorator(func: T) -> T:
-            if isinstance(func, commands.Command):
-                func._buckets = mapping
-            else:
-                func.__commands_cooldown__ = mapping
-            return func
-
-        return decorator
-    return commands.cooldown(rate, per, bucket)
+#: Re-exported so cogs import every command decorator from :mod:`app.core`.
+cooldown = commands.cooldown
 
 
 @discord.utils.copy_doc(commands.max_concurrency)

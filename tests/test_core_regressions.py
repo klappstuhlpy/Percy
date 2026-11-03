@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
@@ -11,6 +12,7 @@ import discord
 from app.core.bot import Bot
 from app.core.context import Context
 from app.core.converter import ColorTransformer
+from app.core.flags import Flags, flag
 from app.core.pagination import BasePaginator, LinePaginator
 from app.core.timer import Timer
 from app.utils.helpers import Colour
@@ -99,13 +101,29 @@ def test_find_member_from_user_is_not_cached() -> None:
     assert Bot.find_member_from_user(me, user) is member  # type: ignore[arg-type]
 
 
-async def test_on_error_survives_a_long_argument_repr() -> None:
-    me = SimpleNamespace()
+async def test_on_error_survives_a_long_argument_repr(monkeypatch) -> None:
+    sent = AsyncMock()
+    monkeypatch.setattr("app.core.bot.send_webhook", sent)
+    me = SimpleNamespace(stats_webhook=object())
     try:
         raise KeyError("boom")
     except KeyError:
         # TextSource.add_line raised RuntimeError on the over-long repr, killing the report.
         await Bot.on_error(me, "on_message", "x" * 5000)  # type: ignore[arg-type]
+    # A first argument that is no context/message/member used to drop the report silently.
+    sent.assert_awaited_once()
+
+
+async def test_on_error_reports_events_without_arguments(monkeypatch) -> None:
+    sent = AsyncMock()
+    monkeypatch.setattr("app.core.bot.send_webhook", sent)
+    me = SimpleNamespace(stats_webhook=object())
+    try:
+        raise KeyError("boom")
+    except KeyError:
+        # args[0] raised IndexError inside the handler for argument-less events (on_ready).
+        await Bot.on_error(me, "on_ready")  # type: ignore[arg-type]
+    sent.assert_awaited_once()
 
 
 def test_slugify() -> None:
@@ -136,3 +154,95 @@ def test_check_failure_message() -> None:
     assert check_failure_message(app_commands.BotMissingPermissions(["ban_members"])) is not None
     assert check_failure_message(app_commands.CheckFailure()) is None  # blacklist path stays silent
     assert check_failure_message(RuntimeError()) is None
+
+
+def test_embed_builder_keeps_the_first_field_of_a_generator() -> None:
+    from app.core.embeds import EmbedBuilder
+
+    # The dict/tuple sniff consumed the first item of a one-shot iterable.
+    embed = EmbedBuilder(fields=((str(i), "v", False) for i in range(3)))
+    assert [f.name for f in embed.fields] == ["0", "1", "2"]
+    embed.add_fields([{"name": "d", "value": 1}])
+    assert embed.fields[-1].value == "1" and embed.fields[-1].inline is True
+
+
+def test_paginator_accepts_embed_subclasses() -> None:
+    from app.core.embeds import EmbedBuilder
+
+    paginator = LinePaginator(entries=["a"], per_page=10)
+    page = EmbedBuilder()
+    # An exact-class lookup rejected EmbedBuilder with "Unsupported type".
+    assert BasePaginator.resolve_msg_kwargs(paginator, page)["embed"] is page
+
+
+def test_presence_summary_skips_unmapped_status() -> None:
+    from app.services.stats.presence_stats import summarize_presence
+
+    now = datetime.datetime(2026, 1, 1, 12)
+    hour = datetime.timedelta(hours=1)
+    # status_before is NULL for invisible; it raised KeyError(None).
+    breakdown = summarize_presence([(now, "Online"), (now - hour, None), (now - 2 * hour, "Idle")])
+    assert breakdown.durations["Idle"] == 3600
+    assert sum(breakdown.durations.values()) == 3600
+
+
+def test_flags_keep_their_own_docstring() -> None:
+    from app.core.flags import Flags
+
+    class DocFlags(Flags):
+        """Mine."""
+
+    assert DocFlags.__doc__ == "Mine."
+
+
+def test_command_suggestion_only_fires_on_a_near_identical_name() -> None:
+    from app.core.bot import closest_command_name
+
+    ask, ban, bal, leaderboard = object(), object(), object(), object()
+    names = {"ask": ask, "ban": ban, "balance": bal, "bal": bal, "leaderboard": leaderboard}
+    assert closest_command_name("aks", names) == "ask"            # transposition
+    assert closest_command_name("BALANCE", {"balance": bal}) == "balance"
+    assert closest_command_name("balanc", names) == "balance"     # one deletion
+    assert closest_command_name("leaderbaord", names) == "leaderboard"
+    assert closest_command_name("ledarboadr", names) == "leaderboard"  # two slips, long word
+    assert closest_command_name("baldheu", names) is None         # not close enough
+    assert closest_command_name("bas", names) is None             # ties ban (ban) and bal (balance)
+    assert closest_command_name("hi", names) is None              # too short to judge
+    assert closest_command_name("what is the weather", names) is None
+
+
+def test_collection_flag_annotations_fail_at_definition() -> None:
+    import pytest
+
+    # tuple/dict flags ran the whole value through e.g. tuple("ab"); reject them up front.
+    with pytest.raises(TypeError, match="not supported"):
+
+        class _Bad(Flags):  # pyright: ignore[reportUnusedClass]
+            pair: tuple[str, int]
+
+
+class _CopyFlags(Flags):
+    amount: int = flag(default=1)
+
+
+class _CopyCog:
+    seen: ClassVar[dict] = {}
+
+    async def cb(self, ctx, *, text: str, flags: _CopyFlags) -> None:
+        _CopyCog.seen = {"text": text, "ctx": ctx, "flags": flags}
+
+
+async def test_flag_wrapper_survives_a_copy_after_add() -> None:
+    from app.core.command import Command
+
+    # The original command (cog-less) was transformed, then a copy bound to a cog was
+    # transformed again: the copy's wrapper wrapped the original's, whose stale ``cog``
+    # made it re-map ``ctx`` into ``text``.
+    cmd = Command(_CopyCog.cb, name="t")
+    cmd.transform_flag_parameters()
+    copy = cmd.copy()
+    cog = _CopyCog()
+    copy.cog = cog
+    copy.transform_flag_parameters()  # what Bot.add_command does for a copied command
+    await copy.callback(cog, "CTX", "hello", flags="F")
+    assert _CopyCog.seen == {"text": "hello", "ctx": "CTX", "flags": "F"}

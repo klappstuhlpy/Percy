@@ -234,6 +234,15 @@ class Context[CogT: "Cog"](commands.Context):
             raise ValueError("No selection was made.")
         return view.selected
 
+    @property
+    def soft_reference(self) -> discord.MessageReference:
+        """A reply reference to the invoking message that degrades to a plain send if it was deleted.
+
+        A hard reference to a deleted message (an auto-deleted command, a mod cleaning up) makes
+        Discord reject the whole send, so the error the user should see never arrives.
+        """
+        return self.message.to_reference(fail_if_not_exists=False)
+
     async def send_success(self, content: str, **kwargs: Any) -> discord.Message:
         """Sends a success message."""
         emoji = Emojis.success if self.bot_permissions.use_external_emojis else "\N{WHITE HEAVY CHECK MARK}"
@@ -243,7 +252,7 @@ class Context[CogT: "Cog"](commands.Context):
         """Sends an error message."""
         kwargs.setdefault("delete_after", 15)
         kwargs.setdefault("ephemeral", True)
-        kwargs.setdefault("reference", self.message)
+        kwargs.setdefault("reference", self.soft_reference)
         emoji = Emojis.error if self.bot_permissions.use_external_emojis else "\N{CROSS MARK}"
         return await self.send(f"{emoji} {content}", **kwargs)
 
@@ -256,23 +265,20 @@ class Context[CogT: "Cog"](commands.Context):
         """Sends a warning message."""
         kwargs.setdefault("delete_after", 15)
         kwargs.setdefault("ephemeral", True)
-        kwargs.setdefault("reference", self.message)
+        kwargs.setdefault("reference", self.soft_reference)
         emoji = Emojis.warning if self.bot_permissions.use_external_emojis else "\N{WARNING SIGN}"
         return await self.send(f"{emoji} {content}", **kwargs)
 
     async def send(self, content: Any = None, **kwargs: Any) -> discord.Message:
-        if kwargs.get("embed") and kwargs.get("embeds") is not None:
-            kwargs["embeds"].append(kwargs["embed"])
-            del kwargs["embed"]
-
-        if kwargs.get("file") and kwargs.get("files") is not None:
-            kwargs["files"].append(kwargs["file"])
-            del kwargs["file"]
+        # Fold a singular embed/file into its plural list (discord.py rejects both at once),
+        # building a new list so the caller's own list is never mutated.
+        for single, plural in (("embed", "embeds"), ("file", "files")):
+            if kwargs.get(single) and kwargs.get(plural) is not None:
+                kwargs[plural] = [*kwargs[plural], kwargs.pop(single)]
 
         if kwargs.pop("edit", False) and self._message:
-            kwargs.pop("files", None)
-            kwargs.pop("reference", None)
-
+            for key in ("files", "file", "reference", "ephemeral", "mention_author"):
+                kwargs.pop(key, None)  # send-only options Message.edit does not accept
             await self.maybe_edit(None, content, **kwargs)
             return self._message
 
@@ -296,15 +302,18 @@ class Context[CogT: "Cog"](commands.Context):
     async def maybe_edit(
         self, message: discord.Message | None = None, content: Any = None, **kwargs: Any
     ) -> discord.Message | None:
-        """Edits the message silently."""
-        message = message or self._message
-        try:
-            await message.edit(content=content, **kwargs)  # type: ignore[union-attr]
-        except (AttributeError, discord.NotFound):
-            if not message or message.channel == self.channel:
-                return await self.send(content, **kwargs)
+        """Edit ``message`` (default: the last one this context sent), re-sending it if it is gone.
 
-            return await message.channel.send(content, **kwargs)
+        Returns the edited or newly sent message.
+        """
+        message = message or self._message
+        if message is not None:
+            try:
+                return await message.edit(content=content, **kwargs)
+            except discord.NotFound:
+                if message.channel != self.channel:
+                    return await message.channel.send(content, **kwargs)
+        return await self.send(content, **kwargs)
 
     async def maybe_delete(self, message: discord.Message | None = None, *args: Any, **kwargs: Any) -> None:
         """Deletes the message silently if it exists."""

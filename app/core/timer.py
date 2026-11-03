@@ -441,7 +441,9 @@ class TimerManager:
                     await asyncio.sleep(to_sleep)
 
                 log.debug("Dispatching timer %r for event %s now.", timer.id, timer.event)
-                await self.call(timer)
+                # Shielded: a reset_task() landing between the row delete and the dispatch inside
+                # call() lost the timer for good (deleted, never fired: a tempban that never ends).
+                await asyncio.shield(self.call(timer))
         except asyncio.CancelledError:
             raise
         except (OSError, discord.ConnectionClosed, asyncpg.PostgresConnectionError):

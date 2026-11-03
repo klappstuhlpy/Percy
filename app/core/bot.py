@@ -9,7 +9,7 @@ import time as _time
 import traceback
 from collections import Counter, defaultdict
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Final, TypeVar
+from typing import TYPE_CHECKING, Any, Final
 
 import discord
 import jishaku
@@ -40,14 +40,13 @@ from app.core.views import CommandSuggestionView
 from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
-from app.services import AIService, CommandRouter, ModelTier, RouteCommand, format_duration
+from app.services import AIService, ModelTier, format_duration
 from app.services.infra.event_hub import EventHub
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,
     AnsiStringBuilder,
     Config,
-    cache,
     deep_to_with,
     fuzzy,
     helpers,
@@ -78,9 +77,7 @@ from config import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, Generator, Iterable
-
-GuildFeatureT = TypeVar('GuildFeatureT', bound=list[tuple[str, str]] | Any)
+    from collections.abc import AsyncIterator, Callable, Generator, Iterable, Mapping
 
 __all__ = (
     'LOG',
@@ -90,6 +87,29 @@ __all__ = (
 LOG: Final[logging.Logger] = logging.getLogger(bot_name)
 # Error replies echo user input (e.g. a bad `<@id>` argument), so they never ping anyone.
 NO_MENTIONS: Final[discord.AllowedMentions] = discord.AllowedMentions.none()
+
+
+def closest_command_name(attempted: str, names: Mapping[str, object]) -> str | None:
+    """The name in ``names`` (name/alias -> command) that ``attempted`` is a near-certain typo of.
+
+    "Near-certain" means a transposition-aware edit distance of 1 (2 for words of 7+ letters,
+    where two slips still leave the word unmistakable), words under 3 letters are ignored, and
+    a tie between two *different commands* at the best distance stays silent rather than guess
+    (a command's name and its alias tying is fine).
+    """
+    attempted = attempted.lower()
+    if len(attempted) < 3:
+        return None
+    limit = 2 if len(attempted) >= 7 else 1
+    best: list[str] = []
+    best_distance = limit + 1
+    for name in names:
+        distance = fuzzy.osa_distance(attempted, name)
+        if distance < best_distance:
+            best, best_distance = [name], distance
+        elif distance == best_distance:
+            best.append(name)
+    return best[0] if best and len({id(names[n]) for n in best}) == 1 else None
 
 
 class Bot(commands.Bot):
@@ -114,7 +134,6 @@ class Bot(commands.Bot):
     klappstuhlme_internal_client: KlappstuhlInternalClient
     klappstuhlme_client: KlappstuhlClient
     ai: AIService
-    ai_router: CommandRouter
     spam_control: SpamControl
     command_stats: Counter[str]
     socket_stats: Counter[str]
@@ -185,10 +204,6 @@ class Bot(commands.Bot):
         self._setup_finished: asyncio.Event = asyncio.Event()
         #: The URL the AI client talks to (``ollama_config.host``). Used for health logging.
         self._ollama_host: str = ollama_config.host
-        #: Throttles AI command-routing so a stream of prefix-misses can't hammer the model.
-        self._ai_route_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
-            1, 8.0, commands.BucketType.user
-        )
 
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
         """Resolves the command prefix for a message, respecting per-guild configuration."""
@@ -280,7 +295,6 @@ class Bot(commands.Bot):
         self.timers = TimerManager(self)
         self.render = RenderingService()
         self.events = EventHub()
-        self._ollama_host = ollama_config.host
         self.ai = AIService(
             OllamaClient(
                 self.session,
@@ -297,9 +311,6 @@ class Bot(commands.Bot):
             max_concurrency=ollama_config.max_concurrency,
             enabled=ollama_config.enabled,
         )
-        # Higher confidence floor than the router default: small models are over-confident,
-        # so demand a stronger signal before proposing a command (cuts weak mis-routes).
-        self.ai_router = CommandRouter(self.ai, min_confidence=0.7)
 
         self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 
@@ -466,14 +477,9 @@ class Bot(commands.Bot):
             # No command matched. discord.py only raises CommandNotFound from invoke(),
             # which we skip here. When the user used the prefix (ctx.invoked_with is set),
             # a guild alias or custom command gets the word first (a real command always won
-            # already, by matching above); then a deterministic typo correction (e.g. "aks" ->
-            # "ask"); only if the word is not a near-miss of a real command do we fall back to
-            # AI intent routing (if enabled). Typos must win over AI guessing, or
-            # "b.aks <question>" gets mis-routed as natural language.
-            if ctx.invoked_with and await self._maybe_dispatch_custom(ctx):
-                return
-            if ctx.invoked_with and not await self._maybe_suggest_command(ctx):
-                await self._maybe_route_with_ai(ctx)
+            # already, by matching above); otherwise a near-identical typo earns a suggestion.
+            if ctx.invoked_with and not await self._maybe_dispatch_custom(ctx):
+                await self._maybe_suggest_command(ctx)
             return
 
         await self.invoke_matched(ctx, message)
@@ -555,135 +561,53 @@ class Bot(commands.Bot):
         embed.add_field(name='Event', value=event_method)
         embed.set_footer(text='Occurred at')
 
-        args_str = TextSource(prefix='```py', max_size=1024)
-        for index, arg in enumerate(args):
-            # add_line raises on a line longer than the page; a long repr must not kill the report.
-            args_str.add_line(f'[{index}]: {arg!r}'[:900])
-        args_str.close_page()
-        embed.add_field(name='Args', value=args_str.pages[0], inline=False)
+        if args:
+            args_str = TextSource(prefix='```py', max_size=1024)
+            for index, arg in enumerate(args):
+                # add_line raises on a line longer than the page; a long repr must not kill the report.
+                args_str.add_line(f'[{index}]: {arg!r}'[:900])
+            embed.add_field(name='Args', value=args_str.pages[0], inline=False)
 
+        first = args[0] if args else None
+        if isinstance(first, (Context, discord.Message)):
+            author = first.author
+        else:
+            author = first if isinstance(first, discord.Member) else None
+
+        # Every report reaches the webhook; only an owner's own trigger is answered in place
+        # (before, any event whose first argument was not a context/message/member, e.g. a raw
+        # payload, built the report and silently dropped it).
         with suppress(discord.HTTPException, ValueError):
-            ctx: Context | discord.Message | discord.Member = args[0]
-
-            if isinstance(ctx, Context):
-                author = ctx.author
-                send = ctx.send
-            elif isinstance(ctx, discord.Message):
-                author = ctx.author
-                send = ctx.channel.send
-            elif isinstance(ctx, discord.Member):
-                author = ctx
-                member = ctx
-                await member.create_dm()
-                assert member.dm_channel is not None
-                send = member.dm_channel.send
-            else:
-                raise ValueError
-
-            if await self.is_owner(author):
-                await send(embed=embed)
+            if author is not None and await self.is_owner(author):
+                if isinstance(first, Context):
+                    await first.send(embed=embed)
+                elif isinstance(first, discord.Message):
+                    await first.channel.send(embed=embed)
+                else:
+                    await author.send(embed=embed)
                 return
 
             await send_webhook(self.stats_webhook, embed=embed)
 
-    #: Minimum fuzzy ``ratio`` (0-100) for a mistyped command to earn a "did you mean?"
-    #: suggestion. Tuned so a clear typo of a real command (``balanace`` -> ``balance``)
-    #: matches while an unrelated word (``baldheu``) stays silent, as before.
-    SUGGESTION_CUTOFF: Final[int] = 75
-    #: Max edit distance (transposition-aware) for the typo fallback when ``ratio`` misses —
-    #: catches single-edit/transposition typos like ``aks`` -> ``ask`` that score poorly.
-    TYPO_MAX_DISTANCE: Final[int] = 1
-
-    def _build_command_catalogue(self) -> list[RouteCommand]:
-        """Compact catalogue of visible top-level commands for the AI router prompt."""
-        catalogue: list[RouteCommand] = []
-        for cmd in self.commands:
-            if cmd.hidden:
-                continue
-            description = (cmd.short_doc or cmd.description or '').strip()
-            catalogue.append(RouteCommand(name=cmd.qualified_name, description=description))
-        return catalogue
-
-    async def _maybe_route_with_ai(self, ctx: Context) -> bool:
-        """Try to route a prefix-miss to a command via AI. Returns whether it handled it.
-
-        Gated on the guild's ``AIFlags.router`` toggle and a per-user cooldown. The model
-        only *proposes* a command; the user must click "Run" (the command then runs through
-        its normal converters/checks/permissions), so the AI never auto-executes anything.
-        """
-        if ctx.guild is None or not self.ai.available:
-            return False
-
-        ai_config = await self.db.get_guild_ai_config(ctx.guild.id)
-        if not ai_config.is_enabled('router', ctx.channel.id):
-            return False
-
-        # Throttle per user so a burst of prefix-misses can't hammer the model.
-        if self._ai_route_cooldown.update_rate_limit(ctx.message):
-            return False
-
-        prefix = ctx.prefix or ''
-        text = ctx.message.content[len(prefix):].strip()
-        if len(text) < 4:
-            return False
-
-        decision = await self.ai_router.route(text, self._build_command_catalogue())
-        if decision is None or decision.command is None:
-            return False
-
-        command = self.get_command(decision.command)
-        if command is None:
-            return False
-
-        suggestion = command.qualified_name
-        new_content = f'{prefix}{suggestion}' + (f' {decision.args}' if decision.args else '')
-        view = CommandSuggestionView(
-            ctx, suggestion, new_content,
-            prompt=f"It looks like you want `{ctx.clean_prefix}{suggestion}`. Run it?",
-        )
-        with suppress(discord.HTTPException):
-            view.message = await ctx.send(view=view, reference=ctx.message, delete_after=30)
-        return True
-
     async def _maybe_suggest_command(self, ctx: Context) -> bool:
-        """Reply with a single close command suggestion for a mistyped command.
+        """Offer to run the command the user almost certainly meant; returns whether it did.
 
-        Returns whether a suggestion was offered. Stays silent (and returns ``False``, so the
-        AI router gets a chance) unless the attempted name is a close fuzzy match *or* a
-        single-edit/transposition typo of a visible command — so genuine natural language
-        falls through to AI routing instead of being hijacked.
+        Silent unless :func:`closest_command_name` finds exactly one visible command name or
+        alias within a typo's reach of the word typed.
         """
-        attempted = (ctx.invoked_with or '').lower()
-        # Only handle clean top-level misses; ignore 1-2 char noise to avoid false hits.
-        if ctx.command is not None or len(attempted) < 3:
+        if ctx.command is not None:
             return False
 
-        # Map every visible command name/alias to its command, then take the best match.
         choices: dict[str, Command] = {}
         for cmd in self.commands:
-            if cmd.hidden:
-                continue
-            for name in (cmd.name, *cmd.aliases):
-                choices.setdefault(name.lower(), cmd)  # type: ignore[arg-type]
+            if not cmd.hidden:
+                for name in (cmd.name, *cmd.aliases):
+                    choices.setdefault(name.lower(), cmd)  # type: ignore[arg-type]
 
-        command: Command | None = None
-        match = fuzzy.extract_one(attempted, choices, scorer=fuzzy.ratio, score_cutoff=self.SUGGESTION_CUTOFF)
-        if match is not None:
-            _, _, command = match
-        else:
-            # Transposition / single-edit typos ("aks" -> "ask") score poorly on ratio; fall
-            # back to a strict edit-distance match so obvious typos still correct.
-            best = (self.TYPO_MAX_DISTANCE + 1, -1)  # (distance, ratio); lower distance wins
-            for name, cmd in choices.items():
-                distance = fuzzy.osa_distance(attempted, name)
-                if distance > self.TYPO_MAX_DISTANCE:
-                    continue
-                candidate = (distance, -fuzzy.ratio(attempted, name))
-                if candidate < best:
-                    best, command = candidate, cmd
-
-        if command is None:
+        name = closest_command_name(ctx.invoked_with or '', choices)
+        if name is None:
             return False
+        command = choices[name]
 
         suggestion = command.qualified_name
         prefix = ctx.prefix or ''
@@ -694,7 +618,7 @@ class Bot(commands.Bot):
         with suppress(discord.HTTPException):
             view.message = await ctx.send(
                 view=view,
-                reference=ctx.message,
+                reference=ctx.soft_reference,
                 delete_after=15,
             )
         return True
@@ -708,16 +632,15 @@ class Bot(commands.Bot):
         messages on the interaction. Unexpected errors are logged and reported
         to the stats webhook.
         """
-        from app.core.models import BadArgument as _BadArgument
-
         error = getattr(error, "original", error)
 
-        if isinstance(error, (commands.BadArgument, _BadArgument, AppBadArgument)):
+        if isinstance(error, (commands.BadArgument, AppBadArgument)):
             msg = f"{Emojis.error} {error}"
-            if not interaction.response.is_done():
-                await interaction.response.send_message(msg, ephemeral=True)
-            else:
-                await interaction.followup.send(msg, ephemeral=True)
+            with suppress(discord.HTTPException):
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(msg, ephemeral=True, allowed_mentions=NO_MENTIONS)
+                else:
+                    await interaction.followup.send(msg, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
 
         if isinstance(error, (discord.Forbidden, discord.NotFound)):
@@ -730,15 +653,15 @@ class Bot(commands.Bot):
             exc_info=error,
         )
 
-        if not interaction.response.is_done():
-            await interaction.response.send_message(
-                f"{Emojis.error} Something went wrong.", ephemeral=True
-            )
+        with suppress(discord.HTTPException):
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"{Emojis.error} Something went wrong.", ephemeral=True)
 
         trace = "".join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
         embed = discord.Embed(
             title=f"{Emojis.warning} View/Modal Error",
-            description=f"```py\n{trace[:3900]}\n```",
+            # The tail holds the exception itself; the head is just the outer frames.
+            description=f"```py\n{trace[-3900:]}\n```",
             timestamp=discord.utils.utcnow(),
             colour=helpers.Colour.burgundy(),
         )
@@ -810,7 +733,7 @@ class Bot(commands.Bot):
         if isinstance(error, commands.NSFWChannelRequired):
             await ctx.send(
                 '\N{NO ENTRY SIGN} This command can only be run in channels that are marked **NSFW**.',
-                reference=ctx.message, delete_after=15, ephemeral=True,
+                reference=ctx.soft_reference, delete_after=15, ephemeral=True,
             )
             return
 
@@ -827,7 +750,7 @@ class Bot(commands.Bot):
             if ctx.guild and (
                     permissions.administrator or (permissions.send_messages and permissions.read_message_history)
             ):
-                await ctx.send(message, reference=ctx.message, ephemeral=True)
+                await ctx.send(message, reference=ctx.soft_reference, ephemeral=True)
                 return
 
             if ctx.interaction is None and (permissions.administrator or permissions.add_reactions):
@@ -855,10 +778,9 @@ class Bot(commands.Bot):
         from app.clients.base import CircuitBreakerOpen, HTTPClientError
         from app.core.errors import ServiceUnavailableError
 
-        unwrapped = getattr(error, 'original', error)
-        if isinstance(unwrapped, (CircuitBreakerOpen, ServiceUnavailableError)):
-            service = getattr(unwrapped, 'service_name', 'external service')
-            retry = getattr(unwrapped, 'retry_after', None)
+        if isinstance(error, (CircuitBreakerOpen, ServiceUnavailableError)):
+            service = getattr(error, 'service_name', 'external service')
+            retry = getattr(error, 'retry_after', None)
             msg = f'The **{service}** service is temporarily unavailable.'
             if retry:
                 msg += f' Try again in **{humanize_duration(retry)}**.'
@@ -867,7 +789,7 @@ class Bot(commands.Bot):
             await ctx.send_info(msg, delete_after=20)
             return
 
-        if isinstance(unwrapped, HTTPClientError) and unwrapped.status >= 500:
+        if isinstance(error, HTTPClientError) and error.status >= 500:
             await ctx.send_info(
                 'An external service returned an error. This is likely temporary — please try again shortly.',
                 delete_after=20,
@@ -886,10 +808,8 @@ class Bot(commands.Bot):
             content = str(to_send_error_lookup)[:1800]
             if not content.startswith('<:'):
                 content = f'{Emojis.error} {content}'
-            await ctx.send(content, reference=ctx.message, delete_after=15, ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await ctx.send(content, reference=ctx.soft_reference, delete_after=15, ephemeral=True, allowed_mentions=NO_MENTIONS)
             return
-
-        error = getattr(error, 'original', error)
 
         # Parameter-based errors.
 
@@ -914,7 +834,7 @@ class Bot(commands.Bot):
                 # URLs. The full error is in the log line above.
                 builder.append(f'panic!({type(error).__name__})', color=AnsiColor.red, bold=True)
                 ansi = builder.ensure_codeblock().dynamic(ctx)
-                await ctx.send(ansi, reference=ctx.message, allowed_mentions=NO_MENTIONS)
+                await ctx.send(ansi, reference=ctx.soft_reference, allowed_mentions=NO_MENTIONS)
             raise error
 
         if param is None:
@@ -998,7 +918,7 @@ class Bot(commands.Bot):
             builder.append(', is this correct?')
 
         ansi = builder.ensure_codeblock().dynamic(ctx)
-        await ctx.send_error(f'Could not parse your command input properly:\n{ansi}', reference=ctx.message,
+        await ctx.send_error(f'Could not parse your command input properly:\n{ansi}', reference=ctx.soft_reference,
                              allowed_mentions=NO_MENTIONS)
 
     async def on_blacklist_timer_complete(self, timer: Timer) -> None:
@@ -1019,39 +939,14 @@ class Bot(commands.Bot):
     # UTILS
 
     @staticmethod
-    def get_guild_features(
-            features: list[GuildFeatureT], *, only_current: bool = False, emojize: bool = True
-    ) -> Generator[tuple[str, Any] | tuple[GuildFeatureT, Any], Any]:
-        """Returns a list of tuples containing all guild features if ``only_current`` is False or enabled features if True.
+    def get_guild_features(features: Iterable[str], *, emojize: bool = True) -> Generator[tuple[str, str]]:
+        """Yield ``(name, description)`` for every feature in ``features`` that :data:`GUILD_FEATURES` knows.
 
-        Parameters
-        ----------
-        features: list[GuildFeatureT]
-            The list of features to get.
-        only_current: bool
-            Whether to only get the current enabled features.
-        emojize: bool
-            Whether to emojize the feature names.
-
-        Returns
-        -------
-        GuildFeatureA
-            The list of tuples containing the features.
+        Unknown features (Discord keeps adding them) are skipped rather than raising.
         """
         for feature in features:
-            if only_current:
-                if feature in GUILD_FEATURES:
-                    fmt = GUILD_FEATURES[feature]
-                    if emojize:
-                        yield f'{fmt[0]} {feature}', fmt[1]
-                    else:
-                        yield feature, fmt[1]
-            else:
-                fmt = GUILD_FEATURES[feature]
-                if emojize:
-                    yield f'{fmt[0]} {feature}', fmt[1]
-                else:
-                    yield feature, fmt[1]
+            if (fmt := GUILD_FEATURES.get(feature)) is not None:
+                yield (f'{fmt[0]} {feature}' if emojize else feature), fmt[1]
 
     @staticmethod
     async def get_or_fetch_member(guild: discord.Guild, member_id: int) -> discord.Member | None:
@@ -1116,22 +1011,10 @@ class Bot(commands.Bot):
             else:
                 needs_resolution.append(member_id)
 
-        total_need_resolution = len(needs_resolution)
-        if total_need_resolution != 0:
-            if total_need_resolution == 1:
-                members = await guild.query_members(limit=1, user_ids=needs_resolution, cache=True)
-                if members:
-                    yield members[0]
-            elif total_need_resolution <= 100:
-                resolved = await guild.query_members(limit=100, user_ids=needs_resolution, cache=True)
-                for member in resolved:
-                    yield member
-            else:
-                for index in range(0, total_need_resolution, 100):
-                    to_resolve = needs_resolution[index: index + 100]
-                    members = await guild.query_members(limit=100, user_ids=to_resolve, cache=True)
-                    for member in members:
-                        yield member
+        for index in range(0, len(needs_resolution), 100):
+            chunk = needs_resolution[index:index + 100]
+            for member in await guild.query_members(limit=len(chunk), user_ids=chunk, cache=True):
+                yield member
 
     def find_member_from_user(self, user: discord.abc.Snowflake) -> discord.Member | None:
         """Finds the first member object given a user/object.

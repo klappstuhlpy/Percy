@@ -24,9 +24,8 @@ pub struct ConfigForm {
 }
 
 /// AI feature flag names — must match Percy's `GuildConfig.AIFlags` / internal API.
-pub const AI_FLAG_NAMES: [&str; 9] = [
+pub const AI_FLAG_NAMES: [&str; 8] = [
     "assistant",
-    "router",
     "moderation",
     "sentinel",
     "music",

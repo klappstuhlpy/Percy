@@ -1,5 +1,5 @@
 import copy
-from collections.abc import Awaitable, Callable, Coroutine, Generator, Iterable
+from collections.abc import Awaitable, Callable, Coroutine, Iterable
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -8,8 +8,6 @@ from discord import Interaction
 from discord.ext import commands
 
 if TYPE_CHECKING:
-    import datetime
-
     import asyncpg
 
     from app.core import Context
@@ -26,13 +24,28 @@ __all__ = (
     "View",
 )
 
+from app.services.stats.presence_stats import summarize_presence
 from app.utils import Timer, get_asset_url, helpers
 from config import Emojis
 
 T = TypeVar("T")
 
-type ViewIdentifierKwars = Any  # loose alias kept for back-compat; kwargs are passed to View.__init__
 AsyncHook = Callable[[discord.Interaction], Coroutine[Any, Any, None]]
+
+
+async def _members_check(
+    members: discord.abc.Snowflake | Iterable[discord.abc.Snowflake] | None, interaction: Interaction
+) -> bool:
+    """Shared member gate of :class:`View` and :class:`LayoutView`: ``None`` lets everyone in."""
+    if not members:
+        return True
+    if isinstance(members, discord.abc.Snowflake):
+        allowed = interaction.user.id == members.id
+    else:
+        allowed = any(m.id == interaction.user.id for m in members)
+    if not allowed:
+        await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.", ephemeral=True)
+    return allowed
 
 
 @discord.utils.copy_doc(discord.ui.View)
@@ -72,18 +85,7 @@ class View(discord.ui.View):
 
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         """The default interaction check for the view."""
-        if not self.members:
-            return True
-
-        members = self.members
-        is_iterable = isinstance(members, Iterable) and not isinstance(members, discord.abc.Snowflake)
-        if (
-            (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
-            or (not is_iterable and interaction.user.id != members.id)
-        ):
-            await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.", ephemeral=True)
-            return False
-        return True
+        return await _members_check(self.members, interaction)
 
     async def on_timeout(self) -> None:
         """|coro|
@@ -118,8 +120,9 @@ class View(discord.ui.View):
         View
             The view with the item disabled. -> Chainable
         """
-        item.style = discord.ButtonStyle.secondary
-        item.disabled = True
+        if isinstance(item, discord.ui.Button):
+            item.style = discord.ButtonStyle.secondary
+        item.disabled = True  # type: ignore[attr-defined]
 
         return self
 
@@ -132,47 +135,9 @@ class View(discord.ui.View):
             Whether to change the style of the buttons to secondary or not.
         """
         for item in self._children:
-            if with_style:
+            if with_style and isinstance(item, discord.ui.Button):
                 item.style = discord.ButtonStyle.secondary
-            item.disabled = True
-
-    def enable_all(self, with_style: bool = False) -> None:
-        """Enables all children of the view.
-
-        Parameters
-        ----------
-        with_style: bool
-            Whether to change the style of the buttons to blurple or not.
-        """
-        for item in self._children:
-            if with_style:
-                item.style = discord.ButtonStyle.blurple
-            item.disabled = False
-
-    def walk_children(self) -> Generator[discord.ui.Item]:
-        """Walks the children of the view."""
-        yield from self._children
-
-    @classmethod
-    def from_items(cls, *items: discord.ui.Item, **view_kwargs: ViewIdentifierKwars) -> "View":
-        """Creates a view from an item.
-
-        Parameters
-        ----------
-        items: discord.ui.Item
-            The items to add to the view.
-        view_kwargs: Any
-            The keyword arguments to pass to the view.
-
-        Returns
-        -------
-        View
-            The view with the item added.
-        """
-        view = cls(**view_kwargs)
-        for item in items:
-            view.add_item(item)
-        return view
+            item.disabled = True  # type: ignore[attr-defined]
 
 
 class LayoutView(discord.ui.LayoutView):
@@ -203,33 +168,22 @@ class LayoutView(discord.ui.LayoutView):
 
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         """Member-gating check, identical to :meth:`View.interaction_check`."""
-        if not self.members:
-            return True
-
-        members = self.members
-        is_iterable = isinstance(members, Iterable) and not isinstance(members, discord.abc.Snowflake)
-        if (
-            (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
-            or (not is_iterable and interaction.user.id != members.id)
-        ):
-            await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.", ephemeral=True)
-            return False
-        return True
+        return await _members_check(self.members, interaction)
 
     async def on_timeout(self) -> None:
-        if self._delete_on_timeout and self.message:
+        if self.message is None:
+            return
+        if self._delete_on_timeout:
             with suppress(discord.HTTPException):
                 await self.message.delete()
-
-        if self._disable_on_timeout and self.message:
+            return
+        if self._disable_on_timeout:
+            # Every interactive child (buttons too, not just selects); link buttons stay usable.
+            for child in self.walk_children():
+                if hasattr(child, "disabled") and getattr(child, "url", None) is None:
+                    child.disabled = True  # type: ignore[attr-defined]
             with suppress(discord.HTTPException):
-                for child in self.walk_children():
-                    if isinstance(child, discord.ui.Select):
-                        child.disabled = True
-                try:
-                    await self.message.edit(view=self)
-                except discord.HTTPException:
-                    pass
+                await self.message.edit(view=self)
 
     async def on_error(self, interaction: Interaction, error: Exception, item: discord.ui.Item, /) -> None:
         await interaction.client.handle_interaction_error(interaction, error)  # type: ignore[attr-defined]
@@ -256,7 +210,7 @@ class TrashView(View):
 class CommandSuggestionView(LayoutView):
     """CV2 card offering a one-click "run the command you probably meant" after a typo."""
 
-    def __init__(self, ctx: Context, suggestion: str, new_content: str, *, prompt: str | None = None) -> None:
+    def __init__(self, ctx: Context, suggestion: str, new_content: str) -> None:
         super().__init__(timeout=30.0, members=ctx.author, delete_on_timeout=True)
         self.ctx = ctx
         self._new_content = new_content
@@ -266,8 +220,7 @@ class CommandSuggestionView(LayoutView):
         )
         button.callback = self._run  # type: ignore[assignment]
 
-        # Default wording suits a typo; the AI router passes its own intent-based prompt.
-        text = prompt or f"I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?"
+        text = f"I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?"
 
         container = discord.ui.Container(accent_colour=helpers.Colour.warning_accent())
         container.add_item(discord.ui.TextDisplay(f"*{text}*"))
@@ -377,12 +330,16 @@ class ConfirmationView(LayoutView):
             elif self._defer:
                 await interaction.response.defer()
             elif self._delete_after:
+                # Acknowledge first: a bare delete left the click unanswered ("interaction failed").
+                # After a deferred update the "original response" is the message holding the
+                # buttons, so this also deletes ephemeral prompts (Message.delete cannot).
                 try:
-                    if interaction.message:
-                        await interaction.message.delete()
+                    await interaction.response.defer()
+                    await interaction.delete_original_response()
                 except discord.HTTPException:
                     if self.message:
-                        await self.message.delete()
+                        with suppress(discord.HTTPException):
+                            await self.message.delete()
 
         return callback
 
@@ -403,7 +360,7 @@ class DisambiguatorView[T](LayoutView):
         for i, x in enumerate(data):
             opt = entry(x)
             if not isinstance(opt, discord.SelectOption):
-                opt = discord.SelectOption(label=str(opt))
+                opt = discord.SelectOption(label=str(opt)[:100])
             opt.value = str(i)
             options.append(opt)
 
@@ -427,7 +384,8 @@ class DisambiguatorView[T](LayoutView):
         self.selected = self.data[index]
         await interaction.response.defer()
         if self.message and not self.message.flags.ephemeral:
-            await self.message.delete()
+            with suppress(discord.HTTPException):
+                await self.message.delete()
 
         self.stop()
 
@@ -509,60 +467,41 @@ class UserInfoView(View):
         await interaction.response.edit_message(view=self)
 
         with Timer() as timer:
-            history: list[asyncpg.Record] = await self.cog.get_presence_history(interaction.user.id, days=30)
+            # The member this card is about (like the ``presence`` command), not whoever clicked.
+            history: list[asyncpg.Record] = await self.cog.get_presence_history(self.member.id, days=30)
 
             if not history:
                 await interaction.followup.send(f"{Emojis.error} No presence history found.", ephemeral=True)
                 return
 
             fetching_time = timer.reset()
-
-            record_dict: dict[datetime.datetime, Any] = {
-                record["changed_at"]: [
-                    record["status"],
-                    record["status_before"],
-                ]
-                for record in history
-            }
-
-            status_timers: dict[str, float] = {
-                "Online": 0,
-                "Idle": 0,
-                "Do Not Disturb": 0,
-                "Offline": 0,
-            }
-
-            for i, (changed_at, statuses) in enumerate(record_dict.items()):
-                if i != 0:
-                    status_timers[statuses[1]] += (list(record_dict.keys())[i - 1] - changed_at).total_seconds()
-
-            if all(value == 0 for value in status_timers.values()):
-                return await interaction.followup.send(
-                    f"{Emojis.error} Not enough data to generate a chart.", ephemeral=True
-                )
+            breakdown = summarize_presence((record["changed_at"], record["status_before"]) for record in history)
+            if not breakdown.has_data:
+                await interaction.followup.send(f"{Emojis.error} Not enough data to generate a chart.", ephemeral=True)
+                return
 
             analyzing_time = timer.reset()
-
+            durations = breakdown.durations
             canvas: discord.File = await self.bot.render.presence_chart(
                 labels=["Online", "Offline", "DND", "Idle"],
                 colors=["#43b581", "#747f8d", "#f04747", "#fba31c"],
                 values=[
-                    int(status_timers["Online"]),
-                    int(status_timers["Offline"]),
-                    int(status_timers["Do Not Disturb"]),
-                    int(status_timers["Idle"]),
+                    int(durations["Online"]),
+                    int(durations["Offline"]),
+                    int(durations["Do Not Disturb"]),
+                    int(durations["Idle"]),
                 ],
                 subtitle="Past month",
             )
 
         embed = discord.Embed(
-            title=f"Past 1 Month User Activity of {interaction.user}",
+            title=f"Past 1 Month User Activity of {self.member}",
             description=(
                 f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
                 f"`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n"
                 f"`{'Generating':<{12}}:` {timer.seconds:.3f}s"
             ),
-            timestamp=min(record_dict.keys()),
+            timestamp=breakdown.earliest,
             colour=helpers.Colour.white(),
         )
         embed.set_image(url=f'attachment://{canvas.filename}')

@@ -275,11 +275,6 @@
                            endif %}>
                 </label>
                 <label class="config-toggle">
-                    <div><span class="config-label">Command Router</span><span class="config-description">Route natural-language messages to the right command</span>
-                    </div>
-                    <input type="checkbox" name="router" value="true" {% if guild.ai.flags.router %}checked{% endif %}>
-                </label>
-                <label class="config-toggle">
                     <div><span class="config-label">Moderation</span><span class="config-description">AI-assisted spam/abuse signals for moderation</span>
                     </div>
                     <input type="checkbox" name="moderation" value="true" {% if guild.ai.flags.moderation %}checked{%

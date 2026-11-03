@@ -708,9 +708,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 if isinstance(param.annotation, FlagMeta) and getattr(command, "custom_flags", None):
                     continue
 
-                description = getattr(command.callback, "__discord_app_commands_param_description__", param.description)
-                if isinstance(description, dict):
-                    description = description.get(param.name, "Argument undocumented.")
+                # Our commands backfill param.description from ``describe``; others (jishaku) only
+                # carry the raw mapping. Before, a param without either rendered as "None".
+                stashed = getattr(command.callback, "__discord_app_commands_param_description__", None) or {}
+                description = param.description or stashed.get(param.name) or "Argument undocumented."
 
                 lines.append(f"- `{param.name}`: {description}")
 

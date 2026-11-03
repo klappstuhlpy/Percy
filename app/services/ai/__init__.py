@@ -22,7 +22,6 @@ from app.services.ai.prompts import (
     build_dashboard_assistant_system,
     json_instruction,
 )
-from app.services.ai.router import CommandRouter, RouteCommand, RouteDecision, build_route_system_prompt
 from app.services.ai.schemas import (
     Parsable,
     SchemaError,
@@ -42,7 +41,6 @@ __all__ = (
     "PERCY_IDENTITY",
     "AIHealthReport",
     "AIService",
-    "CommandRouter",
     "EventExtractor",
     "GiveawayRequest",
     "ModelTier",
@@ -52,14 +50,11 @@ __all__ = (
     "MusicIntentParser",
     "Parsable",
     "PollRequest",
-    "RouteCommand",
-    "RouteDecision",
     "SchemaError",
     "TagFinder",
     "TagMatch",
     "build_assistant_system",
     "build_dashboard_assistant_system",
-    "build_route_system_prompt",
     "build_tag_find_prompt",
     "json_instruction",
     "require_bool",

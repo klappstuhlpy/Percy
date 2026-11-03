@@ -74,6 +74,8 @@ class SpamControl:
         Unlike ``_auto_spam_count`` (which resets after every applied penalty), this
         history persists across penalties so repeat offenders escalate over time.
         """
+        # ponytail: a user's list is only pruned on their next offense, so every past offender keeps
+        # a few floats forever; sweep keys whose offenses all aged out if the spammer count grows.
         offenses = self.spam_details[user_id]
         offenses.append(timestamp)
         cutoff = timestamp - LOOKBACK_WINDOW

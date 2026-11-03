@@ -56,6 +56,8 @@ def summarize_presence(changes: Iterable[tuple[datetime, str]]) -> PresenceBreak
     for i in range(1, len(timestamps)):
         newer_at = timestamps[i - 1][0]
         older_at, status_before = timestamps[i]
-        durations[status_before] += (newer_at - older_at).total_seconds()
+        # status_before is NULL for a status the tracker does not map (e.g. invisible): skip it.
+        if status_before in durations:
+            durations[status_before] += (newer_at - older_at).total_seconds()
 
     return PresenceBreakdown(durations=durations, earliest=min(by_time))

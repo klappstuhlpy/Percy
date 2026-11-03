@@ -655,7 +655,7 @@ class MetaMixin:
             await ctx.send_error(f"Guild with ID `{guild_id}` not found.")
             return
 
-        features = [f"**{e[0]}** - {e[1]}" for e in self.bot.get_guild_features(guild.features, only_current=True)]
+        features = [f"**{e[0]}** - {e[1]}" for e in self.bot.get_guild_features(guild.features)]
         embed = discord.Embed(title="Guild Features", timestamp=discord.utils.utcnow(), color=helpers.Colour.white())
         embed.set_footer(text=f"{pluralize(len(features)):feature|features}")
         await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location="description")

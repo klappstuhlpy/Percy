@@ -1,6 +1,6 @@
 [package]
 name = "percy-client"
-version = "0.22.0"
+version = "0.22.1"
 edition = "2021"
 license = "AGPL-3.0-or-later"
 description = "Typed client for Percy's internal HTTP API (shared between klappstuhl_me and the Percy dashboard)."
