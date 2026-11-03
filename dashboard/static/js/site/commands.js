@@ -9,7 +9,7 @@
     const input = document.getElementById('cmd-search');
     const select = document.getElementById('cmd-category-select');
     const none = document.getElementById('cmd-none');
-    const sidebarLinks = Array.from(document.querySelectorAll('.cmd-sidebar a'));
+    const sidebarLinks = Array.from(document.querySelectorAll('.cmd-sidebar a[data-cat]'));
     const typeButtons = Array.from(document.querySelectorAll('.cmd-type'));
     const sections = Array.from(document.querySelectorAll('.cmd-category'));
     const state = { q: '', type: 'all', cat: '' };
@@ -27,7 +27,9 @@
         sections.forEach(function (sec) {
             let visible = 0;
             const inCat = !state.cat || sec.dataset.category === state.cat;
-            sec.querySelectorAll(':scope > .cmd').forEach(function (top) {
+            sec.querySelectorAll('.cmd-section').forEach(function (part) {
+              let inPart = 0;
+              part.querySelectorAll(':scope > .cmd').forEach(function (top) {
                 const subs = Array.from(top.querySelectorAll('.cmd.sub'));
                 const topOk = passes(top);
                 let anySub = false;
@@ -39,9 +41,12 @@
                 });
                 const ok = inCat && (topOk || anySub);
                 top.hidden = !ok;
-                if (ok) visible++;
+                if (ok) inPart++;
                 // Searching for a subcommand opens its group so the hit is visible.
                 if (ok && state.q && anySub && !topOk) top.open = true;
+              });
+              part.hidden = !inPart;
+              visible += inPart;
             });
             sec.hidden = !visible;
             shown += visible;
@@ -101,6 +106,11 @@
         const el = document.getElementById(id);
         if (!el) return;
         if (el.classList.contains('cmd-category')) { setCategory(el.dataset.category); }
+        // A section link (sidebar sub-entry): narrow to its category, then scroll to it.
+        if (el.classList.contains('cmd-section')) {
+            setCategory(el.closest('.cmd-category').dataset.category);
+            el.scrollIntoView({ block: 'start' });
+        }
         if (el.tagName === 'DETAILS') {
             // Reset filters that would hide the target.
             if (state.cat || state.q || state.type !== 'all') {

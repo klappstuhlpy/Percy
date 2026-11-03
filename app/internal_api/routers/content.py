@@ -79,11 +79,16 @@ class ToggleCommandBody(BaseModel):
     name: str
     enabled: bool
     channel_id: int | str | None = None
+    #: With ``enabled`` and a ``channel_id``: write an explicit allow for that channel (what
+    #: ``config channel enable`` does, so a server-wide disable can keep chosen channels open)
+    #: instead of clearing the channel's toggle.
+    allow: bool = False
 
 
 class ManagePlonkBody(BaseModel):
+    #: ``add`` / ``remove`` one entity, ``all`` ignores every text channel, ``clear`` drops every ignore.
     action: str
-    entity_id: int | str
+    entity_id: int | str | None = None
 
 
 class SetCommandPermissionsBody(BaseModel):
@@ -750,52 +755,73 @@ def _has_owner_check(cmd: Any) -> bool:
 
 def _is_manageable_command(cmd: Any) -> bool:
     """Filter out commands that should never appear in the dashboard's command manager:
-    hidden commands and anything that is owner-only (Jishaku, cogs flagged ``__hidden__``,
-    or commands guarded by an ``is_owner()`` check)."""
+    hidden commands, anything owner-only (Jishaku, cogs flagged ``__hidden__``, or commands
+    guarded by an ``is_owner()`` check) and the ``Config`` cog itself, which ``config disable``
+    and ``config perms`` refuse too — a server must not be able to switch off its own controls."""
+    from app.core.permissions import RULE_EXEMPT_COGS
+
     if getattr(cmd, 'hidden', False):
         return False
     cog = cmd.cog
-    if cog is not None and (getattr(cog, '__hidden__', False) or cog.qualified_name == 'Jishaku'):
+    if cog is not None and (
+        getattr(cog, '__hidden__', False) or cog.qualified_name in ('Jishaku', *RULE_EXEMPT_COGS)
+    ):
         return False
     return not _has_owner_check(cmd)
 
 
+#: The category custom commands are listed under in the command manager.
+CUSTOM_COMMANDS_CATEGORY = 'Custom Commands'
+
+
 @router.get("/commands")
 async def get_commands(guild: GuildDep, bot: BotDep) -> dict:
+    from app.core.help import GENERAL_SECTION, section_index
+
     command_config = await bot.db.guilds.get_command_config(guild.id)
     plonks = await bot.db.guilds.get_plonks(guild.id)
 
-    # A NULL channel_id deny row disables the command for the whole guild;
-    # rows with a channel_id only disable it in that specific channel.
+    # A NULL channel_id deny row disables the command for the whole guild; rows with a
+    # channel_id deny it in that channel, and whitelist rows explicitly allow it there
+    # (``config channel enable``), which is how a server-wide disable keeps channels open.
     disabled_commands: dict[str, list[str]] = {}
+    enabled_commands: dict[str, list[str]] = {}
     globally_disabled: set[str] = set()
     for record in command_config:
         name = record['name']
         channel_id = record.get('channel_id')
-        whitelist = record.get('whitelist', False)
-        if whitelist:
-            continue
-        if channel_id is None:
+        if record.get('whitelist', False):
+            if channel_id is not None:
+                enabled_commands.setdefault(name, []).append(str(channel_id))
+        elif channel_id is None:
             globally_disabled.add(name)
         else:
             disabled_commands.setdefault(name, []).append(str(channel_id))
 
     overrides = await bot.db.get_command_overrides(guild.id)
 
+    def availability(name: str) -> dict[str, Any]:
+        return {
+            'disabled_in': disabled_commands.get(name, []),
+            'enabled_in': enabled_commands.get(name, []),
+            'globally_disabled': name in globally_disabled,
+        }
+
+    manageable = [cmd for cmd in bot.walk_commands() if _is_manageable_command(cmd)]
+    sections = section_index(manageable)
     all_commands = []
-    for cmd in bot.walk_commands():
-        if not _is_manageable_command(cmd):
-            continue
+    for cmd in manageable:
         qualified = cmd.qualified_name
-        cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
         spec = getattr(cmd, 'permissions', None)
         override = overrides.get(qualified)
+        section, section_order = sections[qualified]
         all_commands.append({
             'name': qualified,
-            'category': cog_name,
+            'category': cmd.cog.qualified_name if cmd.cog else 'Uncategorized',
+            'section': section,
+            'section_order': section_order,
             'description': cmd.short_doc or '',
-            'disabled_in': disabled_commands.get(qualified, []),
-            'globally_disabled': qualified in globally_disabled,
+            **availability(qualified),
             # Default user permissions the command requires out of the box.
             'default_permissions': sorted(spec.user) if spec is not None else [],
             # The current per-guild override, if any.
@@ -804,6 +830,23 @@ async def get_commands(guild: GuildDep, bot: BotDep) -> dict:
                 'allowed_roles': [str(r) for r in override.allowed_roles],
             },
         })
+
+    # ``config disable`` takes this server's custom commands too; who may run one is set on
+    # the command itself (Rules & Custom), so they carry no permission gate here.
+    all_commands.extend(
+        {
+            'name': cc.name,
+            'category': CUSTOM_COMMANDS_CATEGORY,
+            'section': GENERAL_SECTION,
+            'section_order': 0,
+            'description': 'Custom command' + (f" · aliases: {', '.join(cc.aliases)}" if cc.aliases else ''),
+            **availability(cc.name),
+            'default_permissions': [],
+            'permission_override': None,
+            'custom': True,
+        }
+        for cc in (await bot.db.get_custom_command_index(guild.id)).commands
+    )
 
     plonk_list = []
     for record in plonks:
@@ -817,14 +860,20 @@ async def get_commands(guild: GuildDep, bot: BotDep) -> dict:
         })
 
     return {
-        'commands': sorted(all_commands, key=lambda c: (c['category'], c['name'])),
+        'commands': sorted(all_commands, key=lambda c: (c['category'], c['section_order'], c['name'])),
         'plonks': plonk_list,
     }
 
 
 @router.post("/commands/toggle")
 async def toggle_command(guild: GuildDep, bot: BotDep, body: ToggleCommandBody) -> dict:
-    if body.enabled:
+    if body.enabled and body.allow:
+        # Explicit allow in one channel: overrides a server-wide disable there.
+        if not body.channel_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='allow needs a channel_id')
+        await bot.db.guilds.set_command_config(
+            guild.id, _guild_channel_id(guild, body.channel_id), body.name, whitelist=True)
+    elif body.enabled:
         # Re-enable: remove the relevant disable entries for this command.
         if body.channel_id:
             await bot.db.guilds.clear_command_config_channel(guild.id, body.name, parse_id(body.channel_id, 'channel_id'))
@@ -847,15 +896,22 @@ async def toggle_command(guild: GuildDep, bot: BotDep, body: ToggleCommandBody) 
 
 @router.post("/plonks")
 async def manage_plonk(guild: GuildDep, bot: BotDep, body: ManagePlonkBody) -> dict:
-    if body.action not in ('add', 'remove'):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='action must be add or remove')
-
-    entity_id = parse_id(body.entity_id, 'entity_id')
-
-    if body.action == 'add':
-        await bot.db.guilds.add_plonk(guild.id, entity_id)
+    if body.action == 'all':
+        # Same as ``config ignore all``: every text channel the server has right now.
+        await bot.db.guilds.bulk_add_plonks(guild.id, [c.id for c in guild.text_channels])
+    elif body.action == 'clear':
+        await bot.db.guilds.clear_plonks(guild.id)
+    elif body.action in ('add', 'remove'):
+        entity_id = parse_id(body.entity_id, 'entity_id')
+        if body.action == 'add':
+            if guild.get_channel(entity_id) is None and await bot.get_or_fetch_member(guild, entity_id) is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail='entity_id is not a member or channel of this server')
+            await bot.db.guilds.add_plonk(guild.id, entity_id)
+        else:
+            await bot.db.guilds.remove_plonks(guild.id, [entity_id])
     else:
-        await bot.db.guilds.remove_plonks(guild.id, [entity_id])
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='action must be add, remove, all or clear')
 
     # Drop the Config cog's plonk-status cache for this guild.
     config_cog = bot.get_cog('Config')

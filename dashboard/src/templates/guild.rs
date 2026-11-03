@@ -194,11 +194,45 @@ pub(crate) struct CommandsTemplate {
     pub(crate) nav_active: &'static str,
     pub(crate) page_title: &'static str,
     pub(crate) commands: CommandsResponse,
+    /// `commands.commands` grouped by category and help section, for the list.
+    pub(crate) groups: Vec<ManagerCategory>,
     pub(crate) channels: Vec<Channel>,
     pub(crate) roles: Vec<Role>,
     pub(crate) disabled_count: usize,
     pub(crate) partial_count: usize,
     pub(crate) override_count: usize,
+}
+
+/// A category (cog) of the command manager.
+pub(crate) struct ManagerCategory {
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    pub(crate) count: usize,
+    /// Commands not fully enabled (disabled, per-channel, limited or blocked by a parent).
+    pub(crate) restricted: usize,
+    pub(crate) sections: Vec<ManagerSection>,
+}
+
+/// One help-menu section of a manager category.
+pub(crate) struct ManagerSection {
+    pub(crate) name: String,
+    pub(crate) rows: Vec<ManagerRow>,
+}
+
+/// One command row; `idx` indexes the page's `COMMANDS_DATA`.
+pub(crate) struct ManagerRow {
+    pub(crate) idx: usize,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    /// `enabled` | `partial` (off in some channels) | `limited` (off except some channels) |
+    /// `disabled` | `inherited` (a parent group is disabled server-wide).
+    pub(crate) state: &'static str,
+    /// Human pill text for `state`.
+    pub(crate) state_label: String,
+    pub(crate) custom_access: bool,
+    pub(crate) custom_command: bool,
+    /// Subcommand nesting depth below the row's section, for the indent.
+    pub(crate) depth: usize,
 }
 
 #[allow(dead_code)]

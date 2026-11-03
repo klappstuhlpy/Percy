@@ -1,7 +1,7 @@
 /* Percy Dashboard — Commands.
-   Availability (enable / per-channel / disable), plonks, and per-command
-   permission overrides ("custom access").
-   Expects GUILD_ID, COMMANDS_DATA, ROLES_DATA and window.showToast (percy_common.js). */
+   Availability (everywhere / off in channels / only in channels / nowhere), the ignore list
+   (plonks), and per-command permission overrides ("custom access") — everything `config` does.
+   Expects GUILD_ID, COMMANDS_DATA, ROLES_DATA, PercyToast and PercyConfirm. */
 
 (function() {
     'use strict';
@@ -39,17 +39,12 @@
     function maskToNames(maskValue) {
         if (maskValue === null || maskValue === undefined) return [];
         var mask = BigInt(maskValue);
-        var out = [];
-        PERMISSIONS.forEach(function(p) {
-            if ((mask & p.bit) === p.bit && p.bit !== 0n) out.push(p.name);
-        });
-        return out;
+        return PERMISSIONS.filter(function(p) { return (mask & p.bit) === p.bit; }).map(function(p) { return p.name; });
     }
 
     // Human sentence describing a set of required permission names.
     function describePerms(names) {
-        if (!names.length) return 'anyone';
-        return names.map(humanize).join(' + ');
+        return names.length ? names.map(humanize).join(' + ') : 'anyone';
     }
 
     var rolesById = {};
@@ -60,6 +55,8 @@
         return '#' + role.color.toString(16).padStart(6, '0');
     }
 
+    function toast(kind, text) { PercyToast.show(kind, text); }
+
     // --- State -------------------------------------------------------------
     var editingIdx = null;
     var availMode = 'enabled';
@@ -67,21 +64,52 @@
     var selectedRoles = [];  // array of role id strings
 
     // --- Availability ------------------------------------------------------
+    var CHANNEL_HINTS = {
+        partial: 'Blocked in the checked channels, works everywhere else.',
+        limited: 'Works only in the checked channels, blocked everywhere else.',
+    };
+
+    function modeOf(cmd) {
+        if (cmd.globally_disabled) return (cmd.enabled_in || []).length ? 'limited' : 'disabled';
+        return (cmd.disabled_in || []).length ? 'partial' : 'enabled';
+    }
+
     function setAvailMode(mode) {
         availMode = mode;
         document.querySelectorAll('.cmd-mode-btn').forEach(function(btn) {
-            btn.className = 'cmd-mode-btn';
-            if (btn.getAttribute('data-mode') === mode) btn.classList.add('active-' + mode);
+            var on = btn.getAttribute('data-mode') === mode;
+            btn.className = 'cmd-mode-btn' + (on ? ' active-' + mode : '');
+            btn.setAttribute('aria-checked', on ? 'true' : 'false');
         });
-        document.getElementById('channel-select-wrap').hidden = (mode !== 'partial');
+        document.getElementById('channel-select-wrap').hidden = !CHANNEL_HINTS[mode];
+        if (CHANNEL_HINTS[mode]) document.getElementById('channel-select-hint').textContent = CHANNEL_HINTS[mode];
     }
+
+    function checkChannels(ids) {
+        document.querySelectorAll('#cmd-channels-list input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = ids.indexOf(cb.value) !== -1;
+        });
+    }
+
+    function checkedChannels() {
+        return Array.prototype.map.call(
+            document.querySelectorAll('#cmd-channels-list input:checked'), function(cb) { return cb.value; });
+    }
+
+    document.getElementById('cmd-channel-filter').addEventListener('input', function() {
+        var q = this.value.trim().toLowerCase();
+        document.querySelectorAll('#cmd-channels-list .cmd-channel-row').forEach(function(row) {
+            row.hidden = q !== '' && (row.getAttribute('data-name') || '').indexOf(q) === -1;
+        });
+    });
 
     // --- Access / permissions ---------------------------------------------
     function setAccessMode(mode) {
         accessMode = mode;
         document.querySelectorAll('.cmd-access-btn').forEach(function(btn) {
-            btn.className = 'cmd-access-btn';
-            if (btn.getAttribute('data-access') === mode) btn.classList.add('active-custom');
+            var on = btn.getAttribute('data-access') === mode;
+            btn.className = 'cmd-access-btn' + (on ? ' active-custom' : '');
+            btn.setAttribute('aria-checked', on ? 'true' : 'false');
         });
         document.getElementById('cmd-access-custom').hidden = (mode !== 'custom');
         updateSummary();
@@ -96,7 +124,6 @@
             var cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = p.name;
-            cb.setAttribute('data-perm', p.name);
             cb.addEventListener('change', updateSummary);
             var span = document.createElement('span');
             span.textContent = p.label;
@@ -107,28 +134,19 @@
     }
 
     function setCheckedPerms(names) {
-        var set = {};
-        names.forEach(function(n) { set[n] = true; });
         document.querySelectorAll('#cmd-perm-grid input[type="checkbox"]').forEach(function(cb) {
-            cb.checked = !!set[cb.value];
+            cb.checked = names.indexOf(cb.value) !== -1;
         });
     }
 
     function checkedPermNames() {
-        var names = [];
-        document.querySelectorAll('#cmd-perm-grid input:checked').forEach(function(cb) {
-            names.push(cb.value);
-        });
-        return names;
+        return Array.prototype.map.call(document.querySelectorAll('#cmd-perm-grid input:checked'), function(cb) { return cb.value; });
     }
 
-    // Build the permission bitmask (as a JS Number — masks stay well below 2^53).
+    // The permission bitmask as a JS Number — masks stay well below 2^53.
     function checkedPermMask() {
         var mask = 0n;
-        document.querySelectorAll('#cmd-perm-grid input:checked').forEach(function(cb) {
-            var p = PERM_BY_NAME[cb.value];
-            if (p) mask |= p.bit;
-        });
+        checkedPermNames().forEach(function(name) { mask |= PERM_BY_NAME[name].bit; });
         return Number(mask);
     }
 
@@ -154,7 +172,8 @@
             var x = document.createElement('button');
             x.type = 'button';
             x.className = 'cmd-role-x';
-            x.innerHTML = '&times;';
+            x.setAttribute('aria-label', 'Remove ' + (role ? role.name : id));
+            x.textContent = '×';
             x.addEventListener('click', function() {
                 selectedRoles = selectedRoles.filter(function(r) { return r !== id; });
                 renderRoleChips();
@@ -170,44 +189,46 @@
     function updateSummary() {
         var box = document.getElementById('cmd-access-summary');
         if (accessMode !== 'custom') { box.textContent = ''; return; }
-        var perms = checkedPermNames();
-        var parts = [];
-        parts.push('Requires: ' + describePerms(perms) + '.');
+        var parts = ['Requires: ' + describePerms(checkedPermNames()) + '.'];
         if (selectedRoles.length) {
-            var roleNames = selectedRoles.map(function(id) {
+            parts.push('Roles that always pass: ' + selectedRoles.map(function(id) {
                 return (rolesById[id] && rolesById[id].name) || id;
-            });
-            parts.push('Roles that always pass: ' + roleNames.join(', ') + '.');
+            }).join(', ') + '.');
         }
         box.textContent = parts.join(' ');
     }
 
     // --- Modal open/close --------------------------------------------------
     function openCommandEdit(idx) {
-        editingIdx = idx;
         var cmd = COMMANDS_DATA[idx];
         if (!cmd) return;
+        editingIdx = idx;
 
-        document.getElementById('cmd-edit-title').textContent = cmd.name;
+        document.getElementById('cmd-edit-title').firstElementChild.textContent = cmd.name;
         document.getElementById('cmd-edit-desc').textContent = cmd.description || cmd.category;
 
-        // Availability
-        if (cmd.globally_disabled) setAvailMode('disabled');
-        else if ((cmd.disabled_in || []).length > 0) setAvailMode('partial');
-        else setAvailMode('enabled');
+        // Disabling a group blocks its subcommands too — say so before someone finds out.
+        var subs = COMMANDS_DATA.filter(function(c) { return c.name.indexOf(cmd.name + ' ') === 0; }).length;
+        var subsNote = document.getElementById('cmd-edit-subs');
+        subsNote.hidden = !subs;
+        subsNote.textContent = subs
+            ? 'Restricting this group also restricts its ' + subs + ' subcommand' + (subs === 1 ? '' : 's') + '.'
+            : '';
 
-        document.querySelectorAll('#cmd-channels-list input[type="checkbox"]').forEach(function(cb) {
-            cb.checked = (cmd.disabled_in || []).indexOf(cb.value) !== -1;
-        });
+        var mode = modeOf(cmd);
+        setAvailMode(mode);
+        checkChannels(mode === 'limited' ? (cmd.enabled_in || []) : (cmd.disabled_in || []));
+        document.getElementById('cmd-channel-filter').value = '';
+        document.querySelectorAll('#cmd-channels-list .cmd-channel-row').forEach(function(row) { row.hidden = false; });
 
-        // Access — describe the built-in default gate.
+        // Custom commands carry their own access settings (Rules & Custom).
+        document.getElementById('cmd-access-form').hidden = !!cmd.custom;
+        document.getElementById('cmd-custom-note').hidden = !cmd.custom;
+
         var defaults = cmd.default_permissions || [];
-        var hint = document.getElementById('cmd-access-default-hint');
-        if (defaults.length) {
-            hint.innerHTML = 'Built-in gate: <strong>' + describePerms(defaults) + '</strong>.';
-        } else {
-            hint.innerHTML = 'This command has no built-in permission gate (anyone can use it, or it is owner-only).';
-        }
+        document.getElementById('cmd-access-default-hint').textContent = defaults.length
+            ? 'Built-in gate: ' + describePerms(defaults) + '.'
+            : 'No built-in permission gate — anyone can use it.';
 
         var ov = cmd.permission_override;
         if (ov) {
@@ -225,6 +246,7 @@
         updateSummary();
 
         document.getElementById('cmd-edit-modal').hidden = false;
+        document.getElementById('cmd-cancel-btn').focus();
     }
 
     function closeCommandEdit() {
@@ -233,62 +255,60 @@
     }
 
     // --- Save --------------------------------------------------------------
-    function postJSON(url, body) {
-        return fetch(url, {
+    async function postJSON(url, body) {
+        var r = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(body),
-        }).then(function(r) { return r.json(); });
+        });
+        var data = await r.json().catch(function() { return { error: 'HTTP ' + r.status }; });
+        if (data && data.error) throw new Error(data.error);
+        return data;
     }
 
     async function saveAvailability(cmd) {
-        var base = '/dashboard/guild/' + GUILD_ID + '/commands/toggle';
-        if (availMode === 'enabled') {
-            return postJSON(base, { name: cmd.name, enabled: true, channel_id: null });
+        var url = '/dashboard/guild/' + GUILD_ID + '/commands/toggle';
+        var channels = (availMode === 'partial' || availMode === 'limited') ? checkedChannels() : [];
+        // Start from a clean slate: drops the server-wide row and every per-channel row.
+        await postJSON(url, { name: cmd.name, enabled: true, channel_id: null });
+        if (availMode === 'disabled' || availMode === 'limited') {
+            await postJSON(url, { name: cmd.name, enabled: false, channel_id: null });
         }
-        if (availMode === 'disabled') {
-            return postJSON(base, { name: cmd.name, enabled: false, channel_id: null });
+        for (var i = 0; i < channels.length; i++) {
+            await postJSON(url, availMode === 'limited'
+                ? { name: cmd.name, enabled: true, channel_id: channels[i], allow: true }
+                : { name: cmd.name, enabled: false, channel_id: channels[i] });
         }
-        // Partial: clear everything, then disable in the checked channels.
-        await postJSON(base, { name: cmd.name, enabled: true, channel_id: null });
-        var checked = document.querySelectorAll('#cmd-channels-list input:checked');
-        for (var i = 0; i < checked.length; i++) {
-            await postJSON(base, { name: cmd.name, enabled: false, channel_id: checked[i].value });
-        }
-        return { ok: true };
     }
 
     async function saveAccess(cmd) {
+        if (cmd.custom) return;
         var url = '/dashboard/guild/' + GUILD_ID + '/commands/permissions';
-        var hadOverride = !!cmd.permission_override;
         if (accessMode === 'default') {
-            // Nothing to clear if there was never an override.
-            if (!hadOverride) return { ok: true };
-            return postJSON(url, { command: cmd.name, permissions: null, allowed_roles: [] });
+            if (cmd.permission_override) await postJSON(url, { command: cmd.name, permissions: null, allowed_roles: [] });
+            return;
         }
         // Custom: a 0 mask with no roles is a valid "anyone" override (distinct from default).
-        return postJSON(url, {
-            command: cmd.name,
-            permissions: checkedPermMask(),
-            allowed_roles: selectedRoles,
-        });
+        await postJSON(url, { command: cmd.name, permissions: checkedPermMask(), allowed_roles: selectedRoles });
     }
 
     async function onSave() {
         if (editingIdx === null) return;
         var cmd = COMMANDS_DATA[editingIdx];
+        if ((availMode === 'partial' || availMode === 'limited') && !checkedChannels().length) {
+            toast('warning', 'Pick at least one channel.');
+            return;
+        }
         var btn = document.getElementById('cmd-save-btn');
         btn.disabled = true;
         try {
-            var a = await saveAvailability(cmd);
-            if (a && a.ok === false) { showToast('error', a.error || 'Failed to update availability'); btn.disabled = false; return; }
-            var p = await saveAccess(cmd);
-            if (p && p.ok === false) { showToast('error', p.error || 'Failed to update access'); btn.disabled = false; return; }
-            showToast('success', 'Command "' + cmd.name + '" updated.');
+            await saveAvailability(cmd);
+            await saveAccess(cmd);
+            toast('success', cmd.name + ' updated.');
             closeCommandEdit();
             setTimeout(function() { location.reload(); }, 400);
         } catch (err) {
-            showToast('error', 'Network error');
+            toast('error', err.message || 'Network error');
         } finally {
             btn.disabled = false;
         }
@@ -297,23 +317,16 @@
     // --- Wiring ------------------------------------------------------------
     buildPermGrid();
 
-    var grid = document.getElementById('command-grid');
-    if (grid) {
-        grid.addEventListener('click', function(e) {
-            var card = e.target.closest('.command-card');
-            if (!card) return;
-            var idx = parseInt(card.getAttribute('data-idx'), 10);
-            if (!isNaN(idx)) openCommandEdit(idx);
-        });
-    }
-
+    document.getElementById('cm-groups').addEventListener('click', function(e) {
+        var row = e.target.closest('.cm-row');
+        if (row) openCommandEdit(parseInt(row.getAttribute('data-idx'), 10));
+    });
     document.querySelectorAll('.cmd-mode-btn').forEach(function(btn) {
         btn.addEventListener('click', function() { setAvailMode(btn.getAttribute('data-mode')); });
     });
     document.querySelectorAll('.cmd-access-btn').forEach(function(btn) {
         btn.addEventListener('click', function() { setAccessMode(btn.getAttribute('data-access')); });
     });
-
     document.getElementById('cmd-role-select').addEventListener('change', function() {
         var id = this.value;
         this.value = '';
@@ -322,84 +335,135 @@
         renderRoleChips();
         updateSummary();
     });
-
     document.getElementById('cmd-save-btn').addEventListener('click', onSave);
     document.getElementById('cmd-cancel-btn').addEventListener('click', closeCommandEdit);
     document.getElementById('cmd-edit-modal').addEventListener('click', function(e) {
         if (e.target === e.currentTarget) closeCommandEdit();
     });
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        closeCommandEdit();
+        closePlonkModal();
+    });
 
     // --- Search + filters --------------------------------------------------
-    var activeFilter = 'all';
+    var filter = { q: '', cat: '', kind: 'all' };
 
     function applyFilters() {
-        var q = (document.getElementById('cmd-search').value || '').toLowerCase();
-        var cards = document.querySelectorAll('.command-card');
-        for (var i = 0; i < cards.length; i++) {
-            var c = cards[i];
-            var name = c.getAttribute('data-name') || '';
-            var cat = c.getAttribute('data-category') || '';
-            var matchesSearch = name.indexOf(q) !== -1 || cat.indexOf(q) !== -1;
-            var matchesFilter = activeFilter === 'all'
-                || (activeFilter === 'custom' && c.getAttribute('data-custom') === '1')
-                || (activeFilter === 'restricted' && c.getAttribute('data-restricted') === '1');
-            c.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
-        }
+        var shown = 0;
+        document.querySelectorAll('.cm-group').forEach(function(group) {
+            var inCat = !filter.cat || group.getAttribute('data-category') === filter.cat;
+            var groupShown = 0;
+            group.querySelectorAll('.cm-section').forEach(function(section) {
+                var sectionShown = 0;
+                section.querySelectorAll('.cm-row').forEach(function(row) {
+                    var ok = inCat
+                        && (!filter.q || row.getAttribute('data-search').indexOf(filter.q) !== -1)
+                        && (filter.kind === 'all' || row.getAttribute('data-' + filter.kind) === '1');
+                    row.parentElement.hidden = !ok;
+                    if (ok) sectionShown++;
+                });
+                section.hidden = !sectionShown;
+                groupShown += sectionShown;
+            });
+            group.hidden = !groupShown;
+            // A search or filter opens the groups it found something in.
+            if (groupShown && (filter.q || filter.kind !== 'all')) group.open = true;
+            shown += groupShown;
+        });
+        document.getElementById('cm-none').hidden = shown > 0;
     }
 
-    document.getElementById('cmd-search').addEventListener('input', applyFilters);
-    document.querySelectorAll('.cmd-filter').forEach(function(btn) {
+    document.getElementById('cmd-search').addEventListener('input', function() {
+        filter.q = this.value.trim().toLowerCase();
+        applyFilters();
+    });
+    document.getElementById('cmd-category').addEventListener('change', function() {
+        filter.cat = this.value;
+        applyFilters();
+    });
+    document.querySelectorAll('.cm-filter').forEach(function(btn) {
         btn.addEventListener('click', function() {
-            document.querySelectorAll('.cmd-filter').forEach(function(b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            activeFilter = btn.getAttribute('data-filter');
+            document.querySelectorAll('.cm-filter').forEach(function(b) { b.classList.toggle('active', b === btn); });
+            filter.kind = btn.getAttribute('data-filter');
             applyFilters();
         });
     });
 
-    // --- Plonks ------------------------------------------------------------
+    // --- Ignore list (plonks) ---------------------------------------------
+    var plonkUrl = '/dashboard/guild/' + GUILD_ID + '/plonks';
     var plonkModal = document.getElementById('plonk-modal');
     var plonkInput = document.getElementById('plonk-id-input');
-    function openPlonkModal() { plonkInput.value = ''; plonkModal.hidden = false; plonkInput.focus(); }
+    var plonkChannel = document.getElementById('plonk-channel-select');
+
+    function openPlonkModal() {
+        plonkInput.value = '';
+        plonkChannel.value = '';
+        plonkModal.hidden = false;
+        plonkChannel.focus();
+    }
     function closePlonkModal() { plonkModal.hidden = true; }
+
+    async function plonk(body, done) {
+        try {
+            await postJSON(plonkUrl, body);
+            toast('success', done);
+            setTimeout(function() { location.reload(); }, 400);
+            return true;
+        } catch (err) {
+            toast('error', err.message || 'Network error');
+            return false;
+        }
+    }
 
     document.getElementById('add-plonk-btn').addEventListener('click', openPlonkModal);
     document.getElementById('plonk-cancel-btn').addEventListener('click', closePlonkModal);
     plonkModal.addEventListener('click', function(e) { if (e.target === e.currentTarget) closePlonkModal(); });
 
     document.getElementById('plonk-add-btn').addEventListener('click', async function() {
-        var id = plonkInput.value.trim();
-        if (!/^\d{15,20}$/.test(id)) { showToast('error', 'Enter a valid Discord ID (15-20 digits).'); return; }
-        var btn = this;
-        btn.disabled = true;
-        try {
-            var data = await postJSON('/dashboard/guild/' + GUILD_ID + '/plonks', { action: 'add', entity_id: id });
-            if (data.ok) {
-                showToast('success', 'Entity plonked.');
-                closePlonkModal();
-                setTimeout(function() { location.reload(); }, 400);
-            } else {
-                showToast('error', data.error || 'Failed to plonk.');
-            }
-        } catch (err) {
-            showToast('error', 'Network error');
-        } finally {
-            btn.disabled = false;
-        }
+        var id = plonkChannel.value || plonkInput.value.trim();
+        if (!/^\d{15,20}$/.test(id)) { toast('error', 'Pick a channel or enter a valid user ID.'); return; }
+        this.disabled = true;
+        if (await plonk({ action: 'add', entity_id: id }, 'Percy now ignores it.')) closePlonkModal();
+        this.disabled = false;
     });
 
-    window.removePlonk = async function(entityId) {
+    document.getElementById('plonk-all-btn').addEventListener('click', async function() {
+        var ok = await PercyConfirm.ask({
+            title: 'Ignore every text channel?',
+            consequence: 'Percy stops answering commands in every text channel that exists now. Channels created later are not included.',
+            undo: 'Stop ignoring channels one by one, or use Clear all.',
+            confirmLabel: 'Ignore all channels',
+        });
+        if (ok) plonk({ action: 'all' }, 'Every text channel is ignored.');
+    });
+
+    document.getElementById('plonk-clear-btn').addEventListener('click', async function() {
+        var ok = await PercyConfirm.ask({
+            title: 'Clear the whole ignore list?',
+            consequence: 'Percy answers commands from every member and in every channel again.',
+            undo: null,
+            confirmLabel: 'Clear all',
+            danger: true,
+        });
+        if (ok) plonk({ action: 'clear' }, 'Ignore list cleared.');
+    });
+
+    document.getElementById('plonks-tbody').addEventListener('click', async function(e) {
+        var btn = e.target.closest('[data-unplonk]');
+        if (!btn) return;
+        btn.disabled = true;
         try {
-            var data = await postJSON('/dashboard/guild/' + GUILD_ID + '/plonks', { action: 'remove', entity_id: entityId });
-            if (data.ok) {
-                var row = document.querySelector('[data-entity-id="' + entityId + '"]');
-                if (row) row.remove();
-                showToast('success', 'Entity unplonked.');
-            } else {
-                showToast('error', data.error || 'Failed to unplonk');
-            }
+            await postJSON(plonkUrl, { action: 'remove', entity_id: btn.getAttribute('data-unplonk') });
+            btn.closest('tr').remove();
+            var empty = !document.querySelector('#plonks-tbody tr');
+            document.getElementById('plonks-table-wrap').hidden = empty;
+            document.getElementById('plonks-empty').hidden = !empty;
+            document.getElementById('plonk-clear-btn').hidden = empty;
+            toast('success', 'No longer ignored.');
         } catch (err) {
-            showToast('error', 'Network error');
+            btn.disabled = false;
+            toast('error', err.message || 'Network error');
         }
-    };
+    });
 })();

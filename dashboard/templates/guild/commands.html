@@ -1,6 +1,6 @@
 {% extends "layout/dashboard_layout.html" %}
 
-{% block page_subtitle %}<p>Enable, disable, restrict, and re-gate commands for this server.</p>{% endblock %}
+{% block page_subtitle %}<p>Turn commands on or off, limit them to channels, re-gate who may run them, and choose who Percy ignores.</p>{% endblock %}
 
 {% block page_css %}
 <link rel="stylesheet" href="/static/css/guild/commands.css" type="text/css"/>
@@ -11,11 +11,11 @@
     <div class="dash-pageinfo">
         <span class="dash-pageinfo-icon">&#9432;</span>
         <div class="dash-pageinfo-body">
-            <p>Control every <strong>command</strong> for this server: turn it on or off (globally or per-channel), change <strong>who is allowed to run it</strong>, and manage the <strong>plonk list</strong> — users or channels Percy ignores entirely.</p>
+            <p>Everything <code>config</code> does in Discord, in one place. Commands are grouped the same way as <code>help</code>. Click a command to set <strong>where</strong> it works and <strong>who</strong> may run it.</p>
             <ul class="dash-pageinfo-tips">
-                <li>Server administrators always bypass disables, permission gates and plonks</li>
-                <li>A <strong>custom access</strong> override replaces a command's built-in permission requirement — loosen it, tighten it, or hand it to specific roles</li>
-                <li>Plonk a channel to silence the bot there without disabling commands elsewhere</li>
+                <li>Members with <strong>Manage Server</strong> bypass disables and the ignore list</li>
+                <li>Disabling a group also switches off every subcommand under it</li>
+                <li>The reply members get on a disabled command is set under <a href="/dashboard/guild/{{ guild_id }}#moderation">Settings → Moderation</a>; allow/deny rules by role, channel or member live on <a href="/dashboard/guild/{{ guild_id }}/command-rules">Rules &amp; Custom</a></li>
             </ul>
         </div>
     </div>
@@ -23,44 +23,111 @@
     {# ─── Summary ─────────────────────────────────────────── #}
     <div class="metric-tiles">
         <div class="metric-tile">
-            <span class="tile-label">Total Commands</span>
+            <span class="tile-label">Commands</span>
             <span class="tile-value">{{ commands.commands.len() }}</span>
+            <span class="tile-sub">{{ groups.len() }} categories</span>
         </div>
         <div class="metric-tile">
             <span class="tile-label">Enabled</span>
             <span class="tile-value text-success">{{ commands.commands.len() - disabled_count - partial_count }}</span>
-            <span class="tile-sub">Fully enabled</span>
+            <span class="tile-sub">Work everywhere</span>
         </div>
         <div class="metric-tile">
-            <span class="tile-label">Partial</span>
+            <span class="tile-label">Per-channel</span>
             <span class="tile-value text-warning">{{ partial_count }}</span>
-            <span class="tile-sub">Disabled in some channels</span>
+            <span class="tile-sub">Off in, or only in, some channels</span>
         </div>
         <div class="metric-tile">
             <span class="tile-label">Disabled</span>
             <span class="tile-value text-error">{{ disabled_count }}</span>
-            <span class="tile-sub">Globally disabled</span>
+            <span class="tile-sub">Server-wide, incl. via a group</span>
         </div>
         <div class="metric-tile">
-            <span class="tile-label">Custom Access</span>
-            <span class="tile-value text-branding">{{ override_count }}</span>
+            <span class="tile-label">Custom access</span>
+            <span class="tile-value">{{ override_count }}</span>
             <span class="tile-sub">Re-gated commands</span>
         </div>
         <div class="metric-tile">
-            <span class="tile-label">Plonked</span>
+            <span class="tile-label">Ignored</span>
             <span class="tile-value">{{ commands.plonks.len() }}</span>
-            <span class="tile-sub">Ignored entities</span>
+            <span class="tile-sub">Members &amp; channels</span>
         </div>
     </div>
 
-    {# ─── Plonks (Ignored) ────────────────────────────────────────────── #}
+    {# ─── Command list ────────────────────────────────────────────── #}
     <section class="config-section">
         <div class="config-section-head">
             <div>
-                <h2>Plonked Entities</h2>
-                <p class="config-section-description">Members and channels completely ignored by the bot — a plonked user cannot run any command. Users with <strong>Manage Server</strong> always bypass this.</p>
+                <h2>Commands</h2>
+                <p class="config-section-description">Grouped by category and help section. A pill shows each command's state in this server.</p>
             </div>
-            <button class="button small" id="add-plonk-btn">Plonk a user</button>
+        </div>
+
+        <div class="cm-toolbar">
+            <input type="search" id="cmd-search" class="config-input cm-search" placeholder="Search name or description…" aria-label="Search commands" autocomplete="off">
+            <select id="cmd-category" class="config-input cm-category" aria-label="Category">
+                <option value="">All categories</option>
+                {% for g in groups %}<option value="{{ g.slug }}">{{ g.name }} ({{ g.count }})</option>{% endfor %}
+            </select>
+            <div class="cm-filters" role="group" aria-label="Filter">
+                <button type="button" class="cm-filter active" data-filter="all">All</button>
+                <button type="button" class="cm-filter" data-filter="restricted">Restricted</button>
+                <button type="button" class="cm-filter" data-filter="custom">Custom access</button>
+            </div>
+        </div>
+
+        {% if groups.is_empty() %}
+        <p class="text-muted">The command list is unavailable right now — Percy may be offline.</p>
+        {% endif %}
+
+        <div class="cm-groups" id="cm-groups">
+            {% for g in groups %}
+            <details class="cm-group" id="{{ g.slug }}" data-category="{{ g.slug }}" open>
+                <summary>
+                    <span class="cm-group-name">{{ g.name }}</span>
+                    <span class="cm-group-meta">{{ g.count }} commands{% if g.restricted > 0 %} · <span class="text-warning">{{ g.restricted }} restricted</span>{% endif %}</span>
+                </summary>
+                {% for part in g.sections %}
+                <div class="cm-section">
+                    {% if g.sections.len() > 1 %}<h3 class="cm-section-title">{{ part.name }}</h3>{% endif %}
+                    <ul class="cm-rows">
+                        {% for row in part.rows %}
+                        <li>
+                            <button type="button" class="cm-row depth-{{ row.depth }}" data-idx="{{ row.idx }}"
+                                    data-search="{{ row.name|lower }} {{ row.description|lower }}"
+                                    data-restricted="{% if row.state != "enabled" %}1{% else %}0{% endif %}"
+                                    data-custom="{% if row.custom_access %}1{% else %}0{% endif %}">
+                                <span class="cm-row-main">
+                                    <code class="cm-row-name">{{ row.name }}</code>
+                                    {% if row.custom_command %}<span class="chip">Custom command</span>{% endif %}
+                                    {% if row.custom_access %}<span class="chip chip--accent">Custom access</span>{% endif %}
+                                    {% if !row.description.is_empty() %}<span class="cm-row-desc">{{ row.description }}</span>{% endif %}
+                                </span>
+                                <span class="cmd-state {{ row.state }}">{{ row.state_label }}</span>
+                            </button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </details>
+            {% endfor %}
+            <p class="text-muted" id="cm-none" hidden>No commands match.</p>
+        </div>
+    </section>
+
+    {# ─── Ignore list (plonks) ────────────────────────────────────────── #}
+    <section class="config-section">
+        <div class="config-section-head">
+            <div>
+                <h2>Ignored members &amp; channels</h2>
+                <p class="config-section-description">Percy ignores every command from these members and in these channels (<code>config ignore</code>). Members with <strong>Manage Server</strong> always bypass this.</p>
+            </div>
+            <div class="cm-head-actions">
+                <button type="button" class="button small" id="plonk-all-btn">Ignore all channels</button>
+                <button type="button" class="button small danger" id="plonk-clear-btn" {% if commands.plonks.is_empty() %}hidden{% endif %}>Clear all</button>
+                <button type="button" class="button small primary" id="add-plonk-btn">Ignore…</button>
+            </div>
         </div>
         <div class="data-table-wrap" id="plonks-table-wrap" {% if commands.plonks.is_empty() %}hidden{% endif %}>
             <table class="data-table">
@@ -74,86 +141,42 @@
                 <tbody id="plonks-tbody">
                     {% for plonk in commands.plonks %}
                     <tr data-entity-id="{{ plonk.entity_id }}">
-                        <td data-label="Name"><strong>{{ plonk.name }}</strong></td>
+                        <td data-label="Name"><strong>{% if plonk.entity_type == "channel" %}#{% endif %}{{ plonk.name }}</strong></td>
                         <td data-label="Type"><span class="pill pending">{{ plonk.entity_type }}</span></td>
                         <td class="col-actions">
-                            <button class="button small danger" onclick="removePlonk('{{ plonk.entity_id }}')">Unplonk</button>
+                            <button type="button" class="button small" data-unplonk="{{ plonk.entity_id }}">Stop ignoring</button>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        <p class="text-muted" id="plonks-empty" {% if !commands.plonks.is_empty() %}hidden{% endif %}>No plonked entities. Click "Plonk a user" to block someone.</p>
+        <p class="text-muted" id="plonks-empty" {% if !commands.plonks.is_empty() %}hidden{% endif %}>Nobody is ignored.</p>
     </section>
 
-    {# ─── Command List ────────────────────────────────────────────── #}
-    <section class="config-section">
-        <h2>All Commands</h2>
-        <p class="config-section-description">Click a command to configure its availability and who can run it. Availability has three states — Enabled (works everywhere), Partial (disabled in specific channels), Disabled (blocked server-wide). Access defaults to the command's built-in permission gate unless you set a custom one.</p>
-
-        <div class="members-toolbar mb-md">
-            <input type="text" id="cmd-search" class="config-input search-input" placeholder="Search commands...">
-            <div class="cmd-filters" id="cmd-filters">
-                <button type="button" class="cmd-filter active" data-filter="all">All</button>
-                <button type="button" class="cmd-filter" data-filter="custom">Custom access</button>
-                <button type="button" class="cmd-filter" data-filter="restricted">Restricted</button>
-            </div>
-        </div>
-
-        <div class="command-grid" id="command-grid">
-            {% for cmd in commands.commands %}
-            <div class="command-card" data-idx="{{ loop.index0 }}" data-name="{{ cmd.name|lower }}" data-category="{{ cmd.category|lower }}"
-                 data-custom="{% if cmd.permission_override.is_some() %}1{% else %}0{% endif %}"
-                 data-restricted="{% if cmd.globally_disabled || !cmd.disabled_in.is_empty() %}1{% else %}0{% endif %}">
-                <div class="cmd-card-body">
-                    <span class="command-name">{{ cmd.name }}</span>
-                    <br>
-                    <span class="command-category">{{ cmd.category }}</span>
-                    {% if !cmd.description.is_empty() %}
-                    <br><span class="config-description">{{ cmd.description }}</span>
-                    {% endif %}
-                    {% if cmd.permission_override.is_some() %}
-                    <div class="cmd-gate-badge"><span class="cmd-lock">&#128274;</span> Custom access</div>
-                    {% endif %}
-                </div>
-                <div class="cmd-card-status">
-                    {% if cmd.globally_disabled %}
-                    <span class="cmd-state disabled">Disabled</span>
-                    {% else if !cmd.disabled_in.is_empty() %}
-                    <span class="cmd-state partial">Partial</span>
-                    {% else %}
-                    <span class="cmd-state enabled">Enabled</span>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-
-    {# ─── Command Edit Modal ───────────────────────────────────────────── #}
+    {# ─── Command edit modal ───────────────────────────────────────────── #}
     <div class="modal-overlay" id="cmd-edit-modal" hidden>
-        <div class="modal-card w-lg">
-            <h3 id="cmd-edit-title">Configure Command</h3>
+        <div class="modal-card w-lg" role="dialog" aria-modal="true" aria-labelledby="cmd-edit-title">
+            <h3 id="cmd-edit-title"><code>command</code></h3>
             <p class="text-muted mb-md" id="cmd-edit-desc"></p>
+            <p class="cm-note" id="cmd-edit-subs" hidden></p>
 
             {# ── Availability ── #}
             <div class="cmd-edit-form">
-                <label class="config-label mb-xs d-block">Availability</label>
-                <span class="config-description mb-sm">Where this command can be used.</span>
-
-                <div class="cmd-mode-select">
-                    <button type="button" class="cmd-mode-btn" data-mode="enabled">Enabled</button>
-                    <button type="button" class="cmd-mode-btn" data-mode="partial">Per-Channel</button>
-                    <button type="button" class="cmd-mode-btn" data-mode="disabled">Disabled</button>
+                <label class="config-label mb-xs d-block">Where it works</label>
+                <div class="cmd-mode-select" role="radiogroup" aria-label="Availability">
+                    <button type="button" class="cmd-mode-btn" data-mode="enabled" role="radio">Everywhere</button>
+                    <button type="button" class="cmd-mode-btn" data-mode="partial" role="radio">Off in…</button>
+                    <button type="button" class="cmd-mode-btn" data-mode="limited" role="radio">Only in…</button>
+                    <button type="button" class="cmd-mode-btn" data-mode="disabled" role="radio">Nowhere</button>
                 </div>
 
                 <div id="channel-select-wrap" hidden>
-                    <label class="config-label">Disable in these channels:</label>
-                    <span class="config-description">The command will be blocked in checked channels but work in all others.</span>
+                    <span class="config-description" id="channel-select-hint"></span>
+                    <input type="search" class="config-input cm-channel-filter" id="cmd-channel-filter" placeholder="Filter channels…" aria-label="Filter channels">
                     <div class="cmd-channels-list" id="cmd-channels-list">
                         {% for ch in channels %}
-                        <label class="cmd-channel-row">
+                        <label class="cmd-channel-row" data-name="{{ ch.name|lower }}">
                             <input type="checkbox" value="{{ ch.id }}">
                             <span>#{{ ch.name }}</span>
                         </label>
@@ -162,14 +185,14 @@
                 </div>
             </div>
 
-            {# ── Access / Permissions ── #}
-            <div class="cmd-edit-form cmd-access-form">
+            {# ── Access / permissions ── #}
+            <div class="cmd-edit-form cmd-access-form" id="cmd-access-form">
                 <label class="config-label mb-xs d-block">Who can use it</label>
                 <span class="config-description mb-sm" id="cmd-access-default-hint"></span>
 
-                <div class="cmd-mode-select">
-                    <button type="button" class="cmd-access-btn" data-access="default">Default gate</button>
-                    <button type="button" class="cmd-access-btn" data-access="custom">Custom access</button>
+                <div class="cmd-mode-select" role="radiogroup" aria-label="Access">
+                    <button type="button" class="cmd-access-btn" data-access="default" role="radio">Built-in gate</button>
+                    <button type="button" class="cmd-access-btn" data-access="custom" role="radio">Custom access</button>
                 </div>
 
                 <div id="cmd-access-custom" hidden>
@@ -177,7 +200,7 @@
                     <span class="config-description">A member needs <em>all</em> of the checked permissions. Leave everything unchecked to allow anyone (subject to the roles below).</span>
                     <div class="cmd-perm-grid" id="cmd-perm-grid"><!-- built by JS --></div>
 
-                    <label class="config-label mt-md">Always-allowed roles</label>
+                    <label class="config-label mt-md" for="cmd-role-select">Always-allowed roles</label>
                     <span class="config-description">Members with any of these roles can run the command even without the permissions above.</span>
                     <div class="cmd-role-picker">
                         <div class="cmd-role-chips" id="cmd-role-chips"></div>
@@ -192,24 +215,31 @@
                     <div class="cmd-access-summary" id="cmd-access-summary"></div>
                 </div>
             </div>
+            <p class="cm-note" id="cmd-custom-note" hidden>Who may run a custom command is set on the command itself, under <a href="/dashboard/guild/{{ guild_id }}/command-rules">Rules &amp; Custom</a>.</p>
 
             <div class="modal-actions">
                 <button type="button" class="button small" id="cmd-cancel-btn">Cancel</button>
-                <button class="button primary small" id="cmd-save-btn">Save Changes</button>
+                <button type="button" class="button primary small" id="cmd-save-btn">Save</button>
             </div>
         </div>
     </div>
 
-    {# ─── Add Plonk Modal ─────────────────────────────────────────── #}
+    {# ─── Ignore modal ─────────────────────────────────────────── #}
     <div class="modal-overlay" id="plonk-modal" hidden>
-        <div class="modal-card w-md">
-            <h3>Plonk a user or channel</h3>
-            <p class="text-muted mb-md">Enter a Discord <strong>user ID</strong> (or channel ID) to block it from using the bot entirely. Right-click a user in Discord with Developer Mode on to copy their ID.</p>
-            <label class="config-label" for="plonk-id-input">User / Channel ID</label>
+        <div class="modal-card w-md" role="dialog" aria-modal="true" aria-labelledby="plonk-title">
+            <h3 id="plonk-title">Ignore a channel or member</h3>
+            <p class="text-muted mb-md">Percy will not run any command there or from them.</p>
+            <label class="config-label" for="plonk-channel-select">Channel</label>
+            <select id="plonk-channel-select" class="config-input">
+                <option value="">Pick a channel…</option>
+                {% for ch in channels %}<option value="{{ ch.id }}">#{{ ch.name }}</option>{% endfor %}
+            </select>
+            <label class="config-label mt-md" for="plonk-id-input">…or a member's user ID</label>
             <input type="text" id="plonk-id-input" class="config-input" placeholder="e.g. 123456789012345678" inputmode="numeric" autocomplete="off">
+            <span class="config-description">With Developer Mode on, right-click a member in Discord → Copy User ID.</span>
             <div class="modal-actions">
                 <button type="button" class="button small" id="plonk-cancel-btn">Cancel</button>
-                <button type="button" class="button primary small" id="plonk-add-btn">Plonk</button>
+                <button type="button" class="button primary small" id="plonk-add-btn">Ignore</button>
             </div>
         </div>
     </div>

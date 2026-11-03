@@ -5511,14 +5511,16 @@
               },
               {
                 "type": "string"
+              },
+              {
+                "type": "null"
               }
             ],
             "title": "Entity Id"
           }
         },
         "required": [
-          "action",
-          "entity_id"
+          "action"
         ],
         "title": "ManagePlonkBody",
         "type": "object"
@@ -12729,6 +12731,11 @@
       },
       "ToggleCommandBody": {
         "properties": {
+          "allow": {
+            "default": false,
+            "title": "Allow",
+            "type": "boolean"
+          },
           "channel_id": {
             "anyOf": [
               {
@@ -15828,7 +15835,7 @@
     },
     "/api/v1/commands/public": {
       "get": {
-        "description": "All bot commands grouped by cog, without guild-specific disable state.",
+        "description": "All bot commands grouped by cog, without guild-specific disable state.\n\n``section``/``section_order`` are the help menu's sections (the cog's ``help_sections``).",
         "operationId": "get_public_commands_api_v1_commands_public_get",
         "parameters": [
           {

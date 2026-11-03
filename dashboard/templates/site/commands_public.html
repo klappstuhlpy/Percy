@@ -57,7 +57,7 @@
 {% block body %}
 <div class="cmd-page">
     <h1><span class="spark" aria-hidden="true">✻</span> Commands</h1>
-    <p class="cmd-lead">All available Percy commands, grouped by category.{% if total > 0 %} {{ total }} commands.{% endif %}</p>
+    <p class="cmd-lead">All available Percy commands, grouped by category and section — the same sections as <code>help</code> in Discord.{% if total > 0 %} {{ total }} commands.{% endif %}</p>
 
     {% if categories.is_empty() %}
     <div class="cmd-empty">
@@ -86,6 +86,9 @@
             <a href="#" data-cat="" class="active">All commands <span>{{ total }}</span></a>
             {% for cat in categories %}
             <a href="#{{ cat.slug }}" data-cat="{{ cat.slug }}">{{ cat.name }} <span>{{ cat.count }}</span></a>
+            {% if cat.sections.len() > 1 %}
+            {% for part in cat.sections %}<a href="#{{ part.slug }}" class="cmd-sidebar-sub" data-section="{{ part.slug }}">{{ part.name }}</a>{% endfor %}
+            {% endif %}
             {% endfor %}
         </nav>
 
@@ -93,7 +96,10 @@
             {% for cat in categories %}
             <section class="cmd-category" id="{{ cat.slug }}" data-category="{{ cat.slug }}">
                 <h2>{{ cat.name }} <span class="cmd-count">{{ cat.count }}</span></h2>
-                {% for cmd in cat.commands %}
+                {% for part in cat.sections %}
+                <div class="cmd-section" id="{{ part.slug }}">
+                {% if cat.sections.len() > 1 %}<h3 class="cmd-section-title">{{ part.name }}</h3>{% endif %}
+                {% for cmd in part.commands %}
                 <details class="cmd" id="{{ cmd.slug }}" data-slash="{{ cmd.slash }}" data-search="{{ cmd.search }}">
                     {% call cmd_summary(cmd) %}
                     {% call cmd_body(cmd) %}
@@ -109,6 +115,8 @@
                     </div>
                     {% endif %}
                 </details>
+                {% endfor %}
+                </div>
                 {% endfor %}
             </section>
             {% endfor %}

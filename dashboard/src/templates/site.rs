@@ -71,6 +71,15 @@ pub(crate) struct CommandCategory {
     pub(crate) slug: String,
     /// Commands in the category, subcommands included.
     pub(crate) count: usize,
+    /// The help menu's sections, in its order; a single section renders without a heading.
+    pub(crate) sections: Vec<CommandSection>,
+}
+
+/// One help-menu section of a category (the cog's `help_sections`).
+pub(crate) struct CommandSection {
+    pub(crate) name: String,
+    /// Anchor-safe id (`cat-economy--shop`).
+    pub(crate) slug: String,
     pub(crate) commands: Vec<PublicCommand>,
 }
 

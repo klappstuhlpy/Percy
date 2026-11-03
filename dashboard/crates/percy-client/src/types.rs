@@ -161,10 +161,23 @@ pub struct CommandInfo {
     pub description: String,
     #[serde(default)]
     pub signature: Option<String>,
+    /// The help menu's section inside the category (the cog's `help_sections`); absent from
+    /// older Percy builds.
+    #[serde(default)]
+    pub section: Option<String>,
+    /// Orders sections within their category.
+    #[serde(default)]
+    pub section_order: u32,
     #[serde(default)]
     pub disabled_in: Vec<String>,
+    /// Channels with an explicit allow — they stay open while the command is disabled server-wide.
+    #[serde(default)]
+    pub enabled_in: Vec<String>,
     #[serde(default)]
     pub globally_disabled: bool,
+    /// One of this server's custom commands (availability only; access is set on the command).
+    #[serde(default)]
+    pub custom: bool,
     /// Canonical Discord permission flag names the command requires out of the box
     /// (its built-in `PermissionTemplate` gate). Empty for ungated / owner-only commands.
     #[serde(default)]

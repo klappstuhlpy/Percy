@@ -21,7 +21,7 @@ use percy_client::CommandInfo;
 use crate::{
     session::Session,
     templates::{
-        ChangelogRelease, ChangelogSection, CommandCategory, HomeModule, HomeStats, HomeTemplate,
+        ChangelogRelease, ChangelogSection, CommandCategory, CommandSection, HomeModule, HomeStats, HomeTemplate,
         PercyChangelogTemplate, PercyCommandsTemplate, PercyLegalTemplate, PublicCommand,
     },
     view::Viewer,
@@ -324,6 +324,9 @@ const BASELINE_BOT_PERMISSIONS: [&str; 5] = [
     "use_external_emojis",
 ];
 
+/// The section commands land in when their cog declares none (mirrors Percy's `GENERAL_SECTION`).
+const GENERAL_SECTION: &str = "General";
+
 /// `economy shop add` -> `economy-shop-add`; also used for category ids.
 fn slugify(s: &str) -> String {
     let mut out = String::new();
@@ -403,8 +406,9 @@ fn count_commands(cmds: &[PublicCommand]) -> usize {
     cmds.iter().map(|c| 1 + c.subs.len()).sum()
 }
 
-/// Groups a flat list of [`CommandInfo`] into sorted categories, nesting subcommands under the
-/// group that owns them.
+/// Groups a flat list of [`CommandInfo`] into sorted categories split into the help menu's
+/// sections, nesting each subcommand under its nearest ancestor *in the same section* (a
+/// subcommand claimed by another section, like `config rule`, heads its own entry there).
 fn group_commands_by_category(commands: Vec<CommandInfo>) -> Vec<CommandCategory> {
     let mut map: HashMap<String, Vec<CommandInfo>> = HashMap::new();
     for cmd in commands {
@@ -414,45 +418,63 @@ fn group_commands_by_category(commands: Vec<CommandInfo>) -> Vec<CommandCategory
     let mut categories: Vec<CommandCategory> = map
         .into_iter()
         .map(|(name, cmds)| {
-            // name -> parent, to find the root group of a (possibly deeply nested) subcommand.
-            let parents: HashMap<&str, &str> = cmds
-                .iter()
-                .filter_map(|c| c.parent.as_deref().map(|p| (c.name.as_str(), p)))
-                .collect();
-            let names: std::collections::HashSet<&str> = cmds.iter().map(|c| c.name.as_str()).collect();
-            let root_of = |name: &str| -> String {
-                let mut n = name.to_string();
-                while let Some(p) = parents.get(n.as_str()) {
-                    if !names.contains(p) {
+            let section_of = |c: &CommandInfo| c.section.clone().unwrap_or_else(|| GENERAL_SECTION.to_string());
+            let by_name: HashMap<&str, &CommandInfo> = cmds.iter().map(|c| (c.name.as_str(), c)).collect();
+            let root_of = |c: &CommandInfo| -> String {
+                let section = section_of(c);
+                let mut n = c;
+                while let Some(p) = n.parent.as_deref().and_then(|p| by_name.get(p)) {
+                    if section_of(p) != section {
                         break;
                     }
-                    n = (*p).to_string();
+                    n = p;
                 }
-                n
+                n.name.clone()
             };
-            let mut roots: Vec<PublicCommand> = Vec::new();
+            // (order, section name) -> roots, then subs attached to their root.
+            let mut sections: Vec<(u32, String, Vec<PublicCommand>)> = Vec::new();
             let mut subs: Vec<(String, PublicCommand)> = Vec::new();
             for c in &cmds {
                 let pc = public_command(c);
-                let root = root_of(&c.name);
-                if root == c.name {
-                    roots.push(pc);
-                } else {
+                let root = root_of(c);
+                if root != c.name {
                     subs.push((root, pc));
+                    continue;
+                }
+                let section = section_of(c);
+                match sections.iter_mut().find(|s| s.1 == section) {
+                    Some(s) => s.2.push(pc),
+                    None => sections.push((c.section_order, section, vec![pc])),
                 }
             }
-            roots.sort_by(|a, b| a.name.cmp(&b.name));
+            sections.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
             subs.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+            for (_, _, roots) in &mut sections {
+                roots.sort_by(|a, b| a.name.cmp(&b.name));
+            }
             for (root, sub) in subs {
-                if let Some(r) = roots.iter_mut().find(|r| r.name == root) {
+                if let Some(r) = sections
+                    .iter_mut()
+                    .flat_map(|s| s.2.iter_mut())
+                    .find(|r| r.name == root)
+                {
                     r.subs.push(sub);
                 }
             }
+            let slug = format!("cat-{}", slugify(&name));
+            let sections: Vec<CommandSection> = sections
+                .into_iter()
+                .map(|(_, section, commands)| CommandSection {
+                    slug: format!("{slug}--{}", slugify(&section)),
+                    name: section,
+                    commands,
+                })
+                .collect();
             CommandCategory {
-                slug: format!("cat-{}", slugify(&name)),
+                count: sections.iter().map(|s| count_commands(&s.commands)).sum(),
+                slug,
                 name,
-                count: count_commands(&roots),
-                commands: roots,
+                sections,
             }
         })
         .collect();
@@ -466,8 +488,9 @@ fn commands_json_ld(categories: &[CommandCategory]) -> String {
     let items: Vec<serde_json::Value> = categories
         .iter()
         .flat_map(|c| {
-            c.commands
+            c.sections
                 .iter()
+                .flat_map(|s| s.commands.iter())
                 .flat_map(|cmd| std::iter::once(cmd).chain(cmd.subs.iter()))
         })
         .enumerate()
@@ -563,16 +586,25 @@ mod tests {
             {"name": "shop add", "cog": "Economy", "description": "Add an item.", "signature": "<name> <price>",
              "slash": true, "parent": "shop", "user_permissions": ["administrator"], "bot_permissions": [],
              "cooldown": {"rate": 1, "per": 90.0}, "example": null, "help": null, "aliases": []},
+            {"name": "shop sell", "cog": "Economy", "description": "Sell.", "parent": "shop",
+             "section": "Trading", "section_order": 1},
             {"name": "ping", "cog": "Meta", "description": "Pong </script>.", "slash": false}
         ]))
         .unwrap();
         let categories = group_commands_by_category(commands);
         assert_eq!(categories.len(), 2);
         let eco = &categories[0];
-        assert_eq!((eco.count, eco.commands.len(), eco.commands[0].subs.len()), (2, 1, 1));
-        assert_eq!(eco.commands[0].subs[0].slug, "shop-add");
-        assert_eq!(eco.commands[0].subs[0].cooldown.as_deref(), Some("1 use per 90s"));
-        assert_eq!(eco.commands[0].bot_permissions, vec!["Manage Roles"]);
+        assert_eq!(eco.count, 3);
+        let names: Vec<&str> = eco.sections.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["General", "Trading"]);
+        let general = &eco.sections[0].commands;
+        assert_eq!((general.len(), general[0].subs.len()), (1, 1));
+        // A subcommand claimed by another section heads its own entry there.
+        assert_eq!(eco.sections[1].commands[0].name, "shop sell");
+        assert_eq!(eco.sections[1].slug, "cat-economy--trading");
+        assert_eq!(general[0].subs[0].slug, "shop-add");
+        assert_eq!(general[0].subs[0].cooldown.as_deref(), Some("1 use per 90s"));
+        assert_eq!(general[0].bot_permissions, vec!["Manage Roles"]);
 
         let json_ld = super::commands_json_ld(&categories);
         assert!(!json_ld.contains("</"));
@@ -580,7 +612,7 @@ mod tests {
             account: None,
             categories,
             flags_md: String::new(),
-            total: 3,
+            total: 4,
             json_ld,
         }
         .render()
@@ -592,6 +624,8 @@ mod tests {
             "cat-economy",
             "application/ld+json",
             "store",
+            "cmd-section-title",
+            "Trading",
         ] {
             assert!(html.contains(needle), "missing {needle}");
         }

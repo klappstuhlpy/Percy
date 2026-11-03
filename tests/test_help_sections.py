@@ -102,3 +102,21 @@ def test_section_title() -> None:
 
     assert section_title("economy-config") == "Economy Config"
     assert section_title("dj") == "DJ"
+
+
+def test_section_index_splits_every_cog_with_positions() -> None:
+    from app.core.help import section_index
+
+    cog = _Cog()
+    sectioned = [_cmd("purge"), _cmd("ban"), _cmd("voicekick")]
+    for c in sectioned:
+        c.cog = cog  # type: ignore[assignment]
+    cogless = _cmd("ping")  # no cog: one General section, even though no page size forces a split
+
+    index = section_index([*sectioned, cogless])  # type: ignore[arg-type]
+    assert index == {
+        "purge": (GENERAL_SECTION, 0),
+        "ban": ("Bans", 1),
+        "voicekick": ("Voice", 2),
+        "ping": (GENERAL_SECTION, 0),
+    }

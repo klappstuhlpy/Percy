@@ -65,7 +65,7 @@ def section_title(name: str) -> str:
     return " ".join(w.upper() if len(w) <= 2 else w.capitalize() for w in name.replace("_", "-").split("-"))
 
 
-def command_sections(cog: Cog, entries: Iterable[AnyCommand]) -> dict[str, list[AnyCommand]]:
+def command_sections(cog: Cog | None, entries: Iterable[AnyCommand]) -> dict[str, list[AnyCommand]]:
     """Split one category's commands into the sections its help page offers.
 
     The cog's ``help_sections`` mapping (``{"Bans": ("ban", "unban"), "Rules": ("config rule",)}``)
@@ -108,6 +108,24 @@ def command_sections(cog: Cog, entries: Iterable[AnyCommand]) -> dict[str, list[
         return (0, "") if name == GENERAL_SECTION else (order.get(name, len(order) + 1), name)
 
     return {name: sections[name] for name in sorted(sections, key=rank)}
+
+
+def section_index(entries: Iterable[AnyCommand]) -> dict[str, tuple[str, int]]:
+    """``qualified name -> (section, position)`` across any number of cogs, for surfaces outside
+    Discord (the website, the dashboard) that group commands the way the help menu does.
+
+    Unlike the help menu, which only splits a category once it outgrows a page, every cog is split
+    here: a web page has no page size to stay under. ``position`` orders sections within their cog.
+    """
+    by_cog: dict[Cog | None, list[AnyCommand]] = {}
+    for cmd in entries:
+        by_cog.setdefault(cmd.cog, []).append(cmd)
+    return {
+        cmd.qualified_name: (section, position)
+        for cog, cmds in by_cog.items()
+        for position, (section, members) in enumerate(command_sections(cog, cmds).items())
+        for cmd in members
+    }
 
 
 def search_commands(entries: Iterable[AnyCommand], query: str) -> list[AnyCommand]:

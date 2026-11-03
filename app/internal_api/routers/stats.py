@@ -342,18 +342,24 @@ async def get_changelog(limit: int = Query(default=20, ge=1, le=50)) -> Changelo
 
 @router.get("/commands/public")
 async def get_public_commands(bot: BotDep) -> dict:
-    """All bot commands grouped by cog, without guild-specific disable state."""
-    commands = []
-    for cmd in bot.walk_commands():
-        if cmd.hidden:
-            continue
-        if cmd.cog and getattr(cmd.cog, '__hidden__', False):
-            continue
-        if cmd.cog and cmd.cog.qualified_name == 'Jishaku':
-            continue
+    """All bot commands grouped by cog, without guild-specific disable state.
 
-        cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
-        commands.append(public_command_payload(cmd, cog_name))
+    ``section``/``section_order`` are the help menu's sections (the cog's ``help_sections``).
+    """
+    from app.core.help import section_index
+
+    visible = [
+        cmd for cmd in bot.walk_commands()
+        if not cmd.hidden
+        and not (cmd.cog and getattr(cmd.cog, '__hidden__', False))
+        and not (cmd.cog and cmd.cog.qualified_name == 'Jishaku')
+    ]
+    sections = section_index(visible)
+    commands = []
+    for cmd in visible:
+        payload = public_command_payload(cmd, cmd.cog.qualified_name if cmd.cog else 'Uncategorized')
+        payload['section'], payload['section_order'] = sections[cmd.qualified_name]
+        commands.append(payload)
     return {'commands': commands}
 
 

@@ -16,8 +16,9 @@ use crate::{
     session::Session,
     templates::{
         AnalyticsTemplate, BackupTemplate, BlacklistRow, CardField, ComicsTemplate, CommandsTemplate, EconomyTemplate,
-        EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate, LevelRoleRow, LevelingTemplate, MultiplierRow,
-        PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate, TempChannelsTemplate, WebhooksTemplate,
+        EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate, LevelRoleRow, LevelingTemplate, ManagerCategory,
+        ManagerRow, ManagerSection, MultiplierRow, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate,
+        TempChannelsTemplate, WebhooksTemplate,
     },
     view::Viewer,
     AppState,
@@ -496,12 +497,15 @@ pub async fn guild_commands(State(app): State<AppState>, session: Session, Path(
     roles.retain(|r| r.id != guild_id.to_string() && !r.managed);
     roles.sort_by_key(|r| std::cmp::Reverse(r.position));
 
-    let disabled_count = commands.commands.iter().filter(|c| c.globally_disabled).count();
-    let partial_count = commands
-        .commands
-        .iter()
-        .filter(|c| !c.globally_disabled && !c.disabled_in.is_empty())
-        .count();
+    let groups = manager_groups(&commands.commands);
+    let rows = || {
+        groups
+            .iter()
+            .flat_map(|g| g.sections.iter())
+            .flat_map(|s| s.rows.iter())
+    };
+    let disabled_count = rows().filter(|r| matches!(r.state, "disabled" | "inherited")).count();
+    let partial_count = rows().filter(|r| matches!(r.state, "partial" | "limited")).count();
     let override_count = commands
         .commands
         .iter()
@@ -515,6 +519,7 @@ pub async fn guild_commands(State(app): State<AppState>, session: Session, Path(
         nav_active: "commands",
         page_title: "Commands",
         commands,
+        groups,
         channels: channels.unwrap_or_default(),
         roles,
         disabled_count,
@@ -522,6 +527,76 @@ pub async fn guild_commands(State(app): State<AppState>, session: Session, Path(
         override_count,
     }
     .into_response()
+}
+
+/// Groups the manager's commands by category, then help section (Percy sends them sorted by
+/// category, section order and name), and works out each row's effective state — including
+/// `inherited`, since disabling a group server-wide blocks every subcommand under it.
+fn manager_groups(commands: &[CommandInfo]) -> Vec<ManagerCategory> {
+    let off: std::collections::HashSet<&str> = commands
+        .iter()
+        .filter(|c| c.globally_disabled && c.enabled_in.is_empty())
+        .map(|c| c.name.as_str())
+        .collect();
+    let mut groups: Vec<ManagerCategory> = Vec::new();
+    for (idx, c) in commands.iter().enumerate() {
+        let section = c.section.clone().unwrap_or_else(|| "General".to_string());
+        let blocker = c
+            .name
+            .match_indices(' ')
+            .map(|(i, _)| &c.name[..i])
+            .find(|parent| off.contains(parent));
+        let (state, state_label) = match () {
+            _ if c.globally_disabled && !c.enabled_in.is_empty() => {
+                ("limited", format!("Only in {}", plural(c.enabled_in.len(), "channel")))
+            }
+            _ if c.globally_disabled => ("disabled", "Disabled".to_string()),
+            _ if blocker.is_some() => ("inherited", format!("Off via {}", blocker.unwrap_or_default())),
+            _ if !c.disabled_in.is_empty() => ("partial", format!("Off in {}", plural(c.disabled_in.len(), "channel"))),
+            _ => ("enabled", "Enabled".to_string()),
+        };
+        if groups.last().is_none_or(|g| g.name != c.category) {
+            groups.push(ManagerCategory {
+                slug: format!("cmdcat-{idx}"),
+                name: c.category.clone(),
+                count: 0,
+                restricted: 0,
+                sections: Vec::new(),
+            });
+        }
+        let group = groups.last_mut().expect("pushed above");
+        group.count += 1;
+        group.restricted += usize::from(state != "enabled");
+        if group.sections.last().is_none_or(|s| s.name != section) {
+            group.sections.push(ManagerSection {
+                name: section,
+                rows: Vec::new(),
+            });
+        }
+        let rows = &mut group.sections.last_mut().expect("pushed above").rows;
+        // Indent below the shallowest command of the section (`config rule allow` under `config rule`).
+        let words = c.name.split(' ').count();
+        let base = rows.first().map_or(words, |r: &ManagerRow| r.name.split(' ').count());
+        rows.push(ManagerRow {
+            idx,
+            name: c.name.clone(),
+            description: c.description.clone(),
+            state,
+            state_label,
+            custom_access: c.permission_override.is_some(),
+            custom_command: c.custom,
+            depth: words.saturating_sub(base).min(3),
+        });
+    }
+    groups
+}
+
+fn plural(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
+    }
 }
 
 /// `GET /dashboard/guild/{id}/analytics`
@@ -599,4 +674,72 @@ pub async fn guild_backup(State(app): State<AppState>, session: Session, Path(gu
         own_templates: templates.own,
     }
     .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use percy_client::CommandInfo;
+
+    #[test]
+    fn manager_groups_sections_and_effective_states() {
+        let commands: Vec<CommandInfo> = serde_json::from_value(serde_json::json!([
+            {"name": "hello", "category": "Custom Commands", "section": "General", "custom": true,
+             "disabled_in": ["1"]},
+            {"name": "purge", "category": "Moderation", "section": "General"},
+            {"name": "ban", "category": "Moderation", "section": "Bans", "section_order": 1,
+             "globally_disabled": true, "enabled_in": ["5", "6"]},
+            {"name": "lockdown", "category": "Moderation", "section": "Lockdown", "section_order": 2,
+             "globally_disabled": true},
+            {"name": "lockdown start", "category": "Moderation", "section": "Lockdown", "section_order": 2}
+        ]))
+        .unwrap();
+        let groups = super::manager_groups(&commands);
+        assert_eq!(groups.len(), 2);
+        let mods = &groups[1];
+        let names: Vec<&str> = mods.sections.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["General", "Bans", "Lockdown"]);
+        assert_eq!((mods.count, mods.restricted), (4, 3));
+        let ban = &mods.sections[1].rows[0];
+        assert_eq!((ban.state, ban.state_label.as_str()), ("limited", "Only in 2 channels"));
+        let start = &mods.sections[2].rows[1];
+        assert_eq!(
+            (start.state, start.state_label.as_str(), start.depth),
+            ("inherited", "Off via lockdown", 1)
+        );
+        let hello = &groups[0].sections[0].rows[0];
+        assert_eq!((hello.state, hello.custom_command), ("partial", true));
+
+        // The whole page renders from the same data.
+        use askama::Template;
+        let html = crate::templates::CommandsTemplate {
+            account: Some(crate::view::Viewer { name: "ferris".into() }),
+            guild_id: 1,
+            guild_name: "Server".into(),
+            nav_active: "commands",
+            page_title: "Commands",
+            groups,
+            commands: percy_client::CommandsResponse {
+                commands,
+                plonks: Vec::new(),
+            },
+            channels: Vec::new(),
+            roles: Vec::new(),
+            disabled_count: 2,
+            partial_count: 2,
+            override_count: 0,
+        }
+        .render()
+        .expect("render");
+        for needle in [
+            "cm-section-title\">Bans",
+            "Only in 2 channels",
+            "Off via lockdown",
+            "Custom command",
+            "depth-1",
+            "data-mode=\"limited\"",
+            "plonk-all-btn",
+        ] {
+            assert!(html.contains(needle), "missing {needle}");
+        }
+    }
 }

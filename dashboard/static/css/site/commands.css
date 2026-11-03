@@ -27,6 +27,11 @@
 
 .cmd-category { margin-bottom: 2rem; scroll-margin-top: 1rem; }
 .cmd-category h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--box-border); }
+.cmd-section { scroll-margin-top: 1rem; }
+.cmd-section[hidden] { display: none; }
+.cmd-section + .cmd-section { margin-top: 1rem; }
+.cmd-section-title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 0.5rem; }
+.cmd-sidebar a.cmd-sidebar-sub { padding: 0.25rem 0.7rem 0.25rem 1.5rem; font-size: 0.78rem; color: var(--text-muted); }
 .cmd-count { color: var(--text-muted); font-weight: 400; font-size: 0.8rem; margin-left: 0.4rem; }
 
 /* One command */
