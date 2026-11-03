@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.31.0] - 2026-11-03
+
+### Changed
+- A mistyped command only gets a "Did you mean...?" suggestion when exactly one command is within a typo of it (one slip, two for long names); anything vaguer gets no reply.
+- List flags convert each value once, so lists of members or channels work.
+
+### Fixed
+- Event errors were not reported for most events, and events without arguments crashed the error handler.
+- Error replies failed when the command message had already been deleted.
+- The "Status History" button on user info charted whoever clicked instead of the member shown; presence charts crashed on statuses that are not tracked.
+- Confirm prompts no longer show "This interaction failed" after a click, and timed-out cards now disable their buttons too.
+- Slash `unban` with an unknown user shows the error instead of a crash message.
+- Server info no longer fails on guild features Percy does not know yet.
+- A rare race could drop a timer (tempban, reminder) that was firing while the timer loop restarted.
+
+### Removed
+- AI command routing of unmatched commands, and its dashboard toggle.
+- Unused paginator search and other dead framework code.
+
 ## [2.30.0] - 2026-11-03
 
 ### Added
