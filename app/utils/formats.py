@@ -640,7 +640,7 @@ def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: in
     if idx <= 0:
         return emojis.leftindicator + emojis.empty * (key_full - 2) + emojis.rightempty
     elif idx >= key_full - 1:
-        return emojis.leftfull + emojis.full * (key_full - 1)
+        return emojis.leftfull + emojis.full * (key_full - 2) + emojis.leftindicator
     else:
         left_part = emojis.leftfull + emojis.full * (idx - 1)
         mid_part = emojis.indicator

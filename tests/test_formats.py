@@ -259,14 +259,14 @@ class TestProgressBar:
                 rendered = formats.ProgressBar(0, 100, current, key_full=length)
                 assert rendered.count('<:') == length
                 assert rendered.startswith((bar.leftfull, bar.leftindicator))
-                assert rendered.endswith((bar.full, bar.rightempty))
+                assert rendered.endswith((bar.leftindicator, bar.rightempty))
 
     def test_only_exact_ends_look_like_ends(self) -> None:
         bar = formats.Emojis.ProgressBar
         assert formats.ProgressBar(0, 100, 0).startswith(bar.leftindicator)
         assert formats.ProgressBar(0, 100, 1).startswith(bar.leftfull + bar.indicator)
         assert formats.ProgressBar(0, 100, 99).endswith(bar.indicator + bar.rightempty)
-        assert formats.ProgressBar(0, 100, 100).endswith(bar.full)
+        assert formats.ProgressBar(0, 100, 100, key_full=4) == bar.leftfull + bar.full * 2 + bar.leftindicator
 
     def test_zero_span_renders_as_empty_bar_with_caps(self) -> None:
         assert formats.ProgressBar(0, 0, 0) == formats.ProgressBar(0, 100, 0)
