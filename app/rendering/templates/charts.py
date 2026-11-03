@@ -1,15 +1,14 @@
-"""Pure drawing logic for the data charts: horizontal bar charts and the presence
-donut chart (matplotlib, Agg) plus the avatar collage (Pillow composition).
+"""Pure drawing logic for the data charts (matplotlib, Agg) plus the avatar collage (Pillow).
 
-The charts follow the klappstuhl.me admin design system (``static/css/base.css``
-tokens in the Rust project): dark panel surfaces with a subtle border, muted
-uppercase titles, the coral brand accent and a monospaced font. Bars are drawn on
-full-width "track" rails like the admin container table's inline meters.
+Every chart is laid out on a :class:`~app.rendering.templates.theme.Canvas` in logical
+pixels and follows the shared quiet style: sentence-case title over a muted subtitle,
+hairline solid gridlines, faint compact tick labels, flat coral marks with a 4px rounded
+data end and a square baseline, 2px lines over a 10% wash, and values labelled
+selectively (the tip of a bar, the end and the peak of a line) instead of everywhere.
 
 Chart figures use the object-oriented matplotlib API (:class:`~matplotlib.figure.Figure`
 with an explicit Agg canvas) instead of ``pyplot``, which holds global state and is not
-thread-safe under ``asyncio.to_thread``. Fonts are loaded from the bundled assets via
-``FontProperties(fname=...)`` so rendering never depends on system font lookup.
+thread-safe under ``asyncio.to_thread``.
 """
 
 from __future__ import annotations
@@ -18,9 +17,7 @@ import math
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.colors import LinearSegmentedColormap, to_hex, to_rgb
 from matplotlib.textpath import TextPath
 from PIL import Image
 
@@ -28,23 +25,25 @@ from app.rendering.primitives import resize_to_limit
 from app.rendering.templates.theme import (
     BRAND,
     BRAND_BRIGHT,
+    FAINT,
+    FONT,
     FOREGROUND,
-    GRID,
-    MENLO,
+    LINE,
+    LINE_STRONG,
     MUTED,
+    PAD,
     PANEL_BG,
-    RUBIK,
+    SCALE,
     TRACK_BG,
-    add_panel_title,
-    figure_to_image,
-    panel_figure,
+    Canvas,
+    compact,
+    nice_ticks,
+    pt,
+    rounded_bar,
+    style_axes,
 )
 
 if TYPE_CHECKING:
-    from matplotlib.axes import Axes
-    from matplotlib.figure import Figure
-    from matplotlib.font_manager import FontProperties
-
     from app.rendering.models import BarChartData, HeatmapData, PresenceData, SeriesData
 
 __all__ = (
@@ -56,139 +55,99 @@ __all__ = (
     'render_bar_chart_images',
 )
 
-CHART_DPI = 100
-CHART_WIDTH_PX = 1920
-ROW_HEIGHT_PX = 52
-BAR_HEIGHT_PX = 26  # pill bars: corner radius = half of this
+CHART_WIDTH = 960  # logical px
+CHART_WIDTH_PX = CHART_WIDTH * SCALE
+ROW_HEIGHT = 34
+BAR_THICKNESS = 14  # <= 24px, the band's leftover stays air
+AXIS_HEIGHT = 26
 MAX_BARS_PER_CHART = 18
-
-# Subtle left-to-right gradient for the value bars (coral -> bright coral).
-BRAND_GRADIENT = LinearSegmentedColormap.from_list('brand', [BRAND, BRAND_BRIGHT])
-_GRADIENT_ROW = np.linspace(0.0, 1.0, 256).reshape(1, -1)
+MIN_LABEL_WIDTH = 110  # keeps bar baselines aligned when charts are stacked
 
 
-def _format_value(value: int | float) -> str:
-    """Format a bar value with thousands grouping, trimming trailing zeros."""
-    if float(value).is_integer():
-        return f'{int(value):,}'
-    return f'{value:,.2f}'.rstrip('0').rstrip('.')
+def _mix(color: str, other: str, amount: float) -> str:
+    """``amount`` of ``color`` blended over ``other``."""
+    a, b = to_rgb(color), to_rgb(other)
+    return to_hex(tuple(x * amount + y * (1 - amount) for x, y in zip(a, b)))
 
 
-def _text_width_px(text: str, prop: FontProperties, size_pt: float, dpi: int) -> float:
-    """Measure rendered text width in pixels without a canvas."""
+# Sequential: one hue, from barely-there to bright. Zero is the empty surface step.
+HEAT_CMAP = LinearSegmentedColormap.from_list('heat', [_mix(BRAND, PANEL_BG, 0.28), BRAND, BRAND_BRIGHT])
+
+
+def _text_px(text: str, size: float) -> float:
+    """Rendered width of ``text`` at ``size`` logical px, in logical px."""
     if not text:
         return 0.0
-    return TextPath((0, 0), text, prop=prop, size=size_pt).get_extents().width * dpi / 72
+    return TextPath((0, 0), text, prop=FONT, size=pt(size)).get_extents().width / 0.72
 
 
-def _pill(x: float, y: float, width: float, height: float, radius_x: float, aspect: float) -> FancyBboxPatch:
-    """A rounded-end bar in data coordinates with pixel-circular corners.
-
-    ``radius_x`` is the corner radius expressed in x-data units; ``aspect`` is the
-    x/y pixels-per-data-unit ratio that makes the corners round on screen.
-    """
-    return FancyBboxPatch(
-        (x, y), width, height,
-        boxstyle=f'round,pad=0,rounding_size={min(radius_x, width / 2)}',
-        mutation_aspect=aspect,
-        linewidth=0,
-    )
+def _header_height(title: str, subtitle: str) -> float:
+    if not title:
+        return PAD
+    return PAD + (60 if subtitle else 36)
 
 
-def _draw_bar_chart_page(values: dict[str, int | float], title: str, max_value: float) -> Image.Image:
-    """Draw a single page of the horizontal bar chart."""
-    pad = 32
-    title_px = 104 if title else 40
+# -- Horizontal bar chart ------------------------------------------------------
+
+
+def _draw_bar_chart_page(values: dict[str, int | float], title: str, subtitle: str, ticks: list[float]) -> Image.Image:
     rows = len(values)
-    height_px = max(rows, 1) * ROW_HEIGHT_PX + title_px + pad
-
-    figure = panel_figure(CHART_WIDTH_PX, height_px, CHART_DPI)
+    top = _header_height(title, subtitle)
+    height = int(top + max(rows, 1) * ROW_HEIGHT + AXIS_HEIGHT + PAD)
+    canvas = Canvas(CHART_WIDTH, height)
+    if title:
+        canvas.header(title, subtitle)
+    if not rows:
+        canvas.empty(top)
+        return canvas.image()
 
     labels = list(values)
-    bar_values = list(values.values())
-    xmax = max(max_value, 1)
+    numbers = list(values.values())
+    xmax = ticks[-1]
 
-    # Manual axes geometry: rounded corners need exact pixel scales, so the label
-    # and value columns are measured up front instead of letting a layout engine
-    # reserve them. The value column sits right of the track so bars never run
-    # underneath the numbers.
-    label_w = max((_text_width_px(label, RUBIK, 14, CHART_DPI) for label in labels), default=0.0)
-    value_w = max((_text_width_px(_format_value(v), RUBIK, 13.5, CHART_DPI) for v in bar_values), default=0.0)
-    value_col = value_w + 26
-    ax_left = pad + label_w + 28
-    ax_width = CHART_WIDTH_PX - ax_left - pad - value_col
-    ax_height = max(rows, 1) * ROW_HEIGHT_PX
-
-    ax: Axes = figure.add_axes(
-        (ax_left / CHART_WIDTH_PX, pad / height_px, ax_width / CHART_WIDTH_PX, ax_height / height_px)
-    )
-    ax.set_facecolor(PANEL_BG)
+    label_w = max(MIN_LABEL_WIDTH, *(_text_px(label, 13) for label in labels))
+    value_w = max(_text_px(compact(v), 12) for v in [*numbers, xmax])
+    left = PAD + label_w + 16
+    right = PAD + value_w + 10
+    ax = canvas.axes(left, top, right, PAD + AXIS_HEIGHT)
     ax.set_xlim(0, xmax)
-    ax.set_ylim(max(rows, 1) - 0.5, -0.5)  # inverted: first dict entry on top
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.set_xticks([])
-    ax.set_yticks(list(range(rows)))
-    ax.set_yticklabels(labels, fontproperties=RUBIK, fontsize=14, color=FOREGROUND)
-    ax.tick_params(axis='y', length=0, pad=16)
+    ax.set_ylim(rows - 0.5, -0.5)  # first entry on top
+    ax.set_xticks(ticks)
+    ax.set_yticks(range(rows), labels)
+    style_axes(ax, grid='x')
+    ax.xaxis.set_major_formatter(lambda v, _: compact(v))
+    for label in ax.get_yticklabels():
+        label.set_color(FOREGROUND)
+        label.set_fontsize(pt(13))
+    ax.axvline(0, color=LINE_STRONG, linewidth=pt(1), zorder=2)
 
-    # Pixel-exact pill geometry.
-    px_per_x = ax_width / xmax
-    px_per_y = float(ROW_HEIGHT_PX)
-    aspect = px_per_x / px_per_y
-    bar_h = BAR_HEIGHT_PX / px_per_y  # in y-data units
-    radius_x = (BAR_HEIGHT_PX / 2) / px_per_x  # in x-data units
-
-    for i, value in enumerate(bar_values):
-        track = _pill(0, i - bar_h / 2, xmax, bar_h, radius_x, aspect)
-        track.set_facecolor(TRACK_BG)
-        track.set_zorder(2)
-        ax.add_patch(track)
-
-        if value > 0:
-            # Trace amounts still render as a full pill "dot" instead of a hairline.
-            bar_w = max(float(value), BAR_HEIGHT_PX / px_per_x)
-            bar = _pill(0, i - bar_h / 2, bar_w, bar_h, radius_x, aspect)
-            bar.set_facecolor('none')
-            bar.set_zorder(3)
-            ax.add_patch(bar)
-            gradient = ax.imshow(
-                _GRADIENT_ROW,
-                extent=(0, bar_w, i - bar_h / 2, i + bar_h / 2),
-                aspect='auto',
-                cmap=BRAND_GRADIENT,
-                interpolation='bicubic',
-                zorder=3,
-            )
-            gradient.set_clip_path(bar)
-
-        # Value in its own right-aligned column past the end of the track.
-        ax.text(
-            xmax + value_col / px_per_x, i, _format_value(value),
-            fontproperties=RUBIK, fontsize=13.5, color=FOREGROUND, ha='right', va='center', zorder=5,
+    half = BAR_THICKNESS / ROW_HEIGHT / 2
+    min_width = 6 * xmax / (CHART_WIDTH - left - right)  # trace amounts still read as a mark
+    for i, value in enumerate(numbers):
+        end = max(float(value), min_width) if value > 0 else 0.0
+        rounded_bar(ax, 0, i - half, end, i + half, end='right', color=BRAND)
+        ax.annotate(
+            compact(value), (end, i), xytext=(pt(8), 0), textcoords='offset points',
+            fontproperties=FONT, fontsize=pt(12), color=MUTED, va='center', annotation_clip=False,
         )
 
-    if title:
-        add_panel_title(figure, title, width_px=CHART_WIDTH_PX, height_px=height_px)
-
-    image = figure_to_image(figure).convert('RGB')
-    figure.clear()
-    return image
+    return canvas.image()
 
 
 def render_bar_chart_images(data: BarChartData) -> list[Image.Image]:
     """Generate one or more bar chart images from a dictionary of data.
 
     Data that spans more than :data:`MAX_BARS_PER_CHART` bars is paginated into
-    multiple images of identical width so they can be stacked afterwards.
+    multiple images of identical width (and one shared scale) so they can be stacked.
     """
     values = data.data
-    max_value = max(values.values(), default=0)
-
+    ticks = nice_ticks(max(values.values(), default=0), bins=5)
     items = list(values.items())
     pages = [dict(items[i:i + MAX_BARS_PER_CHART]) for i in range(0, len(items), MAX_BARS_PER_CHART)] or [{}]
-
-    return [_draw_bar_chart_page(page, data.title, max_value) for page in pages]
+    return [
+        _draw_bar_chart_page(page, data.title if i == 0 else '', data.subtitle if i == 0 else '', ticks)
+        for i, page in enumerate(pages)
+    ]
 
 
 def merge_images_vertical(images: list[Image.Image]) -> Image.Image:
@@ -202,116 +161,143 @@ def merge_images_vertical(images: list[Image.Image]) -> Image.Image:
     return final_image
 
 
-def draw_presence_chart(data: PresenceData) -> BytesIO:
-    """Draws a presence donut chart for the given prepared data and returns a PNG buffer."""
-    total = sum(data.values) or 1
-    has_data = sum(data.values) > 0
-
-    figure = panel_figure(1800, 1200, dpi=200)
-
-    figure.text(0.05, 0.915, data.title.upper(), fontproperties=MENLO, fontsize=13, color=MUTED)
-
-    ax: Axes = figure.add_axes((0.045, 0.05, 0.46, 0.74))
-    ax.set_facecolor('none')
-    ax.pie(
-        data.values if has_data else [1],
-        colors=data.colors if has_data else [TRACK_BG],
-        startangle=90,
-        counterclock=False,
-        wedgeprops={'width': 0.26, 'edgecolor': PANEL_BG, 'linewidth': 3},
-        radius=1.0,
-    )
-    ax.set(aspect='equal')
-
-    # Big total in the donut hole, metric-tile style.
-    ax.text(0, 0.06, f'{total / 3600:.1f}', fontproperties=MENLO, fontsize=30, color=FOREGROUND, ha='center', va='center')
-    ax.text(0, -0.22, 'HOURS TOTAL', fontproperties=MENLO, fontsize=10, color=MUTED, ha='center', va='center')
-
-    # Legend rows on the right: marker + label, with hours · percent underneath.
-    legend_x = 0.58
-    legend_y = 0.72
-    for value, color, label in zip(data.values, data.colors, data.labels):
-        figure.add_artist(
-            Rectangle((legend_x, legend_y - 0.014), 0.016, 0.036, transform=figure.transFigure, facecolor=color)
-        )
-        figure.text(
-            legend_x + 0.032, legend_y, label, fontproperties=MENLO, fontsize=13, color=FOREGROUND, va='center'
-        )
-        figure.text(
-            legend_x + 0.032, legend_y - 0.055, f'{value / 3600:.1f} h · {value / total * 100:.1f}%',
-            fontproperties=MENLO, fontsize=11, color=MUTED, va='center',
-        )
-        legend_y -= 0.16
-
-    image = figure_to_image(figure)
-    figure.clear()
-
-    buffer = BytesIO()
-    image.save(buffer, format='png')
-    buffer.seek(0)
-    return buffer
-
-
-def _png(figure: Figure) -> BytesIO:
-    image = figure_to_image(figure)
-    figure.clear()
-    buffer = BytesIO()
-    image.save(buffer, format='png')
-    buffer.seek(0)
-    return buffer
-
-
-def _style_axes(ax: Axes) -> None:
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.tick_params(colors=MUTED, length=0, labelsize=10)
-    for label in (*ax.get_xticklabels(), *ax.get_yticklabels()):
-        label.set_fontproperties(MENLO)
+# -- Line / column series --------------------------------------------------------
 
 
 def draw_series_chart(data: SeriesData) -> BytesIO:
-    """Draws a single-series line/area or bar chart on a dashboard panel and returns a PNG buffer."""
-    width, height = 1800, 800
-    figure = panel_figure(width, height, dpi=200)
-    add_panel_title(figure, data.title, width_px=width, height_px=height)
+    """A single series as a line over a 10% wash (``kind='line'``) or as columns."""
+    canvas = Canvas(900, 400)
+    top = canvas.header(data.title, data.subtitle)
+    values = data.values
+    if not values or not any(values):
+        canvas.empty(top)
+        return canvas.png()
 
-    ax: Axes = figure.add_axes((0.06, 0.14, 0.91, 0.62))
-    ax.set_facecolor('none')
-    xs = list(range(len(data.values)))
-    if data.kind == 'bar':
-        ax.bar(xs, data.values, color=BRAND, width=0.7)
-    else:
-        ax.fill_between(xs, data.values, color=BRAND, alpha=0.18, linewidth=0)
-        ax.plot(xs, data.values, color=BRAND_BRIGHT, linewidth=2.4)
-    ax.set_ylim(bottom=0, top=max(max(data.values, default=0), 1) * 1.1)
-    ax.set_xlim(-0.6, max(len(xs) - 0.4, 0.6))
-    step = max(1, math.ceil(len(xs) / 12))  # at most ~12 x ticks
+    n = len(values)
+    ticks = nice_ticks(max(values))
+    left = PAD + max(_text_px(compact(t), 11) for t in ticks) + 12
+    right = PAD + 6
+    ax = canvas.axes(left, top + 14, right, PAD + 22)  # +14: room for the peak label
+    ax.set_ylim(0, ticks[-1])
+    ax.set_yticks(ticks)
+    xs = list(range(n))
+    step = max(1, math.ceil(n / 8))
     ax.set_xticks(xs[::step], [data.labels[i] if i < len(data.labels) else '' for i in xs[::step]])
-    ax.grid(axis='y', color=GRID, linewidth=1)
-    ax.set_axisbelow(True)
-    _style_axes(ax)
-    return _png(figure)
+    style_axes(ax, grid='y')
+    ax.yaxis.set_major_formatter(lambda v, _: compact(v))
+    ax.axhline(0, color=LINE_STRONG, linewidth=pt(1), zorder=2)
+
+    peak = max(range(n), key=values.__getitem__)
+    label_style = {'fontproperties': FONT, 'fontsize': pt(11.5), 'color': FOREGROUND, 'textcoords': 'offset points',
+                   'annotation_clip': False, 'zorder': 6}
+
+    if data.kind == 'bar':
+        ax.set_xlim(-0.5, n - 0.5)
+        slot = (canvas.width - left - right) / n
+        half = min(24.0, slot * 0.6) / slot / 2
+        for x, value in zip(xs, values):
+            rounded_bar(ax, x - half, 0, x + half, value, end='top', color=BRAND)
+        ax.annotate(compact(values[peak]), (peak, values[peak]), xytext=(0, pt(6)), ha='center', **label_style)
+    else:
+        ax.set_xlim(0, max(n - 1, 1))
+        ax.fill_between(xs, values, color=BRAND, alpha=0.10, linewidth=0, zorder=3)
+        ax.plot(xs, values, color=BRAND, linewidth=pt(2), solid_joinstyle='round', solid_capstyle='round', zorder=4)
+        marked = sorted({peak, n - 1})
+        ax.scatter(
+            marked, [values[i] for i in marked], s=pt(10) ** 2, color=BRAND,
+            edgecolor=PANEL_BG, linewidth=pt(2), zorder=5, clip_on=False,
+        )
+        for i in marked:
+            ha = 'right' if i == n - 1 and n > 1 else 'center'
+            ax.annotate(compact(values[i]), (i, values[i]), xytext=(0, pt(10)), ha=ha, **label_style)
+
+    return canvas.png()
+
+
+# -- Weekday x hour heatmap -------------------------------------------------------
+
+_DAYS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
+
+
+def _heat_color(value: float, vmax: float) -> str:
+    return TRACK_BG if value <= 0 else to_hex(HEAT_CMAP(value / vmax))
 
 
 def draw_heatmap_chart(data: HeatmapData) -> BytesIO:
-    """Draws a weekday x hour heatmap (UTC) and returns a PNG buffer."""
-    width, height = 1800, 700
-    figure = panel_figure(width, height, dpi=200)
-    add_panel_title(figure, data.title, width_px=width, height_px=height)
+    """A weekday x hour (UTC) grid of rounded cells with a Less -> More key."""
+    grid = data.grid or [[0] * 24 for _ in range(7)]
+    vmax = max((max(row) for row in grid), default=0) or 1
 
-    ax: Axes = figure.add_axes((0.07, 0.12, 0.91, 0.62))
+    top = _header_height(data.title, data.subtitle) + 4
+    left = PAD + 38
+    cell = (900 - left - PAD) / 24
+    gap = 3
+    height = int(top + 7 * cell + 26 + PAD)
+    canvas = Canvas(900, height)
+    canvas.header(data.title, data.subtitle)
+
+    for day, row in enumerate(grid[:7]):
+        y = top + day * cell
+        canvas.text(PAD, y + cell / 2, _DAYS[day], size=11, color=FAINT, va='center')
+        for hour, value in enumerate(row[:24]):
+            canvas.box(left + hour * cell + gap / 2, y + gap / 2, cell - gap, cell - gap, _heat_color(value, vmax), radius=4)
+
+    for hour in range(0, 24, 3):
+        canvas.text(left + hour * cell + cell / 2, top + 7 * cell + 16, f'{hour:02d}', size=11, color=FAINT, ha='center')
+
+    # Key, top right, aligned with the title.
+    swatch, x = 12, canvas.width - PAD
+    canvas.text(x, PAD + 15, 'More', size=11, color=FAINT, ha='right')
+    x -= _text_px('More', 11) + 8 + 5 * (swatch + 3)
+    for i, level in enumerate((0, 0.25, 0.5, 0.75, 1.0)):
+        canvas.box(x + i * (swatch + 3), PAD + 4, swatch, swatch, _heat_color(level * vmax, vmax), radius=3)
+    canvas.text(x - 8, PAD + 15, 'Less', size=11, color=FAINT, ha='right')
+
+    return canvas.png()
+
+
+# -- Presence donut ----------------------------------------------------------------
+
+
+def draw_presence_chart(data: PresenceData) -> BytesIO:
+    """A donut of time per status with the total in the hole and a ruled legend."""
+    canvas = Canvas(900, 600)
+    top = canvas.header(data.title, data.subtitle)
+    total = sum(data.values)
+
+    ax = canvas.axes(PAD + 10, top + 10, 900 / 2 + 10, PAD + 10)
     ax.set_facecolor('none')
-    grid = np.array(data.grid or [[0] * 24] * 7, dtype=float)
-    cmap = LinearSegmentedColormap.from_list('heat', [TRACK_BG, BRAND, BRAND_BRIGHT])
-    ax.imshow(grid, cmap=cmap, aspect='auto', vmin=0, vmax=max(grid.max(), 1), interpolation='nearest')
-    ax.set_xticks(range(0, 24, 2), [f'{h:02d}' for h in range(0, 24, 2)])
-    ax.set_yticks(range(7), ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
-    _style_axes(ax)
-    ax.set_xticks([x - 0.5 for x in range(1, 24)], minor=True)  # cell gutters
-    ax.set_yticks([y - 0.5 for y in range(1, 7)], minor=True)
-    ax.grid(which='minor', color=PANEL_BG, linewidth=2)
-    ax.tick_params(which='minor', length=0)
-    return _png(figure)
+    ax.axis('off')
+    ax.pie(
+        data.values if total else [1],
+        colors=data.colors if total else [TRACK_BG],
+        startangle=90,
+        counterclock=False,
+        wedgeprops={'width': 0.22, 'edgecolor': PANEL_BG, 'linewidth': pt(3)},
+    )
+    ax.set(aspect='equal')
+    ax.text(0, 0.07, f'{total / 3600:.1f}', fontproperties=FONT, fontsize=pt(44), color=FOREGROUND, ha='center', va='center')
+    ax.text(0, -0.2, 'hours tracked', fontproperties=FONT, fontsize=pt(13), color=MUTED, ha='center', va='center')
+
+    rows = list(zip(data.labels, data.values, data.colors))
+    row_h = 52
+    x0, x1 = 900 / 2 + 50, canvas.width - PAD - 10
+    y = top + (canvas.height - top - PAD - len(rows) * row_h) / 2
+    for i, (label, value, color) in enumerate(rows):
+        mid = y + row_h / 2
+        canvas.dot(x0 + 5, mid, 5, color)
+        canvas.text(x0 + 22, mid, label, size=15, va='center')
+        share = f'{value / total * 100:.0f}%' if total else '0%'
+        canvas.text(x1, mid, share, size=15, ha='right', va='center')
+        canvas.text(x1 - 64, mid, f'{value / 3600:.1f} h', size=13, color=MUTED, ha='right', va='center')
+        if i < len(rows) - 1:
+            canvas.box(x0, y + row_h, x1 - x0, 1, LINE)
+        y += row_h
+
+    return canvas.png()
+
+
+# -- Avatar collage -----------------------------------------------------------------
 
 
 def draw_avatar_collage(avatars: list[bytes]) -> BytesIO:
@@ -326,7 +312,7 @@ def draw_avatar_collage(avatars: list[bytes]) -> BytesIO:
         for avy in avatars:
             if avy:
                 with Image.open(BytesIO(avy)) as opened:
-                    im = opened.resize((size, size), resample=Image.Resampling.BICUBIC)
+                    im = opened.resize((size, size), resample=Image.Resampling.BICUBIC, reducing_gap=2.0)
                 base.paste(im, box=(x * size, y * size))
                 im.close()
             if x < xbound - 1:

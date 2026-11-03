@@ -10,17 +10,18 @@ used for their display name; all structural text uses the theme fonts.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from io import BytesIO
 from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image, ImageColor, ImageDraw
 
-from app.rendering.primitives import ASSETS, FONT_MAPPING, Font, FontManager, mask_to_circle, rounded_mask
+from app.rendering.primitives import Font, FontManager, mask_to_circle, rounded_mask
 from app.utils import shorten_number
 
 if TYPE_CHECKING:
-    from app.rendering.models import ActiveBoost, LevelCardData
+    from app.rendering.models import LevelCardData
 
 __all__ = ('draw_level_card',)
 
@@ -42,8 +43,9 @@ def _round_avatar(avatar: bytes, size: int) -> Image.Image:
     return mask_to_circle(image)
 
 
+@lru_cache(maxsize=32)
 def _ring(diameter: int, thickness: int, color: str, *, quality: int = 4) -> Image.Image:
-    """An anti-aliased circle outline (the avatar's coral ring)."""
+    """An anti-aliased circle outline (the avatar's accent ring). Cached: read-only."""
     big = diameter * quality
     image = Image.new('RGBA', (big, big), (0, 0, 0, 0))
     inset = thickness * quality // 2
@@ -65,11 +67,10 @@ def _gradient_pill(width: int, height: int, start_color: str, end_color: str) ->
 
 def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     """Draws a rank card for the given prepared data and returns a PNG buffer."""
-    name_font_path = str(ASSETS / FONT_MAPPING[Font[data.style.font.upper()].value])
+    name_font = fonts.get(Font[data.style.font.upper()], 44)
     background, border, track, foreground, muted = data.style.palette
     accent, accent_end = data.style.accent_colors
-    rubik = str(ASSETS / 'fonts/rubik.ttf')
-    poppins = str(ASSETS / 'fonts/poppins.ttf')
+    rubik, poppins = Font.RUBIK, Font.POPPINS
 
     base = Image.new('RGB', (WIDTH, HEIGHT), background)
     draw = ImageDraw.Draw(base)
@@ -96,7 +97,6 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     )
 
     # Name in the member's configured font, truncated before the rank block.
-    name_font = fonts.get(name_font_path, 44)
     name = data.name
     max_name_width = rank_left - CONTENT_X - 30
     while name and draw.textlength(f'{name}…' if name != data.name else name, font=name_font) > max_name_width:

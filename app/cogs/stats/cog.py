@@ -835,7 +835,8 @@ class Stats(Cog):
         cpm = total / self._minutes_up()
         image = await self.bot.render.bar_chart(
             dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
-            f"{total} socket events observed ({cpm:.2f}/minute)",
+            "Socket events",
+            subtitle=f"{total:,} observed · {cpm:.2f}/minute",
             merge=True,
         )
         assert isinstance(image, discord.File)
@@ -1112,7 +1113,10 @@ class Stats(Cog):
         if not rows:
             await ctx.send_info(f"No commands recorded for **{target.display_name}** in the last {days} days.")
             return
-        file = await self.bot.render.heatmap_chart(activity_grid(rows), f"{target.display_name} - activity (UTC)")
+        file = await self.bot.render.heatmap_chart(
+            activity_grid(rows), f"{target.display_name}'s activity",
+            subtitle=f"Commands by weekday and hour (UTC) · last {days} days",
+        )
         view = chart_card(
             f"Activity Heatmap for {target.display_name}",
             f"`{sum(r['count'] for r in rows)}` commands over the last {days} days.",
@@ -1133,7 +1137,9 @@ class Stats(Cog):
         if not any(values):
             await ctx.send_info(f"No commands recorded in the last {days} days.")
             return
-        file = await self.bot.render.series_chart(labels=labels, values=values, title=f"Commands per day - {ctx.guild.name}")
+        file = await self.bot.render.series_chart(
+            labels=labels, values=values, title="Commands per day", subtitle=f"{ctx.guild.name} · last {days} days (UTC)"
+        )
         view = chart_card(
             "Server Activity", f"`{sum(values)}` commands in the last {days} days (peak `{max(values)}`/day).",
             file.filename, footer="Days are UTC.",
@@ -1153,7 +1159,8 @@ class Stats(Cog):
             return
         values = hour_totals(rows)
         file = await self.bot.render.series_chart(
-            labels=[f"{h:02d}" for h in range(24)], values=values, title="Commands by hour of day (UTC)", kind="bar",
+            labels=[f"{h:02d}" for h in range(24)], values=values, title="Commands by hour of day",
+            subtitle=f"Last {days} days · hours in UTC", kind="bar",
             filename="hours.png",
         )
         view = chart_card(
@@ -1792,7 +1799,8 @@ class Stats(Cog):
 
         image = await self.bot.render.bar_chart(
             dict(sorted(dict(common).items(), key=lambda item: item[1], reverse=True)),
-            f"{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)",
+            title,
+            subtitle=f"{total:,} uses · {slash_commands:,} slash · {cpm:.2f}/minute",
             merge=True,
         )
         assert isinstance(image, discord.File)

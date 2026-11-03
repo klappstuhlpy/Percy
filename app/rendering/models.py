@@ -18,6 +18,7 @@ __all__ = (
     "ActiveBoost",
     "BarChartData",
     "ColorSwatchData",
+    "HandOddsData",
     "HeatmapData",
     "LevelCardData",
     "PresenceData",
@@ -75,6 +76,21 @@ class BarChartData:
 
     data: dict[str, int | float]
     title: str
+    subtitle: str = ''
+
+
+@dataclass(slots=True)
+class HandOddsData:
+    """Final-hand odds per street: ``odds[i]`` maps hand -> percent for ``stages[i]``.
+
+    ``hands`` lists every category weakest first, so missing hands still get a row.
+    """
+
+    stages: list[str]
+    odds: list[dict[str, float]]
+    hands: tuple[str, ...]
+    title: str
+    subtitle: str = ''
 
 
 @dataclass(slots=True)
@@ -85,6 +101,7 @@ class PresenceData:
     values: list[int] = field(default_factory=list)
     colors: list[str] = field(default_factory=list)
     title: str = 'Presence'
+    subtitle: str = ''
 
 
 @dataclass(slots=True)
@@ -95,6 +112,7 @@ class SeriesData:
     values: list[int] = field(default_factory=list)
     title: str = ''
     kind: str = 'line'
+    subtitle: str = ''
 
 
 @dataclass(slots=True)
@@ -103,3 +121,4 @@ class HeatmapData:
 
     grid: list[list[int]] = field(default_factory=list)
     title: str = ''
+    subtitle: str = ''

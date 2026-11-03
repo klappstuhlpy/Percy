@@ -18,17 +18,18 @@ from app.rendering.templates.charts import (
 )
 from app.rendering.templates.color import draw_color_swatch
 from app.rendering.templates.leveling import draw_level_card
-from app.rendering.templates.music import draw_equalizer, draw_progress_bar
+from app.rendering.templates.music import draw_equalizer
+from app.rendering.templates.poker import draw_hand_odds
 from app.rendering.templates.quote import draw_quote
 
 __all__ = (
     'draw_avatar_collage',
     'draw_color_swatch',
     'draw_equalizer',
+    'draw_hand_odds',
     'draw_heatmap_chart',
     'draw_level_card',
     'draw_presence_chart',
-    'draw_progress_bar',
     'draw_quote',
     'draw_series_chart',
     'generate_captcha',

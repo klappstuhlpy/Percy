@@ -34,8 +34,6 @@ yarl = "^1.9.4"
 levenshtein = "^0.27.5"
 markdownify = "^0.14.1"
 regex = "^2026.9.29"
-pilmoji = {git = "https://github.com/jay3332/pilmoji", branch = "2.0"}
-fonttools = "^4.50.0"
 discord-py = {extras = ["voice"], version = "^2.7.1"}
 parsedatetime = "^2.6"
 fastapi = "^0.138.0"

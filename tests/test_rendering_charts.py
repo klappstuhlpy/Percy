@@ -15,12 +15,16 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PIL import Image, ImageDraw
 
 from app.rendering.models import ActiveBoost, BarChartData, LevelCardData, PresenceData
 from app.rendering.primitives import FontManager
 from app.rendering.templates import charts, leveling, music
+
+if TYPE_CHECKING:
+    import pytest
 
 ARTIFACTS = Path(__file__).parent / 'artifacts'
 
@@ -77,20 +81,34 @@ def _save(image: Image.Image, name: str) -> Path:
 
 
 def test_poker_odds_analysis_chart() -> None:
-    """Render the full poker odds analysis exactly as `_on_analysis` does."""
-    images: list[Image.Image] = []
-    for spec in POKER_ODDS_STAGES:
-        pages = charts.render_bar_chart_images(spec)
-        assert len(pages) == 1  # each stage has at most 10 hands -> one page
-        assert pages[0].width == charts.CHART_WIDTH_PX
-        images.extend(pages)
+    """Render the hand-strength table exactly as `_on_analysis` does (hands x streets)."""
+    from app.cogs.games.engine.cards import NAMED_HAND
+    from app.rendering.models import HandOddsData
+    from app.rendering.templates import poker
 
-    merged = charts.merge_images_vertical(images)
-    assert merged.width == charts.CHART_WIDTH_PX
-    assert merged.height == sum(image.height for image in images)
+    hands = tuple(NAMED_HAND[k] for k in sorted(NAMED_HAND))
+    data = HandOddsData(
+        stages=['Pre-Flop', 'Flop', 'Turn'],
+        odds=[stage.data for stage in POKER_ODDS_STAGES],
+        hands=hands,
+        title='Seat #1 · final hand by street',
+        subtitle='Chance of ending the hand with each holding (simulated)',
+    )
+    image = Image.open(poker.draw_hand_odds(data))
+    assert image.format == 'PNG'
+    assert image.height < 1200  # one compact table, not a stack of charts
 
-    path = _save(merged, 'poker_odds_analysis.png')
-    print(f'\npoker odds analysis chart written to {path}')
+    path = _save(image, 'poker_odds_analysis.png')
+    print(f'poker odds analysis chart written to {path}')
+
+
+def test_likely_floor_sums_from_the_strongest_hand() -> None:
+    from app.rendering.templates.poker import likely_floor
+
+    hands = ('High Card', 'One Pair', 'Two Pairs', 'Three of a Kind', 'Full House')
+    turn = {'One Pair': 30.0, 'Two Pairs': 42.5, 'Three of a Kind': 12.5, 'Full House': 15.0}
+    assert likely_floor(turn, hands) == ('Two Pairs', 70.0)
+    assert likely_floor({}, hands) is None
 
 
 def test_bar_chart_paginates_and_keeps_global_scale() -> None:
@@ -242,3 +260,43 @@ def test_series_and_heatmap_charts() -> None:
         image = Image.open(buf)
         assert image.width == 1800
         image.save(ARTIFACTS / name)
+
+
+def test_quote_wraps_and_shrinks_long_text() -> None:
+    from app.rendering.models import QuoteData
+    from app.rendering.templates import quote
+
+    avatar = BytesIO()
+    Image.new('RGB', (128, 128), '#5865f2').save(avatar, format='png')
+    for text in ('Short.', 'word ' * 400, 'x' * 300, ''):
+        image = Image.open(quote.draw_quote(QuoteData(avatar.getvalue(), text, 'Klappstuhl'), FontManager()))
+        assert image.size == (quote.WIDTH, quote.HEIGHT)
+
+
+def test_dominant_color_ignores_transparent_pixels() -> None:
+    from app.rendering.primitives import get_dominant_color
+
+    image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+    image.paste((255, 0, 0, 255), (0, 0, 20, 64))  # a third red, the rest fully transparent
+    for mode in ('RGBA', 'LA', 'P'):
+        buffer = BytesIO()
+        image.convert(mode).save(buffer, format='png')
+        buffer.seek(0)
+        r, g, b = get_dominant_color(buffer)
+        assert (r, g, b) != (0, 0, 0)
+
+
+
+def test_bar_chart_keeps_category_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.rendering.templates import theme
+
+    captured: list[str] = []
+    original = theme.Canvas.image
+
+    def spy(self: theme.Canvas) -> Image.Image:
+        captured.extend(t.get_text() for ax in self.figure.axes for t in ax.get_yticklabels())
+        return original(self)
+
+    monkeypatch.setattr(theme.Canvas, 'image', spy)
+    charts.render_bar_chart_images(BarChartData(data={'One Pair': 40.0, 'Flush': 3.0}, title='t'))
+    assert captured == ['One Pair', 'Flush']

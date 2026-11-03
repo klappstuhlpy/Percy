@@ -552,6 +552,7 @@ class UserInfoView(View):
                     int(status_timers["Do Not Disturb"]),
                     int(status_timers["Idle"]),
                 ],
+                subtitle="Past month",
             )
 
         embed = discord.Embed(

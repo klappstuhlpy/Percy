@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
+from app.cogs.games.engine.cards import NAMED_HAND
 from app.cogs.games.engine.poker import OddsMode, TableState
 from app.core.views import LayoutView
-from app.rendering.models import BarChartData
 from app.utils import fnumb, helpers
 from config import Emojis
 
@@ -672,15 +672,14 @@ class TableView(LayoutView):
             if not data:
                 embed.description += "***NO DATA***"
 
-            TITLE_MAP = {0: f"Seat #{d_index} - Hand Strength Analysis | Pre-Flop", 1: "Flop", 2: "Turn"}
-            specs = [
-                BarChartData(
-                    data=dict(data[i][2][d_index].items()),  # Index 2 is hand_strength
-                    title=TITLE_MAP.get(i, "---"),
-                )
-                for i in range(len(data))
-            ]
-            image = await cast("Bot", interaction.client).render.merge_bar_charts(specs, filename=f"bar_chart-{index}.png")
+            image = await cast("Bot", interaction.client).render.hand_odds(
+                stages=street_names[:len(data)],
+                odds=[dict(data[i][2][d_index]) for i in range(len(data))],  # index 2 is hand_strength
+                hands=tuple(NAMED_HAND[k] for k in sorted(NAMED_HAND)),
+                title=f"Seat #{d_index} · final hand by street",
+                subtitle="Chance of ending the hand with each holding (simulated)",
+                filename=f"bar_chart-{index}.png",
+            )
 
             embed.set_image(url=f"attachment://bar_chart-{index}.png")
             embeds.append(embed)

@@ -25,13 +25,14 @@ from app.rendering.models import (
     ActiveBoost,
     BarChartData,
     ColorSwatchData,
+    HandOddsData,
     HeatmapData,
     LevelCardData,
     PresenceData,
     QuoteData,
     SeriesData,
 )
-from app.rendering.primitives import Font, FontManager, get_dominant_color
+from app.rendering.primitives import Font, FontManager
 
 if TYPE_CHECKING:
     from app.cogs.leveling import LevelConfig
@@ -68,7 +69,7 @@ class RenderingService:
             name=str(member),
             total_xp=level_config.config.spec.get_total_xp(level_config.level, level_config.xp),
             rank=await level_config.get_rank(),
-            member_count=len(member.guild.members),
+            member_count=member.guild.member_count or len(member.guild.members),
             level=level_config.level,
             xp=level_config.xp,
             max_xp=level_config.max_xp,
@@ -94,7 +95,7 @@ class RenderingService:
         self, rgb: tuple[int, int, int], text: str | None = None, *, filename: str = "color.png"
     ) -> discord.File:
         """Render a solid colour swatch with optional caption."""
-        buffer = await asyncio.to_thread(templates.draw_color_swatch, ColorSwatchData(rgb=rgb, text=text))
+        buffer = await asyncio.to_thread(templates.draw_color_swatch, ColorSwatchData(rgb=rgb, text=text), self._fonts)
         return discord.File(buffer, filename=filename)
 
     async def equalizer(self, gains: list[float], *, filename: str = "image.png") -> discord.File:
@@ -102,13 +103,14 @@ class RenderingService:
         buffer = await asyncio.to_thread(templates.draw_equalizer, gains)
         return discord.File(buffer, filename=filename)
 
-    def progress_bar(self, filled: int, *, variant: str = 'position', filename: str = "bar.png") -> discord.File:
-        """Return a pre-cached progress bar image (synchronous — no thread needed)."""
-        buffer = templates.draw_progress_bar(filled, variant=variant)
-        return discord.File(buffer, filename=filename)
-
     async def bar_chart(
-        self, data: dict[str, int | float], title: str, *, merge: bool = False, filename: str = "bar_chart.png"
+        self,
+        data: dict[str, int | float],
+        title: str,
+        *,
+        subtitle: str = "",
+        merge: bool = False,
+        filename: str = "bar_chart.png",
     ) -> discord.File | list[discord.File]:
         """Render a horizontal bar chart.
 
@@ -116,7 +118,7 @@ class RenderingService:
         ``merge=True`` the parts are stacked into a single file, otherwise a list
         of files (one per part) is returned.
         """
-        spec = BarChartData(data=data, title=title)
+        spec = BarChartData(data=data, title=title, subtitle=subtitle)
         if merge:
             return await self.merge_bar_charts([spec], filename=filename)
 
@@ -147,6 +149,21 @@ class RenderingService:
 
         return await asyncio.to_thread(_render)
 
+    async def hand_odds(
+        self,
+        *,
+        stages: list[str],
+        odds: list[dict[str, float]],
+        hands: tuple[str, ...],
+        title: str,
+        subtitle: str = "",
+        filename: str = "hand_odds.png",
+    ) -> discord.File:
+        """Render the poker hand-strength table (hands x streets)."""
+        data = HandOddsData(stages=stages, odds=odds, hands=hands, title=title, subtitle=subtitle)
+        buffer = await asyncio.to_thread(templates.draw_hand_odds, data)
+        return discord.File(buffer, filename=filename)
+
     async def avatar_collage(self, avatars: list[bytes], *, filename: str = "collage.png") -> discord.File:
         """Render a square collage of the given avatars."""
         buffer = await asyncio.to_thread(templates.draw_avatar_collage, avatars)
@@ -159,34 +176,37 @@ class RenderingService:
         values: list[int],
         colors: list[str],
         title: str = "Presence",
+        subtitle: str = "",
         filename: str = "presence.png",
     ) -> discord.File:
         """Render a presence/activity donut chart."""
-        data = PresenceData(labels=labels, values=values, colors=colors, title=title)
+        data = PresenceData(labels=labels, values=values, colors=colors, title=title, subtitle=subtitle)
         buffer = await asyncio.to_thread(templates.draw_presence_chart, data)
         return discord.File(buffer, filename=filename)
 
     async def series_chart(
-        self, *, labels: list[str], values: list[int], title: str, kind: str = "line", filename: str = "series.png"
+        self,
+        *,
+        labels: list[str],
+        values: list[int],
+        title: str,
+        subtitle: str = "",
+        kind: str = "line",
+        filename: str = "series.png",
     ) -> discord.File:
-        """Render a single-series line/area (``kind="line"``) or bar chart."""
-        data = SeriesData(labels=labels, values=values, title=title, kind=kind)
+        """Render a single-series line/area (``kind="line"``) or column chart."""
+        data = SeriesData(labels=labels, values=values, title=title, kind=kind, subtitle=subtitle)
         buffer = await asyncio.to_thread(templates.draw_series_chart, data)
         return discord.File(buffer, filename=filename)
 
-    async def heatmap_chart(self, grid: list[list[int]], title: str, *, filename: str = "heatmap.png") -> discord.File:
+    async def heatmap_chart(
+        self, grid: list[list[int]], title: str, *, subtitle: str = "", filename: str = "heatmap.png"
+    ) -> discord.File:
         """Render a weekday x hour (UTC) activity heatmap; ``grid[weekday][hour]``, Monday first."""
-        buffer = await asyncio.to_thread(templates.draw_heatmap_chart, HeatmapData(grid=grid, title=title))
+        buffer = await asyncio.to_thread(templates.draw_heatmap_chart, HeatmapData(grid=grid, title=title, subtitle=subtitle))
         return discord.File(buffer, filename=filename)
 
     async def captcha(self, *, length: int = 6, filename: str = "captcha.png") -> Captcha:
         """Generate a random captcha image and its solution text."""
         text, buffer = await asyncio.to_thread(templates.generate_captcha, length=length)
         return Captcha(text=text, file=discord.File(buffer, filename=filename))
-
-    # -- Pure helpers -------------------------------------------------------
-
-    @staticmethod
-    def dominant_color(image: io.BytesIO) -> tuple:
-        """Return the dominant RGB colour of an image (synchronous, cheap)."""
-        return get_dominant_color(image)
