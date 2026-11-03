@@ -49,9 +49,15 @@ def boost_display_line(row: Any) -> str:
 
 
 def progress_bar(progress: int, goal: int, *, width: int = 10) -> str:
-    """A small text progress bar like ``█████░░░░░``."""
-    filled = 0 if goal <= 0 else min(round(progress / goal * width), width)
-    return '█' * filled + '░' * (width - filled)
+    """A progress bar of custom emojis, without an indicator. Emojis don't render inside backticks."""
+    emojis = Emojis.ProgressBar
+    filled = 0 if goal <= 0 else max(0, min(round(progress / goal * width), width))
+    segments = [emojis.full] * filled + [emojis.empty] * (width - filled)
+    if filled:
+        segments[0] = emojis.leftfull
+    if filled < width:
+        segments[-1] = emojis.rightempty
+    return ''.join(segments)
 
 
 class SearchButton(discord.ui.Button['SearchView']):
@@ -405,7 +411,7 @@ class EconomyHub(LayoutView):
             else:
                 lines.append(
                     f'\N{SCROLL} **{description}**\n'
-                    f'`{progress_bar(row["progress"], row["goal"])}` {fnumb(row["progress"])}/{fnumb(row["goal"])} '
+                    f'{progress_bar(row["progress"], row["goal"])} {fnumb(row["progress"])}/{fnumb(row["goal"])} '
                     f'— {Emojis.Economy.cash} **{fnumb(row["reward"])}**'
                 )
 
@@ -427,7 +433,7 @@ class EconomyHub(LayoutView):
         if nxt is not None:
             unlock_line = (
                 f'Next unlock: {nxt.emoji} **{nxt.name}** — '
-                f'`{progress_bar(shifts, nxt.shifts_required)}` {shifts}/{nxt.shifts_required} shifts'
+                f'{progress_bar(shifts, nxt.shifts_required)} {shifts}/{nxt.shifts_required} shifts'
             )
         else:
             unlock_line = 'You\'ve reached the top of the ladder. \N{ROCKET}'
@@ -547,6 +553,6 @@ class EconomyHub(LayoutView):
         container.add_item(discord.ui.TextDisplay('\n'.join(lines)))
         container.add_item(discord.ui.TextDisplay(
             f'-# Next prestige at {Emojis.Economy.cash} {fnumb(requirement)} net worth '
-            f'(`{progress_bar(balance.total, requirement)}` {fnumb(balance.total)}/{fnumb(requirement)}).'
+            f'({progress_bar(balance.total, requirement)} {fnumb(balance.total)}/{fnumb(requirement)}).'
         ))
         return container

@@ -485,3 +485,16 @@ def test_builtin_refusals() -> None:
     assert builtin_error({'name': 'Cookie', 'builtin_key': None}, 'edit') is None
     assert name_reserved_error('  fishing ROD ') is not None
     assert name_reserved_error('Cookie') is None
+
+
+def test_progress_bar_uses_emojis_without_indicator() -> None:
+    from app.cogs.economy.ui import progress_bar
+    from config import Emojis
+
+    bar = Emojis.ProgressBar
+    assert progress_bar(0, 10, width=4) == bar.empty * 3 + bar.rightempty
+    assert progress_bar(-5, 10, width=4) == bar.empty * 3 + bar.rightempty
+    assert progress_bar(5, 10, width=4) == bar.leftfull + bar.full + bar.empty + bar.rightempty
+    assert progress_bar(10, 10, width=4) == bar.leftfull + bar.full * 3
+    assert progress_bar(99, 10, width=4) == bar.leftfull + bar.full * 3
+    assert progress_bar(1, 0, width=4) == bar.empty * 3 + bar.rightempty
