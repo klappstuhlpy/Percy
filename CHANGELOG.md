@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.31.1] - 2026-11-03
+
+### Changed
+- Economy progress bars (quests, career, prestige) use Percy's progress bar emojis instead of text blocks.
+- Music progress bars only look empty or full at exactly 0% and 100%.
+- Music volume is capped at 100%, so relative changes, the panel and saved volumes can no longer go past it.
+
+### Fixed
+- The `volume` command showed raw emoji text instead of its progress bar.
+- A negative volume could be set with a relative change such as `-15`.
+
 ## [2.31.0] - 2026-11-03
 
 ### Changed
