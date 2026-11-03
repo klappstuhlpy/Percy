@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.29.0] - 2026-11-03
+
+### Added
+- Dashboard: the command manager can limit a command to chosen channels ("Only in…", like `config channel enable` after a server-wide disable), toggle this server's custom commands, ignore every text channel at once or clear the whole ignore list, and pick a channel to ignore from a list.
+- Internal API: `/commands/public` and the guild `/commands` list carry each command's help section (`section`, `section_order`); the guild list also returns `enabled_in`, custom commands (`custom: true`), and `POST /commands/toggle` accepts `allow`, `POST /plonks` the actions `all` and `clear`.
+
 ### Changed
+- The public commands page and the dashboard's command manager group commands by the same sections as `help` in Discord. The command manager is rebuilt as a grouped list that shows each command's effective state, including commands switched off through their parent group.
+- Dashboard: `config` commands are no longer listed in the command manager, since they cannot be disabled in Discord either.
 - Developers: the `command`/`group` decorators and `@<group>.command`/`@<group>.group` declare their keyword arguments and overload on `hybrid`, so type checkers and editors resolve hybrid groups and subcommands precisely and complete decorator arguments.
 
 ### Fixed
