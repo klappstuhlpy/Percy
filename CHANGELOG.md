@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Developers: the `command`/`group` decorators and `@<group>.command`/`@<group>.group` declare their keyword arguments and overload on `hybrid`, so type checkers and editors resolve hybrid groups and subcommands precisely and complete decorator arguments.
+
+### Fixed
+- Help: usage examples set on a command group (`group(examples=...)`) are shown instead of being silently dropped.
+
 ## [2.28.0] - 2026-11-02
 
 ### Added
