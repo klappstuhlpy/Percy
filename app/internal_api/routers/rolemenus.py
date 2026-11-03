@@ -6,7 +6,7 @@ posted message is re-rendered after each change.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,7 +17,6 @@ from ..helpers import resolve_channel, resolve_moderator
 from .guild_models import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
 
 if TYPE_CHECKING:
-    from app.cogs.rolemenu.cog import RoleMenus
     from app.core import Bot
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Role menus"], dependencies=[Depends(verify_token)])
@@ -85,11 +84,11 @@ class RoleMenuNotice(BaseModel):
     message: str
 
 
-def _cog(bot: Bot) -> RoleMenus:
+def _cog(bot: Bot) -> Any:
     cog = bot.get_cog('RoleMenus')
     if cog is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="role menus are not loaded")
-    return cog  # type: ignore[return-value]
+    return cog
 
 
 def _refused(exc: Exception) -> HTTPException:
@@ -130,7 +129,7 @@ async def list_role_menus(guild: GuildDep, bot: BotDep) -> RoleMenusResponse:
 
 @router.post("/rolemenus")
 async def create_role_menu(guild: GuildDep, bot: BotDep, body: CreateRoleMenuBody) -> RoleMenuCreated:
-    from app.cogs.rolemenu.cog import RoleMenuError
+    from app.cogs.rolemenu.models import RoleMenuError
 
     channel = guild.get_channel(body.channel_id)
     if not isinstance(channel, discord.TextChannel):
@@ -144,7 +143,7 @@ async def create_role_menu(guild: GuildDep, bot: BotDep, body: CreateRoleMenuBod
 
 @router.patch("/rolemenus/{menu_id}")
 async def patch_role_menu(guild: GuildDep, bot: BotDep, menu_id: int, body: PatchRoleMenuBody) -> dict:
-    from app.cogs.rolemenu.cog import RoleMenuError
+    from app.cogs.rolemenu.models import RoleMenuError
 
     try:
         await _cog(bot).edit_menu(guild, menu_id, title=body.title, description=body.description, unique=body.unique)
@@ -155,7 +154,7 @@ async def patch_role_menu(guild: GuildDep, bot: BotDep, menu_id: int, body: Patc
 
 @router.post("/rolemenus/{menu_id}/roles")
 async def add_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, body: AddRoleMenuRoleBody) -> RoleMenuNotice:
-    from app.cogs.rolemenu.cog import RoleMenuError
+    from app.cogs.rolemenu.models import RoleMenuError
 
     role = guild.get_role(body.role_id)
     if role is None:
@@ -173,7 +172,7 @@ async def add_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, body: A
 
 @router.delete("/rolemenus/{menu_id}/roles/{role_id}")
 async def remove_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, role_id: int) -> dict:
-    from app.cogs.rolemenu.cog import RoleMenuError
+    from app.cogs.rolemenu.models import RoleMenuError
 
     try:
         await _cog(bot).remove_role(guild, menu_id, role_id)
@@ -184,7 +183,7 @@ async def remove_role_menu_role(guild: GuildDep, bot: BotDep, menu_id: int, role
 
 @router.delete("/rolemenus/{menu_id}")
 async def delete_role_menu(guild: GuildDep, bot: BotDep, menu_id: int) -> dict:
-    from app.cogs.rolemenu.cog import RoleMenuError
+    from app.cogs.rolemenu.models import RoleMenuError
 
     try:
         await _cog(bot).delete_menu(guild, menu_id)

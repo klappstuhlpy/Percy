@@ -285,3 +285,22 @@ class PlaylistTrack(BaseRecord, table="playlist_lookup", pk="id"):
     def text(self) -> str:
         artist = f' - {self.author}' if self.author else ''
         return f'[{display_title(self.name, self.author)}]({self.url}){artist} (ID: {self.id})'
+
+
+# Curated, verified direct-stream radio presets for `music 247 radio <name>`.
+# Each value is (human label, direct stream URL). These are real audio streams
+# (SomaFM / Antenne Bayern), not station landing pages, so Lavalink can play them.
+RADIO_PRESETS: dict[str, tuple[str, str]] = {
+    "lofi": ("Fluid — instrumental hip-hop / lofi", "https://ice.somafm.com/fluid-128-mp3"),
+    "chill": ("Groove Salad — chilled ambient beats", "https://ice.somafm.com/groovesalad-128-mp3"),
+    "ambient": ("Drone Zone — atmospheric ambient", "https://ice.somafm.com/dronezone-128-mp3"),
+    "space": ("Space Station Soma — ambient electronica", "https://ice.somafm.com/spacestation-128-mp3"),
+    "vocals": ("Lush — electronic female vocals", "https://ice.somafm.com/lush-128-mp3"),
+    "house": ("Beat Blender — deep house & downtempo", "https://ice.somafm.com/beatblender-128-mp3"),
+    "indie": ("Indie Pop Rocks!", "https://ice.somafm.com/indiepop-128-mp3"),
+    "pop": ("PopTron — electro-pop & indie dance", "https://ice.somafm.com/poptron-128-mp3"),
+    "lounge": ("Secret Agent — spy lounge", "https://ice.somafm.com/secretagent-128-mp3"),
+    "70s": ("Left Coast 70s — mellow album rock", "https://ice.somafm.com/seventies-128-mp3"),
+    "metal": ("Metal Detector — all things metal", "https://ice.somafm.com/bagel-128-mp3"),
+    "antenne": ("ANTENNE BAYERN — German pop & hits", "https://s1-webradio.antenne.de/antenne"),
+}

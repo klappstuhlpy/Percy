@@ -11,9 +11,9 @@ import discord
 
 # app.database cannot be imported first (circular), so load app.core before it.
 import app.core  # pyright: ignore[reportUnusedImport]
-from app.database import sentinel_roles
+from app.cogs.moderation import sentinel_roles
+from app.cogs.moderation.sentinel_roles import PassResult, RoleOutcome, SentinelRoleQueue, attempt
 from app.database.base import Sentinel
-from app.database.sentinel_roles import PassResult, RoleOutcome, SentinelRoleQueue, attempt
 
 if TYPE_CHECKING:
     import pytest

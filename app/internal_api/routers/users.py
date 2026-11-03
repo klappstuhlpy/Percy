@@ -22,7 +22,6 @@ from .leveling import CardOption  # noqa: TC001 - pydantic resolves it at runtim
 from .music import serialize_play
 
 if TYPE_CHECKING:
-    from app.cogs.leveling.cog import Leveling
     from app.core import Bot
 
 router = APIRouter(prefix="/users/{discord_id}", tags=["Users"], dependencies=[Depends(verify_token)])
@@ -275,11 +274,11 @@ _PREVIEW_MAX_WAIT = 2.0
 _last_preview: dict[int, float] = {}
 
 
-def _leveling(bot: Bot) -> Leveling:
+def _leveling(bot: Bot) -> Any:
     cog = bot.get_cog('Leveling')
     if cog is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="leveling is not loaded")
-    return cog  # type: ignore[return-value]
+    return cog
 
 
 def _member(bot: Bot, guild_id: int, discord_id: int) -> discord.Member:

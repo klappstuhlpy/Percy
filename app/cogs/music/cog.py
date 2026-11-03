@@ -52,7 +52,7 @@ from app.utils import (
 from config import Emojis, genius_key
 
 from .lookups import album, artist_tracks
-from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode, is_dj
+from .models import RADIO_PRESETS, Playlist, PlaylistTrack, SearchReturn, ShuffleMode, is_dj
 from .player import MAX_CONSECUTIVE_ERRORS, Player
 from .playlist import PlaylistNameOrID
 from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator, QueueView, TrackItem, TrackListView
@@ -61,24 +61,6 @@ if TYPE_CHECKING:
     from app.utils.progress import ProgressTracker
 
 log = logging.getLogger(__name__)
-
-# Curated, verified direct-stream radio presets for `music 247 radio <name>`.
-# Each value is (human label, direct stream URL). These are real audio streams
-# (SomaFM / Antenne Bayern), not station landing pages, so Lavalink can play them.
-RADIO_PRESETS: dict[str, tuple[str, str]] = {
-    "lofi": ("Fluid — instrumental hip-hop / lofi", "https://ice.somafm.com/fluid-128-mp3"),
-    "chill": ("Groove Salad — chilled ambient beats", "https://ice.somafm.com/groovesalad-128-mp3"),
-    "ambient": ("Drone Zone — atmospheric ambient", "https://ice.somafm.com/dronezone-128-mp3"),
-    "space": ("Space Station Soma — ambient electronica", "https://ice.somafm.com/spacestation-128-mp3"),
-    "vocals": ("Lush — electronic female vocals", "https://ice.somafm.com/lush-128-mp3"),
-    "house": ("Beat Blender — deep house & downtempo", "https://ice.somafm.com/beatblender-128-mp3"),
-    "indie": ("Indie Pop Rocks!", "https://ice.somafm.com/indiepop-128-mp3"),
-    "pop": ("PopTron — electro-pop & indie dance", "https://ice.somafm.com/poptron-128-mp3"),
-    "lounge": ("Secret Agent — spy lounge", "https://ice.somafm.com/secretagent-128-mp3"),
-    "70s": ("Left Coast 70s — mellow album rock", "https://ice.somafm.com/seventies-128-mp3"),
-    "metal": ("Metal Detector — all things metal", "https://ice.somafm.com/bagel-128-mp3"),
-    "antenne": ("ANTENNE BAYERN — German pop & hits", "https://s1-webradio.antenne.de/antenne"),
-}
 
 # Hosts accepted as autoplay seeds (recommendations only generate from YouTube).
 _YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "music.youtube.com")

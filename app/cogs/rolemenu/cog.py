@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.rolemenu import ui
+from app.cogs.rolemenu.models import RoleMenuError
 from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, describe, group
 from app.core.pagination import LinePaginator
@@ -15,10 +16,6 @@ if TYPE_CHECKING:
 
 #: Discord allows at most 5 action rows of 5 buttons inside a container.
 MAX_ROLES = 25
-
-
-class RoleMenuError(Exception):
-    """A role-menu operation was refused; the message is shown to the user as is."""
 
 
 class RoleMenus(Cog):

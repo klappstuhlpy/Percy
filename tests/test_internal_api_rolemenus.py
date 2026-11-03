@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.cogs.rolemenu.cog import RoleMenuError
+from app.cogs.rolemenu.models import RoleMenuError
 from app.internal_api.routers import rolemenus as api
 
 

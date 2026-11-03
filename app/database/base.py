@@ -52,7 +52,6 @@ from app.database.repositories import (
     VotesRepository,
     WatchlistRepository,
 )
-from app.database.sentinel_roles import SentinelRoleQueue
 from app.services.custom_commands.models import CustomCommandIndex
 from app.utils import BaseFlags, cache, flag_value
 from app.utils.query_tracker import QueryTracker
@@ -354,6 +353,9 @@ class Database(_Database):
         self.command_rules = CommandRulesRepository(self)
         self.custom_commands = CustomCommandsRepository(self)
         self.trivia = TriviaRepository(self)
+        # Lazy: the worker lives in the moderation cog package, which itself imports the database.
+        from app.cogs.moderation.sentinel_roles import SentinelRoleQueue
+
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
@@ -1381,7 +1383,7 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
     members : set[int]
         The members that have the role and are pending to be verified.
 
-    The role itself is given and taken by :class:`~app.database.sentinel_roles.SentinelRoleQueue`
+    The role itself is given and taken by :class:`~app.cogs.moderation.sentinel_roles.SentinelRoleQueue`
     (``bot.db.sentinel_roles``), which works off ``guild_sentinel_members`` rather than this
     instance, so dropping a cached instance never drops queued work.
 

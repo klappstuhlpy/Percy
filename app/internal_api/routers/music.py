@@ -592,7 +592,7 @@ async def post_music_247(guild: GuildDep, bot: BotDep, body: AlwaysOnBody) -> Mu
 
     # Radio mode accepts a friendly preset name (e.g. "lofi") as a shortcut.
     if body.mode == 'radio':
-        from app.cogs.music.cog import RADIO_PRESETS
+        from app.cogs.music.models import RADIO_PRESETS
 
         preset = RADIO_PRESETS.get(source.strip().lower())
         if preset:

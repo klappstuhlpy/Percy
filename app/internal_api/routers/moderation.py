@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,7 +14,6 @@ from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id, parse_timestamp, resolve_moderator, role_error, validate_timeout_duration
 
 if TYPE_CHECKING:
-    from app.cogs.modlog.cog import ModLog
     from app.cogs.modlog.models import ModerationCase
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Moderation"], dependencies=[Depends(verify_token)])
@@ -283,7 +282,7 @@ async def pardon_case(case_index: int, bot: BotDep, guild: GuildDep, body: Pardo
     if record is None:
         raise HTTPException(status_code=404, detail='not an active warning')
     case = ModerationCase.from_record(record)
-    cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
+    cog: Any = bot.get_cog('ModLog')
     if cog is not None:
         await cog._edit_modlog_message(case)
     return _case_payload(guild, case, bot)
@@ -371,7 +370,7 @@ async def create_case(
         await resolve_moderator(guild, moderator_id, 'manage_guild')
     reason = body.reason or None
 
-    cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
+    cog: Any = bot.get_cog('ModLog')
     if cog is not None:
         case = await cog.record_case(guild.id, body.action, target_id, moderator_id, reason)
     else:
@@ -397,7 +396,7 @@ async def patch_case(
     if body.moderator_id not in (None, ''):
         await resolve_moderator(guild, body.moderator_id, 'manage_guild')
 
-    cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
+    cog: Any = bot.get_cog('ModLog')
     if cog is not None:
         case = await cog.update_case_reason(guild.id, case_index, reason)
     else:
@@ -425,7 +424,7 @@ async def delete_case(
     if moderator_id:
         await resolve_moderator(guild, moderator_id, 'manage_guild')
 
-    cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
+    cog: Any = bot.get_cog('ModLog')
     if cog is not None:
         case = await cog.delete_case(guild.id, case_index)
     else:
