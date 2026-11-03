@@ -35,7 +35,7 @@ from app.services.releases import COMIC_SUBJECT_TYPES, TITLE_SUBJECT_TYPES
 from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
-from .news_models import NewsPage, NewsRelated, NewsSourcesResponse
+from .models.news import NewsPage, NewsRelated, NewsSourcesResponse
 
 if TYPE_CHECKING:
     import asyncpg

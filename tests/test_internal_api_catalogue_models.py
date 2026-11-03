@@ -10,15 +10,15 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING, Any
 
-from app.internal_api.routers.comics_models import (
+from app.internal_api.routers.models.comics import (
     ComicBrowsePage,
     ComicDetail,
     ComicNamesResponse,
     ComicSeriesList,
     ComicSeriesPage,
 )
-from app.internal_api.routers.news_models import NewsPage, NewsRelated, NewsSourcesResponse
-from app.internal_api.routers.releases_models import (
+from app.internal_api.routers.models.news import NewsPage, NewsRelated, NewsSourcesResponse
+from app.internal_api.routers.models.releases import (
     ProgressResponse,
     ReleaseProgressDeleted,
     ReleasesOverview,
@@ -27,7 +27,7 @@ from app.internal_api.routers.releases_models import (
     SubscriptionDeleted,
     SubscriptionsResponse,
 )
-from app.internal_api.routers.watchlist_models import (
+from app.internal_api.routers.models.watchlist import (
     WatchPeopleResponse,
     WatchPersonPage,
     WatchPrefs,

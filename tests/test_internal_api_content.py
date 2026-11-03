@@ -10,7 +10,7 @@ import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 from app.internal_api.routers import content
-from app.internal_api.routers import content_models as m
+from app.internal_api.routers.models import content as m
 
 NOW = datetime.datetime(2026, 1, 2, 3, 4, 5)
 

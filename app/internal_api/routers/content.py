@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import invalidate_cog_cache, parse_id, resolve_channel
-from .content_models import (
+from .models.content import (
     ComicsResponse,
     EmojiStatsResponse,
     GiveawaysResponse,

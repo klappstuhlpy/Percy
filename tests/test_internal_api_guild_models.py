@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.internal_api.routers import guild_models as m
+from app.internal_api.routers.models import guild as m
 
 CH = {'id': '1', 'name': 'general', 'type': 'text'}
 RO = {'id': '2', 'name': 'Mod', 'color': 255}

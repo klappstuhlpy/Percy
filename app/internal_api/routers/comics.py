@@ -30,7 +30,7 @@ from app.services.comics.payload import (
 from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
-from .comics_models import (
+from .models.comics import (
     ComicBrowsePage,
     ComicDetail,
     ComicNamesResponse,

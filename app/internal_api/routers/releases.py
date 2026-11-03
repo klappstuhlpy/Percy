@@ -65,7 +65,7 @@ from app.utils import cache, fuzzy
 
 from ..dependencies import BotDep, verify_token
 from ..helpers import naive_utc
-from .releases_models import (
+from .models.releases import (
     ProgressResponse,
     ReleaseProgressDeleted,
     ReleasesOverview,

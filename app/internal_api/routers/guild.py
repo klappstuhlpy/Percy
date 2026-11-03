@@ -21,7 +21,7 @@ from app.utils.webhooks import send_webhook
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id, resolve_channel, resolve_entity, resolve_role
-from .guild_models import AiAskResponse, AiConfig, Channel, GuildHealth, GuildInfo, Role, SentinelInfo
+from .models.guild import AiAskResponse, AiConfig, Channel, GuildHealth, GuildInfo, Role, SentinelInfo
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -286,7 +286,7 @@ def _build_config_updates(data: dict, guild_config, guild: discord.Guild | None 
 # ---------------------------------------------------------------------------
 
 
-def _serialize_ai_config(guild, ai_config) -> dict:  # shape: guild_models.AiConfig
+def _serialize_ai_config(guild, ai_config) -> dict:  # shape: models.guild.AiConfig
     """Shape the resolved AI config (server flags + per-channel overrides) for the dashboard."""
     return {
         "flags": {name: bool(getattr(ai_config.flags, name)) for name in _AI_FLAG_MAP},

@@ -15,7 +15,7 @@ import pytest
 import wavelink
 
 from app.internal_api.routers import gallery, music, profile
-from app.internal_api.routers import music_models as mm
+from app.internal_api.routers.models import music as mm
 
 REQUESTER = {'id': '5', 'name': 'Ann', 'avatar': 'https://cdn/a.png'}
 LINK = {'name': 'Glass Tides', 'url': 'https://x.test/album/1'}

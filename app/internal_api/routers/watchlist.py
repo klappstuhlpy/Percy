@@ -30,7 +30,7 @@ from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
 from ..helpers import naive_utc
-from .watchlist_models import (
+from .models.watchlist import (
     WatchPeopleResponse,
     WatchPersonPage,
     WatchPrefs,

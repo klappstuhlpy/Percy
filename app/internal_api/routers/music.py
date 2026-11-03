@@ -18,7 +18,7 @@ from app.services.music.lyrics import display_title
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import parse_id
-from .music_models import (
+from .models.music import (
     MusicAck,
     MusicAlbum,
     MusicAlwaysOnApplied,
@@ -36,7 +36,7 @@ from .music_models import (
     MusicSetupResponse,
     MusicTrending,
 )
-from .music_models import (
+from .models.music import (
     MusicViewer as MusicViewerOut,
 )
 
