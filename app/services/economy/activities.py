@@ -23,11 +23,15 @@ __all__ = (
     'BEG_FAIL_LINES',
     'BEG_SUCCESS_LINES',
     'BEG_TABLE',
+    'CLAIM_LINES',
     'DIG_COOLDOWN',
     'DIG_TABLE',
+    'LOOT_LINES',
     'MEME_FORMATS',
+    'MEME_HIT_LINES',
     'POSTMEME_COOLDOWN',
     'SEARCH_COOLDOWN',
+    'SEARCH_FOUND_LINES',
     'SEARCH_LOCATIONS',
     'SearchLocation',
     'SearchOutcome',
@@ -65,6 +69,11 @@ BEG_DONORS: tuple[str, ...] = (
     'a tired barista',
     'someone who mistook you for a busker',
     'the mayor',
+    'a street magician',
+    'a very lost tourist',
+    'a retired pirate',
+    'the ice cream van driver',
+    'an off-duty mall cop',
 )
 
 #: Flavour lines when begging pays out; formatted with ``donor`` and ``coins``.
@@ -73,6 +82,10 @@ BEG_SUCCESS_LINES: tuple[str, ...] = (
     '{donor} tossed {coins} into your cup without breaking stride.',
     'You put on your saddest face and {donor} handed over {coins}.',
     '{donor} said "get yourself something nice" and gave you {coins}.',
+    'You held up a cardboard sign with a pun on it. {donor} laughed and paid {coins}.',
+    '{donor} dropped {coins} and pretended it was on purpose.',
+    'After a long, uncomfortable eye contact, {donor} surrendered {coins}.',
+    '{donor} asked no questions and slipped you {coins}.',
 )
 
 #: Flavour lines when begging yields nothing.
@@ -81,7 +94,95 @@ BEG_FAIL_LINES: tuple[str, ...] = (
     'Someone gave you advice instead of money. Thanks.',
     'A pigeon stole the one coin you had. Devastating.',
     'You got a coupon that expired last week.',
+    'A child looked you in the eye and said "no".',
+    'Someone handed you a flyer for a job fair. Ouch.',
+    'A busker across the street out-earned you and waved.',
+    'You got a very firm "maybe tomorrow".',
 )
+
+#: Result lines per loot activity: ``(hits, misses)``. Hits take ``catch`` and ``coins``, misses only ``catch``.
+LOOT_LINES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    'fish': (
+        (
+            'You caught {catch} and sold it for {coins}.',
+            'The line went tight: {catch}! The fishmonger paid {coins}.',
+            'After an hour of silence you landed {catch}, worth {coins}.',
+            'You wrestled {catch} into the boat and made {coins}.',
+        ),
+        (
+            'You reeled in {catch}. Barely worth it.',
+            'A long wait for {catch}. The fish are laughing at you.',
+            'You proudly hauled up {catch}. Nobody is impressed.',
+        ),
+    ),
+    'hunt': (
+        (
+            'You bagged {catch} worth {coins}.',
+            'One clean shot and {catch} was yours. It sold for {coins}.',
+            'You tracked {catch} for miles and came home with {coins}.',
+            'The lodge paid {coins} for {catch}.',
+        ),
+        (
+            'You found {catch} and came back empty-handed.',
+            'Hours in the woods, and all you got was {catch}.',
+            'You followed {catch} in a big circle back to your car.',
+        ),
+    ),
+    'dig': (
+        (
+            'You unearthed {catch} worth {coins}.',
+            'Your shovel hit something: {catch}! A collector paid {coins}.',
+            'Three feet down you found {catch} and cashed in {coins}.',
+            'The neighbours complained about the hole, but {catch} fetched {coins}.',
+        ),
+        (
+            'You dug up {catch}. Hardly a treasure.',
+            'All that digging for {catch}. Your back hurts.',
+            'The ground gave up {catch} and nothing else.',
+        ),
+    ),
+}
+
+#: Result lines for ``search``; formatted with ``place``, ``catch`` and ``coins``.
+SEARCH_FOUND_LINES: tuple[str, ...] = (
+    '**{place}**: you found {catch} worth {coins}.',
+    'You rummaged through **{place}** and came out with {catch}, worth {coins}.',
+    'Nobody was watching **{place}**. {catch} is yours: {coins}.',
+    'Patience paid off at **{place}**: {catch}, good for {coins}.',
+)
+
+#: Result lines for ``postmemes``; formatted with ``meme``, ``catch`` and ``coins``.
+MEME_HIT_LINES: tuple[str, ...] = (
+    'Your **{meme}** earned {catch}: {coins} in ad revenue.',
+    'The algorithm liked your **{meme}**. {catch} brought in {coins}.',
+    'Your **{meme}** got {catch} and {coins} from a very confused sponsor.',
+    'People screenshotted your **{meme}**. {catch}, plus {coins} in tips.',
+)
+
+#: Result lines for the timed claims; formatted with ``coins``.
+CLAIM_LINES: dict[str, tuple[str, ...]] = {
+    'daily': (
+        'You claimed {coins}.',
+        'Your daily allowance arrived: {coins}.',
+        'You showed up, and that is worth {coins} today.',
+        'Another day, another {coins}.',
+    ),
+    'weekly': (
+        'Your weekly payout is in: {coins}.',
+        'Seven days of patience paid {coins}.',
+        'The weekly envelope contained {coins}.',
+    ),
+    'monthly': (
+        'Your monthly dividend landed: {coins}.',
+        'Thirty days later, {coins} is yours.',
+        'The month is over, and accounting sent you {coins}.',
+    ),
+    'vote': (
+        'Thanks for voting! You claimed {coins}.',
+        'Democracy pays: {coins} for your vote.',
+        'Your vote counted, and so did {coins}.',
+    ),
+}
 
 #: Digging outcomes — junk to buried treasure, on a mid-length cooldown.
 DIG_TABLE: tuple[LootEntry, ...] = (
@@ -192,6 +293,33 @@ SEARCH_LOCATIONS: tuple[SearchLocation, ...] = (
         ),
         0.05, 5, 40, 'Grandma caught you elbow-deep in the cookie jar. Guilt tax applied.',
     ),
+    SearchLocation(
+        'beach', 'The Beach', '\N{BEACH WITH UMBRELLA}',
+        (
+            LootEntry('a pretty shell', '\N{SPIRAL SHELL}', 0, 15, 35),
+            LootEntry('coins in the sand', '\N{COIN}', 40, 140, 50),
+            LootEntry('a washed-up watch', '\N{WATCH}', 180, 380, 15),
+        ),
+        0.05, 10, 50, 'A crab took your sandal. A new pair was not cheap.',
+    ),
+    SearchLocation(
+        'car_wash', 'The Car Wash', '\N{AUTOMOBILE}',
+        (
+            LootEntry('a soggy air freshener', '\N{EVERGREEN TREE}', 0, 10, 35),
+            LootEntry('change from the vacuums', '\N{COIN}', 50, 150, 50),
+            LootEntry('a forgotten tip jar', '\N{MONEY BAG}', 200, 420, 15),
+        ),
+        0.1, 20, 90, 'You walked into the rinse cycle and paid for the dry cleaning.',
+    ),
+    SearchLocation(
+        'lost_and_found', 'The Lost & Found', '\N{SCHOOL}',
+        (
+            LootEntry('a single mitten', '\N{GLOVES}', 0, 10, 40),
+            LootEntry('a cracked tablet', '\N{PERSONAL COMPUTER}', 70, 200, 45),
+            LootEntry('a wallet full of cash', '\N{PURSE}', 220, 480, 15),
+        ),
+        0.15, 30, 110, 'The caretaker caught you and made you pay for the "missing" umbrella.',
+    ),
 )
 
 
@@ -241,6 +369,24 @@ MEME_FORMATS: tuple[SearchLocation, ...] = (
             LootEntry('an unhinged bidding war', '\N{MONEY WITH WINGS}', 500, 1_000, 20),
         ),
         0.35, 100, 300, 'Your account got shadowbanned and the appeal fee was steep.',
+    ),
+    SearchLocation(
+        'cat', 'Cat Picture', '\N{CAT FACE}',
+        (
+            LootEntry('a polite nod', '\N{CAT FACE WITH WRY SMILE}', 10, 40, 50),
+            LootEntry('thousands of hearts', '\N{SPARKLING HEART}', 70, 180, 42),
+            LootEntry('a pet food deal', '\N{FISH}', 280, 500, 8),
+        ),
+        0.02, 5, 30, 'It was a dog in a cat costume. The internet demanded a refund.',
+    ),
+    SearchLocation(
+        'hot_take', 'Hot Take', '\N{HOT PEPPER}',
+        (
+            LootEntry('a ratio', '\N{FACE WITH TEARS OF JOY}', 0, 15, 35),
+            LootEntry('a heated thread', '\N{FIRE}', 110, 270, 45),
+            LootEntry('a podcast invite', '\N{STUDIO MICROPHONE}', 400, 800, 20),
+        ),
+        0.25, 60, 220, 'You got ratioed so hard that your sponsor asked for the money back.',
     ),
 )
 

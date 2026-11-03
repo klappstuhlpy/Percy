@@ -77,6 +77,7 @@ def make_notice(
     thumbnail: str | None = None,
     fields: Iterable[tuple[str, str]] | None = None,
     footer: str | None = None,
+    compact: bool = False,
 ) -> NoticeView:
     """Build an embed-like Components V2 card.
 
@@ -97,6 +98,9 @@ def make_notice(
         embed-style.
     footer:
         Optional muted line rendered last, after a separator.
+    compact:
+        A smaller heading, and the footer directly under the body with no separator
+        (a card with fields keeps its footer last).
 
     Returns
     -------
@@ -107,8 +111,11 @@ def make_notice(
     colour = accent.colour if isinstance(accent, Accent) else accent
     container = discord.ui.Container(accent_colour=colour)
 
-    heading = f'## {title}'
+    heading = f'### {title}' if compact else f'## {title}'
     body = f'{heading}\n{description}' if description else heading
+    field_list = list(fields) if fields is not None else []
+    if compact and footer is not None and not field_list:
+        body, footer = f'{body}\n-# {footer}', None
 
     if thumbnail is not None:
         container.add_item(
@@ -117,7 +124,6 @@ def make_notice(
     else:
         container.add_item(discord.ui.TextDisplay(body))
 
-    field_list = list(fields) if fields is not None else []
     if field_list:
         container.add_item(discord.ui.Separator())
         for name, value in field_list:

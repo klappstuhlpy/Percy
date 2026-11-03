@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import datetime
+import itertools
 import random
+
+import discord
 
 from app.services.economy import (
     ACHIEVEMENTS,
@@ -55,6 +58,35 @@ def test_job_ladder_is_ordered_and_unlockable() -> None:
     assert JOB_LADDER[0].shifts_required == 0
     for job in JOB_LADDER:
         assert 0 < job.pay_min <= job.pay_max
+
+
+def test_job_ladder_ids_and_pay_climb() -> None:
+    assert len({job.id for job in JOB_LADDER}) == len(JOB_LADDER)
+    # The hub's "switch job" select holds at most 25 options.
+    assert len(JOB_LADDER) <= 26
+    for lower, higher in itertools.pairwise(JOB_LADDER):
+        assert lower.shifts_required < higher.shifts_required
+        assert lower.pay_min < higher.pay_min and lower.pay_max < higher.pay_max
+
+
+def test_shift_lines_all_format() -> None:
+    from app.utils.constants import WORKING_RESPONSES
+
+    for line in (*WORKING_RESPONSES, *(line for job in JOB_LADDER for line in job.lines)):
+        assert 'X' in line.replace('{coins}', 'X'), line
+        line.format(coins='X')
+    assert all(job.lines for job in JOB_LADDER[1:])
+
+
+def test_response_pools_all_format() -> None:
+    from app.services.economy import CLAIM_LINES, LOOT_LINES, MEME_HIT_LINES, SEARCH_FOUND_LINES
+
+    for hits, misses in LOOT_LINES.values():
+        assert all('X' in line.format(catch='c', coins='X') for line in hits)
+        assert all(line.format(catch='c') for line in misses)
+    assert all('X' in line.format(place='p', catch='c', coins='X') for line in SEARCH_FOUND_LINES)
+    assert all('X' in line.format(meme='m', catch='c', coins='X') for line in MEME_HIT_LINES)
+    assert all('X' in line.format(coins='X') for lines in CLAIM_LINES.values() for line in lines)
 
 
 def test_get_job_falls_back_to_bottom_rung() -> None:
@@ -360,6 +392,48 @@ def test_work_challenges_invariants() -> None:
             shown = c.prompt.split('**')[1].lower()
             assert shown != c.answer and sorted(shown) == sorted(c.answer)
     assert seen == set(CHALLENGE_KINDS)
+
+
+def test_every_job_serves_valid_questions() -> None:
+    from app.services.economy import generate_challenge
+    from app.services.economy.minigames import _JOB_TASKS
+
+    assert set(_JOB_TASKS) == {job.id for job in JOB_LADDER}
+    for job in JOB_LADDER:
+        rng = random.Random(job.id)
+        kinds = set()
+        for _ in range(100):
+            c = generate_challenge(rng, job_id=job.id)
+            kinds.add(c.kind)
+            assert c.answer in c.options
+            assert len(set(c.options)) == 4
+            # Discord button labels hold 80 characters.
+            assert all(0 < len(option) <= 80 for option in c.options)
+        assert 'job' in kinds and len(kinds) > 1
+
+
+async def test_work_card_marks_answer_and_shows_result() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.cogs.economy.ui import WorkChallengeView
+    from app.services.economy import generate_challenge
+
+    challenge = generate_challenge(random.Random(1))
+    view = WorkChallengeView(MagicMock(id=1), challenge, 'task')
+    view.message = MagicMock(edit=AsyncMock())
+    wrong = next(b for b in view.buttons if b.label != challenge.answer)
+    interaction = MagicMock(response=MagicMock(defer=AsyncMock()))
+    await wrong.callback(interaction)
+    assert view.correct is False and view.is_finished()
+    interaction.response.defer.assert_awaited_once()
+
+    await view.finish('result')
+    view.message.edit.assert_awaited_once_with(view=view)
+    assert all(button.disabled for button in view.buttons)
+    assert next(b for b in view.buttons if b.label == challenge.answer).style is discord.ButtonStyle.success
+    assert wrong.style is discord.ButtonStyle.danger
+    payload = view.to_components()
+    assert 'result' in str(payload) and len(payload) == 1
 
 
 # -- bank space --------------------------------------------------------------

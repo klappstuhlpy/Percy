@@ -248,7 +248,7 @@ class ItemBrowser(LayoutView):
         if self.mode == 'shop':
             balance = await self.cog.bot.db.get_user_balance(self.viewer.id, self.guild.id)
             return (
-                f'## \N{CONVENIENCE STORE} {self.guild.name} Shop\n'
+                f'### \N{CONVENIENCE STORE} {self.guild.name} Shop\n'
                 f'**{len(rows)}** items for sale • your cash {cash} **{fnumb(balance.cash)}**\n'
                 f'-# Pick an item to see what it does and buy it.'
                 + self._deals_line(rows)
@@ -258,7 +258,7 @@ class ItemBrowser(LayoutView):
         total = sum(r['quantity'] for r in rows)
         boosts = await self.cog.bot.db.economy.get_active_boosts(self.target.id, self.guild.id)
         lines = [
-            f'## \N{SCHOOL SATCHEL} {self.target.display_name}\'s Inventory',
+            f'### \N{SCHOOL SATCHEL} {self.target.display_name}\'s Inventory',
             f'\N{PACKAGE} **{total:,}** items • **{len(rows)}** kinds • worth {cash} **{fnumb(worth)}**',
             *(boost_display_line(b) for b in boosts),
         ]
@@ -337,7 +337,7 @@ class ItemBrowser(LayoutView):
         container = discord.ui.Container(accent_colour=discord.Colour(rarity.colour))
 
         heading = (
-            f'## {item_emoji(item)} {item["name"]}\n'
+            f'### {item_emoji(item)} {item["name"]}\n'
             f'{rarity.emoji} **{rarity.name}** • {category.emoji} {category.name}'
             f'{" • \N{ROBOT FACE} Percy item" if item.get("builtin_key") else ""}\n'
             f'{item.get("description") or "*No description.*"}'

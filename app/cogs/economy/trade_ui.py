@@ -96,13 +96,13 @@ class TradeView(LayoutView):
         offer = self.offers[member.id]
         cash = f'{Emojis.Economy.cash} **{fnumb(offer.cash)}**' if offer.cash else ''
         mark = '\N{WHITE HEAVY CHECK MARK} confirmed' if offer.confirmed else '\N{HOURGLASS WITH FLOWING SAND} deciding'
-        return f'### {member.mention} — {mark}\n{summarize_offer(offer, names, cash)}'
+        return f'{member.mention} • {mark}\n{summarize_offer(offer, names, cash)}'
 
     async def build(self) -> None:
         names = await self._names()
         container = discord.ui.Container(accent_colour=helpers.Colour.brand())
         container.add_item(discord.ui.TextDisplay(
-            f'## \N{HANDSHAKE} Trade\n{self.a.mention} and {self.b.mention}: add items or cash, then both confirm.\n'
+            f'### \N{HANDSHAKE} Trade\n{self.a.mention} and {self.b.mention}: add items or cash, then both confirm.\n'
             f'-# Any change resets both confirmations. Nothing moves until you both confirm.'
         ))
         if self.notice:

@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import datetime
 import logging
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 
-from app.core import LayoutView
+from app.core import Accent, LayoutView, make_notice
 from app.services.economy import (
     ACHIEVEMENTS,
     DROP_GRAB_TIMEOUT,
     JOB_LADDER,
     WORK_CHALLENGE_TIMEOUT,
+    available_jobs,
     compute_pet_claim,
     generate_daily_quests,
     get_job,
     get_species,
+    next_unlock,
     prestige_multiplier,
     prestige_requirement,
 )
@@ -25,15 +28,27 @@ from app.utils import fnumb, get_asset_url, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import Awaitable, Callable, Iterable, Sequence
 
     from app.cogs.economy.cog import Economy
+    from app.core.components_v2 import NoticeView
     from app.core.models import Context
-    from app.services.economy import Challenge, SearchLocation
+    from app.services.economy import Challenge, Job, SearchLocation
 
 log = logging.getLogger(__name__)
 
-__all__ = ('BOOST_LABELS', 'DropView', 'EconomyHub', 'SearchView', 'WorkChallengeView', 'boost_display_line', 'progress_bar')
+__all__ = (
+    'BOOST_LABELS',
+    'DropView',
+    'EconomyHub',
+    'SearchView',
+    'WorkChallengeView',
+    'boost_display_line',
+    'card',
+    'card_text',
+    'job_line',
+    'progress_bar',
+)
 
 #: Display labels for active boost kinds.
 BOOST_LABELS = {'xp': 'leveling XP', 'loot': 'fishing & hunting payouts'}
@@ -60,134 +75,156 @@ def progress_bar(progress: int, goal: int, *, width: int = 10) -> str:
     return ''.join(segments)
 
 
-class SearchButton(discord.ui.Button['SearchView']):
-    """One of the location choices offered by :class:`SearchView`."""
-
-    def __init__(self, location: SearchLocation) -> None:
-        super().__init__(style=discord.ButtonStyle.secondary, label=location.name, emoji=location.emoji)
-        self.location = location
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        assert self.view is not None
-        view = self.view
-        view.stop()
-        for child in view.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = True
-                child.style = (
-                    discord.ButtonStyle.primary if child is self else discord.ButtonStyle.secondary
-                )
-        await view.resolve(interaction, self.location)
+def _join_notes(notes: Iterable[str | None]) -> str:
+    return ' • '.join(note for note in notes if note)
 
 
-class SearchView(discord.ui.View):
+def card_text(title: str, body: str, notes: Iterable[str | None] = ()) -> str:
+    """The markdown of a small card: heading, body and a muted line of facts."""
+    footer = _join_notes(notes)
+    return f'### {title}\n{body}' + (f'\n-# {footer}' if footer else '')
+
+
+def card(
+    title: str, description: str | None = None, *, notes: Iterable[str | None] = (),
+    footer: str | None = None, accent: Accent = Accent.brand, **kwargs: Any,
+) -> NoticeView:
+    """A small display-only economy card; ``notes`` are muted facts joined into its footer."""
+    return make_notice(title, description, compact=True, accent=accent, footer=_join_notes(notes) or footer, **kwargs)
+
+
+def job_line(job: Job, *, current_id: str, shifts: int) -> str:
+    """One career-ladder row: employed, unlocked or locked."""
+    unlocked = '\N{WHITE HEAVY CHECK MARK}' if job.shifts_required <= shifts else '\N{LOCK}'
+    marker = '\N{BRIEFCASE}' if job.id == current_id else unlocked
+    return f'{marker} {job.emoji} **{job.name}** • {job.pay_min:,}-{job.pay_max:,} • *{job.shifts_required} shifts*'
+
+
+class _ButtonCard(LayoutView):
+    """A small card: markdown text above a row of buttons, re-rendered whenever either changes."""
+
+    def __init__(
+        self, text: str, *, timeout: float, members: discord.abc.Snowflake | None = None
+    ) -> None:
+        super().__init__(timeout=timeout, members=members)
+        self.text = text
+        self.buttons: list[discord.ui.Button] = []
+
+    def render(self) -> None:
+        container = discord.ui.Container(discord.ui.TextDisplay(self.text), accent_colour=helpers.Colour.brand())
+        if self.buttons:
+            container.add_item(discord.ui.ActionRow(*self.buttons))
+        self.clear_items()
+        self.add_item(container)
+
+    def freeze(self, text: str | None = None) -> None:
+        """Disable every button, optionally swapping the text."""
+        for button in self.buttons:
+            button.disabled = True
+        if text is not None:
+            self.text = text
+        self.render()
+
+
+class SearchView(_ButtonCard):
     """Presents the ``search`` location options and forwards the pick to the cog.
 
     The cog supplies ``resolve``, an async callback receiving the interaction and
-    the chosen location; the view only owns the button plumbing (single-use,
-    invoker-locked, disabled once picked or timed out).
+    the chosen location; it calls :meth:`freeze` with the result and edits the
+    message. The view only owns the button plumbing (single-use, invoker-locked,
+    disabled once picked or timed out).
     """
 
     def __init__(
         self,
-        member: discord.abc.User,
+        member: discord.abc.Snowflake,
         options: Sequence[SearchLocation],
         resolve: Callable[[discord.Interaction, SearchLocation], Awaitable[None]],
         *,
-        timeout_text: str = 'You hesitated too long and went home empty-handed.',
+        prompt: str,
+        timeout_text: str,
     ) -> None:
-        super().__init__(timeout=30.0)
-        self.member = member
+        super().__init__(prompt, timeout=30.0, members=member)
         self.timeout_text = timeout_text
-        self.resolve = resolve
-        self.message: discord.Message | None = None
         for location in options:
-            self.add_item(SearchButton(location))
+            button: discord.ui.Button = discord.ui.Button(
+                style=discord.ButtonStyle.secondary, label=location.name, emoji=location.emoji)
+            button.callback = self._picker(button, location, resolve)  # type: ignore[assignment]
+            self.buttons.append(button)
+        self.render()
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.member.id:
-            await interaction.response.send_message('This choice is not yours.', ephemeral=True)
-            return False
-        return True
+    def _picker(
+        self, button: discord.ui.Button, location: SearchLocation,
+        resolve: Callable[[discord.Interaction, SearchLocation], Awaitable[None]],
+    ) -> Callable[[discord.Interaction], Awaitable[None]]:
+        async def callback(interaction: discord.Interaction) -> None:
+            self.stop()
+            button.style = discord.ButtonStyle.primary
+            self.freeze()
+            await resolve(interaction, location)
+        return callback
 
     async def on_timeout(self) -> None:
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = True
+        self.freeze(self.timeout_text)
         if self.message is not None:
-            try:
-                await self.message.edit(content=self.timeout_text, view=self)
-            except discord.HTTPException:
-                pass
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
 
-class _ChallengeButton(discord.ui.Button['WorkChallengeView']):
-    """One answer option of a :class:`WorkChallengeView`."""
-
-    def __init__(self, option: str) -> None:
-        super().__init__(style=discord.ButtonStyle.secondary, label=option)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        assert self.view is not None
-        view = self.view
-        view.correct = self.label == view.challenge.answer
-        view.stop()
-        for child in view.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = True
-                if child.label == view.challenge.answer:
-                    child.style = discord.ButtonStyle.success
-        if not view.correct:
-            self.style = discord.ButtonStyle.danger
-        await interaction.response.edit_message(view=view)
-
-
-class WorkChallengeView(discord.ui.View):
+class WorkChallengeView(_ButtonCard):
     """The ``work`` challenge: one button per option, invoker-locked and single use.
 
-    The cog awaits :meth:`wait`, then reads :attr:`correct` (``None`` = timed out).
+    The cog awaits :meth:`wait`, reads :attr:`correct` (``None`` = timed out) and
+    turns the same message into the shift result with :meth:`finish`.
     """
 
-    def __init__(self, member: discord.abc.User, challenge: Challenge) -> None:
-        super().__init__(timeout=WORK_CHALLENGE_TIMEOUT)
-        self.member = member
+    def __init__(self, member: discord.abc.Snowflake, challenge: Challenge, text: str) -> None:
+        super().__init__(text, timeout=WORK_CHALLENGE_TIMEOUT, members=member)
         self.challenge = challenge
         self.correct: bool | None = None
-        self.message: discord.Message | None = None
         for option in challenge.options:
-            self.add_item(_ChallengeButton(option))
+            button: discord.ui.Button = discord.ui.Button(style=discord.ButtonStyle.secondary, label=option)
+            button.callback = self._answer(button)  # type: ignore[assignment]
+            self.buttons.append(button)
+        self.render()
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.member.id:
-            await interaction.response.send_message('This is not your shift.', ephemeral=True)
-            return False
-        return True
+    def _answer(self, button: discord.ui.Button) -> Callable[[discord.Interaction], Awaitable[None]]:
+        async def callback(interaction: discord.Interaction) -> None:
+            self.correct = button.label == self.challenge.answer
+            if not self.correct:
+                button.style = discord.ButtonStyle.danger
+            self.stop()
+            await interaction.response.defer()  # finish() edits the card once the shift is paid
+        return callback
 
-    async def on_timeout(self) -> None:
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = True
+    async def finish(self, text: str) -> None:
+        """Mark the right answer and swap the task for the result."""
+        for button in self.buttons:
+            if button.label == self.challenge.answer:
+                button.style = discord.ButtonStyle.success
+        self.freeze(text)
         if self.message is not None:
-            try:
+            with suppress(discord.HTTPException):  # the pay already went through; a deleted card must not undo the rest
                 await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass
 
 
-class DropView(discord.ui.View):
+class DropView(_ButtonCard):
     """A chat drop: the first member to press **Grab** wins, everyone else is told they were too slow.
 
     ``award(member)`` pays the winner and returns the text shown on the finished card.
     """
 
-    def __init__(self, award: Callable[[discord.Member], Awaitable[str]]) -> None:
-        super().__init__(timeout=DROP_GRAB_TIMEOUT)
+    def __init__(self, text: str, award: Callable[[discord.Member], Awaitable[str]]) -> None:
+        super().__init__(text, timeout=DROP_GRAB_TIMEOUT)
         self._award = award
         self.winner: discord.abc.User | None = None
-        self.message: discord.Message | None = None
+        self.grab: discord.ui.Button = discord.ui.Button(
+            label='Grab', style=discord.ButtonStyle.success, emoji='\N{RAISED HAND}')
+        self.grab.callback = self._grab  # type: ignore[assignment]
+        self.buttons.append(self.grab)
+        self.render()
 
-    @discord.ui.button(label='Grab', style=discord.ButtonStyle.success, emoji='\N{RAISED HAND}')
-    async def grab(self, interaction: discord.Interaction, button: discord.ui.Button[DropView]) -> None:
+    async def _grab(self, interaction: discord.Interaction) -> None:
         if self.winner is not None:  # claimed before any await, so the first click wins
             await interaction.response.send_message('Too slow - someone already grabbed it.', ephemeral=True)
             return
@@ -202,19 +239,15 @@ class DropView(discord.ui.View):
             await interaction.followup.send('Something went wrong paying out the drop - try again.', ephemeral=True)
             return
         self.stop()
-        button.disabled = True
-        button.label = 'Grabbed'
-        await interaction.edit_original_response(content=text, view=self)
+        self.grab.label = 'Grabbed'
+        self.freeze(text)
+        await interaction.edit_original_response(view=self)
 
     async def on_timeout(self) -> None:
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = True
         if self.message is not None and self.winner is None:
-            try:
-                await self.message.edit(content='\N{ALARM CLOCK} Nobody grabbed the drop.', view=self)
-            except discord.HTTPException:
-                pass
+            self.freeze(card_text('\N{ALARM CLOCK} Drop missed', 'Nobody grabbed it in time.'))
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
 
 
 # -- interactive economy hub ---------------------------------------------------
@@ -352,47 +385,47 @@ class EconomyHub(LayoutView):
         earned = await db.economy.get_achievements(user_id, guild_id)
         boosts = await db.economy.get_active_boosts(user_id, guild_id)
         settings = await self.cog._settings(guild_id)
+        items = await db.economy.inventory_value(user_id, guild_id)
 
         job = get_job(job_row['job_id'] if job_row else None)
         shifts = job_row['shifts'] if job_row else 0
         streak = daily['streak'] if daily else 0
         quests_done = sum(1 for row in quest_rows if row['completed'])
 
-        pet_line = 'No pet — adopt one on the Pet page.'
+        pet_line = '\N{PAW PRINTS} *No pet yet*'
         if pet_row is not None:
             pet_species = get_species(pet_row['species'])
             if pet_species is not None:
-                pet_line = f'{pet_species.emoji} **{pet_row["name"]}** ({pet_species.name})'
+                pet_line = f'{pet_species.emoji} **{pet_row["name"]}** • {pet_species.name}'
 
+        bonus = (prestige_multiplier(prestige) - 1) * 100
         scale = settings.payout_multiplier * prestige_multiplier(prestige)
-        scale_line = f'\N{CHART WITH UPWARDS TREND} Payout multiplier: **x{scale:.2f}**\n' if scale != 1.0 else ''
+        scale_line = f'\N{CHART WITH UPWARDS TREND} **x{scale:.2f}** payouts\n' if scale != 1.0 else ''
 
         container = self._container(
-            f'## {Emojis.Economy.cash} {self.user.display_name}\'s Economy\n'
-            f'Everything about your standing on **{self.ctx.guild.name}** in one card.'  # type: ignore[union-attr]
+            f'### {self.user.display_name}\n'
+            f'-# Economy on **{self.ctx.guild.name}**'  # type: ignore[union-attr]
         )
         container.add_item(discord.ui.Separator())
-        items = await db.economy.inventory_value(self.user.id, guild_id)
         container.add_item(discord.ui.TextDisplay(
-            f'**Cash** {Emojis.Economy.cash} **{fnumb(balance.cash)}** • '
-            f'**Bank** {Emojis.Economy.cash} **{fnumb(balance.bank)}** • '
-            f'**Items** {Emojis.Economy.cash} **{fnumb(items)}** • '
-            f'**Net worth** {Emojis.Economy.cash} **{fnumb(balance.total + items)}**'
+            f'{Emojis.Economy.cash} **{fnumb(balance.total + items)}** net worth\n'
+            f'-# Cash {fnumb(balance.cash)} • Bank {fnumb(balance.bank)} • Items {fnumb(items)}'
         ))
+        container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
             f'{scale_line}'
-            f'\N{FIRE} Daily streak: **{streak}**\n'
-            f'\N{BRIEFCASE} Job: {job.emoji} **{job.name}** ({fnumb(shifts)} lifetime shifts)\n'
-            f'\N{GLOWING STAR} Prestige: **{prestige}** (+{(prestige_multiplier(prestige) - 1) * 100:.0f}% payouts)\n'
-            f'\N{PAW PRINTS} Pet: {pet_line}\n'
-            f'\N{SCROLL} Quests today: **{quests_done}/{len(quest_rows)}** complete\n'
-            f'\N{TROPHY} Badges: **{len(earned)}/{len(ACHIEVEMENTS)}** unlocked\n'
-            f'\N{HIGH VOLTAGE SIGN} Active boosts: **{len(boosts)}**'
+            f'{job.emoji} **{job.name}** • {shifts:,} shifts\n'
+            f'{pet_line}\n'
+            f'\N{GLOWING STAR} Prestige **{prestige}** • +{bonus:.0f}% payouts\n'
+            f'\N{FIRE} Streak **{streak}**\n'
+            f'\N{SCROLL} Quests **{quests_done}/{len(quest_rows)}**\n'
+            f'\N{TROPHY} Badges **{len(earned)}/{len(ACHIEVEMENTS)}**\n'
+            f'\N{HIGH VOLTAGE SIGN} Boosts **{len(boosts)}**'
         ))
         if self.own:
             container.add_item(discord.ui.ActionRow(
-                self._button('Open inventory', self._browse('inventory'), emoji='\N{SCHOOL SATCHEL}'),
-                self._button('Open shop', self._browse('shop'), emoji='\N{CONVENIENCE STORE}'),
+                self._button('Inventory', self._browse('inventory'), emoji='\N{SCHOOL SATCHEL}'),
+                self._button('Shop', self._browse('shop'), emoji='\N{CONVENIENCE STORE}'),
             ))
         return container
 
@@ -406,18 +439,18 @@ class EconomyHub(LayoutView):
         for row in rows:
             quest = board.get(row['quest'])
             description = quest.description if quest else row['quest']
+            reward = f'{Emojis.Economy.cash} **{fnumb(row["reward"])}**'
             if row['completed']:
-                lines.append(f'\N{WHITE HEAVY CHECK MARK} ~~{description}~~ — {Emojis.Economy.cash} **{fnumb(row["reward"])}**')
+                lines.append(f'\N{WHITE HEAVY CHECK MARK} ~~{description}~~ • {reward}')
             else:
                 lines.append(
-                    f'\N{SCROLL} **{description}**\n'
-                    f'{progress_bar(row["progress"], row["goal"])} {fnumb(row["progress"])}/{fnumb(row["goal"])} '
-                    f'— {Emojis.Economy.cash} **{fnumb(row["reward"])}**'
+                    f'**{description}**\n'
+                    f'{progress_bar(row["progress"], row["goal"])} `{row["progress"]:,}/{row["goal"]:,}` • {reward}'
                 )
 
         resets = datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.time(), tzinfo=datetime.UTC)
         container = self._container(
-            f'## \N{SCROLL} Daily Quests\nNew quests {discord.utils.format_dt(resets, "R")} (UTC).'
+            f'### \N{SCROLL} Daily Quests\n-# New quests {discord.utils.format_dt(resets, "R")}'
         )
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay('\n'.join(lines)))
@@ -429,37 +462,29 @@ class EconomyHub(LayoutView):
         current = get_job(row['job_id'] if row else None)
         shifts = row['shifts'] if row else 0
 
-        nxt = next((j for j in JOB_LADDER if j.shifts_required > shifts), None)
-        if nxt is not None:
-            unlock_line = (
-                f'Next unlock: {nxt.emoji} **{nxt.name}** — '
-                f'{progress_bar(shifts, nxt.shifts_required)} {shifts}/{nxt.shifts_required} shifts'
-            )
-        else:
-            unlock_line = 'You\'ve reached the top of the ladder. \N{ROCKET}'
-
-        ladder_lines = []
-        for ladder_job in JOB_LADDER:
-            unlocked = ladder_job.shifts_required <= shifts
-            marker = '\N{BRIEFCASE}' if ladder_job.id == current.id else (
-                '\N{WHITE HEAVY CHECK MARK}' if unlocked else '\N{LOCK}')
-            ladder_lines.append(
-                f'{marker} {ladder_job.emoji} **{ladder_job.name}** — '
-                f'{fnumb(ladder_job.pay_min)}-{fnumb(ladder_job.pay_max)}/shift *(needs {ladder_job.shifts_required})*'
-            )
-
         container = self._container(
-            f'## \N{BRIEFCASE} Career\n'
-            f'{current.emoji} **{current.name}** — {Emojis.Economy.cash} {fnumb(current.pay_min)}-'
-            f'{fnumb(current.pay_max)} per shift • **{fnumb(shifts)}** lifetime shifts\n{unlock_line}'
+            f'### \N{BRIEFCASE} Career\n'
+            f'{current.emoji} **{current.name}** • {Emojis.Economy.cash} {current.pay_min:,}-{current.pay_max:,} per shift\n'
+            f'-# {shifts:,} lifetime shifts'
         )
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay('\n'.join(ladder_lines)))
-        container.add_item(discord.ui.TextDisplay('-# Work with `work`.'))
+
+        nxt = next_unlock(shifts)
+        if nxt is not None:
+            container.add_item(discord.ui.TextDisplay(
+                f'**Next up:** {nxt.emoji} {nxt.name}\n'
+                f'{progress_bar(shifts, nxt.shifts_required)} `{shifts}/{nxt.shifts_required}`'
+            ))
+        # The ladder is long, so the card shows the rungs around the member's job; `job list` has them all.
+        index = JOB_LADDER.index(current)
+        container.add_item(discord.ui.TextDisplay(
+            '\n'.join(job_line(job, current_id=current.id, shifts=shifts) for job in JOB_LADDER[max(index - 2, 0):index + 4])
+            + '\n-# All jobs: `job list` • Clock in: `work`'
+        ))
         options = [
             discord.SelectOption(
-                label=j.name, value=j.id, emoji=j.emoji, description=f'{fnumb(j.pay_min)}-{fnumb(j.pay_max)} per shift')
-            for j in JOB_LADDER if j.shifts_required <= shifts and j.id != current.id
+                label=j.name, value=j.id, emoji=j.emoji, description=f'{j.pay_min:,}-{j.pay_max:,} per shift')
+            for j in available_jobs(shifts) if j.id != current.id
         ]
         if self.own and options:
             select: discord.ui.Select = discord.ui.Select(placeholder='Switch to an unlocked job…', options=options)
@@ -476,13 +501,13 @@ class EconomyHub(LayoutView):
     async def _page_pet(self) -> discord.ui.Container:
         guild_id = self.ctx.guild.id  # type: ignore[union-attr]
         row = await self.cog.bot.db.economy.get_pet(self.user.id, guild_id)
-        container = self._container('## \N{PAW PRINTS} Pet')
+        container = self._container('### \N{PAW PRINTS} Pet')
         container.add_item(discord.ui.Separator())
 
         if row is None:
             container.add_item(discord.ui.TextDisplay(
-                'You don\'t have a pet yet. Pets earn cash passively while you keep them fed.\n'
-                'Browse the species with `pet shop` and adopt with `pet adopt <species> [name]`.'
+                'No pet yet. Pets earn cash while you keep them fed.\n'
+                '-# Browse: `pet shop` • Adopt: `pet adopt <species> [name]`'
             ))
             return container
 
@@ -499,11 +524,10 @@ class EconomyHub(LayoutView):
             now=now,
         )
         container.add_item(discord.ui.TextDisplay(
-            f'{species.emoji} **{row["name"]}** ({species.name})\n'
+            f'{species.emoji} **{row["name"]}** • {species.name}\n'
             f'{_HUNGER_LABELS[claim.hunger.value]}\n'
-            f'{Emojis.Economy.cash} **{fnumb(claim.amount)}** unclaimed '
-            f'*(rate {fnumb(species.hourly_rate)}/h, stores up to {species.storage_hours}h)*\n'
-            f'Feeding costs {Emojis.Economy.cash} **{fnumb(species.feed_cost)}**'
+            f'{Emojis.Economy.cash} **{fnumb(claim.amount)}** unclaimed\n'
+            f'-# {species.hourly_rate:,}/h • stores {species.storage_hours}h • feeding costs {species.feed_cost:,}'
         ))
         if self.own:
             container.add_item(discord.ui.ActionRow(
@@ -519,13 +543,12 @@ class EconomyHub(LayoutView):
         earned = {row['achievement']: row['earned_at'] for row in earned_rows}
 
         lines = [
-            f'{a.emoji} **{a.name}** — {a.description} '
-            f'*(earned {discord.utils.format_dt(earned[a.id].replace(tzinfo=datetime.UTC), "d")})*' if a.id in earned
-            else f'\N{LOCK} *{a.name}* — {a.description}'
-            for a in ACHIEVEMENTS
+            f'{a.emoji} **{a.name}** • {discord.utils.format_dt(earned[a.id].replace(tzinfo=datetime.UTC), "d")}\n-# {a.description}'
+            for a in ACHIEVEMENTS if a.id in earned
         ]
+        lines += [f'-# \N{LOCK} {a.name}: {a.description}' for a in ACHIEVEMENTS if a.id not in earned]
         container = self._container(
-            f'## \N{TROPHY} Achievements\nUnlocked **{len(earned)}/{len(ACHIEVEMENTS)}** badges.'
+            f'### \N{TROPHY} Achievements\n-# **{len(earned)}/{len(ACHIEVEMENTS)}** unlocked'
         )
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay('\n'.join(lines)))
@@ -538,21 +561,19 @@ class EconomyHub(LayoutView):
         prestige = await db.economy.get_prestige(self.user.id, guild_id)
         settings = await self.cog._settings(guild_id)
 
-        lines = [boost_display_line(row) for row in boosts] or ['*No active boosts — usable shop items grant them.*']
+        lines = [boost_display_line(row) for row in boosts] or ['*No active boosts. Usable shop items grant them.*']
         if prestige > 0:
-            lines.append(f'\N{GLOWING STAR} **Prestige {prestige}** — permanent +{(prestige_multiplier(prestige) - 1) * 100:.0f}% payouts')
+            lines.append(f'\N{GLOWING STAR} **Prestige {prestige}** • +{(prestige_multiplier(prestige) - 1) * 100:.0f}% payouts')
         if settings.payout_multiplier != 1.0:
-            lines.append(f'\N{CHART WITH UPWARDS TREND} Server payout multiplier: **x{settings.payout_multiplier:.2f}**')
+            lines.append(f'\N{CHART WITH UPWARDS TREND} Server payouts **x{settings.payout_multiplier:.2f}**')
 
-        level = prestige
-        requirement = prestige_requirement(level)
+        requirement = prestige_requirement(prestige)
         balance = await self.ctx.db.get_user_balance(self.user.id, guild_id)
 
-        container = self._container('## \N{HIGH VOLTAGE SIGN} Perks & Boosts')
+        container = self._container('### \N{HIGH VOLTAGE SIGN} Perks & Boosts')
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay('\n'.join(lines)))
         container.add_item(discord.ui.TextDisplay(
-            f'-# Next prestige at {Emojis.Economy.cash} {fnumb(requirement)} net worth '
-            f'({progress_bar(balance.total, requirement)} {fnumb(balance.total)}/{fnumb(requirement)}).'
+            f'**Next prestige**\n{progress_bar(balance.total, requirement)} `{balance.total:,}/{requirement:,}`'
         ))
         return container

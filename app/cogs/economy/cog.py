@@ -22,9 +22,12 @@ from app.cogs.economy.ui import (
     SearchView,
     WorkChallengeView,
     boost_display_line,
+    card,
+    card_text,
+    job_line,
     progress_bar,
 )
-from app.core import Accent, Bot, Cog, converter, make_notice
+from app.core import Accent, Bot, Cog, converter
 from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator
 from app.core.timer import Timer
@@ -35,6 +38,7 @@ from app.services.economy import (
     BEG_FAIL_LINES,
     BEG_SUCCESS_LINES,
     BEG_TABLE,
+    CLAIM_LINES,
     DAILY_COOLDOWN,
     DIG_COOLDOWN,
     DIG_TABLE,
@@ -45,10 +49,12 @@ from app.services.economy import (
     HUNTING_TABLE,
     JOB_LADDER,
     LIFESAVER_KEY,
+    LOOT_LINES,
     MARKET_TAX,
     MAX_ITEM_STOCK,
     MAX_LISTINGS,
     MEME_FORMATS,
+    MEME_HIT_LINES,
     MONTHLY_AMOUNT,
     MONTHLY_COOLDOWN,
     NO_TOOL_PAYOUT,
@@ -58,9 +64,11 @@ from app.services.economy import (
     PRESTIGE_STEP,
     REPLY_LIMIT,
     SEARCH_COOLDOWN,
+    SEARCH_FOUND_LINES,
     VOTE_REWARD,
     WEEKLY_AMOUNT,
     WEEKLY_COOLDOWN,
+    WORK_CHALLENGE_TIMEOUT,
     WORK_COOLDOWN,
     WORK_FAIL_FACTOR,
     WORK_SUCCESS_BONUS,
@@ -119,6 +127,7 @@ from app.services.economy import (
     vote_claimable,
 )
 from app.utils import fnumb, fuzzy, get_asset_url, helpers, pluralize, timetools
+from app.utils.constants import WORKING_RESPONSES
 from config import Emojis
 
 #: Staked casino games whose wins advance the ``casino_win`` quest (fight and heist have their own kinds).
@@ -126,6 +135,8 @@ _CASINO_QUEST_GAMES = frozenset({
     'blackjack', 'slots', 'roulette', 'poker', 'tower', 'higherlower', 'dice', 'mines', 'coinflip',
     'horserace', 'russianroulette', 'crash', 'scratch', 'snakeeyes', 'gamble',
 })
+
+_DROP_TITLE = '\N{WRAPPED PRESENT} Chat drop'
 
 #: Ceiling for admin/transfer money arguments, far under the bigint columns so sums never overflow.
 MAX_MONEY = 10**15
@@ -211,12 +222,12 @@ class Economy(Cog):
             amount = max(1, round(drop.coins * scale))
             balance = await self.bot.db.get_user_balance(member.id, member.guild.id)
             await balance.add(cash=amount)
-            return f'{member.mention} grabbed the drop: {Emojis.Economy.cash} **{fnumb(amount)}**!'
+            return card_text(_DROP_TITLE, f'{member.mention} grabbed {Emojis.Economy.cash} **{fnumb(amount)}**!')
         row = await db.ensure_builtin(member.guild.id, drop.item)
         await db.add_to_inventory(member.id, member.guild.id, row['id'], 1)
         if drop.item.drop_from:
             await db.record_discovery(member.id, member.guild.id, drop.item.key)
-        return f'{member.mention} grabbed the drop: {drop.item.emoji} **{row["name"]}**!'
+        return card_text(_DROP_TITLE, f'{member.mention} grabbed {drop.item.emoji} **{row["name"]}**!')
 
     async def _drops_enabled(self, guild_id: int) -> bool:
         """Whether chat drops are on for the guild, cached for 5 minutes so a message costs no DB read."""
@@ -240,18 +251,20 @@ class Economy(Cog):
         if not await self._drops_enabled(message.guild.id):
             return
         drop = roll_chat_drop()
-        view = DropView(lambda member: self._award_drop(member, drop))
-        prize = f'{Emojis.Economy.cash} coins' if drop.item is None else f'{drop.item.emoji} an item'
+        prize = f'{Emojis.Economy.cash} **coins**' if drop.item is None else f'{drop.item.emoji} **an item**'
+        view = DropView(
+            card_text(_DROP_TITLE, f'A drop with {prize} appeared.\n-# First to press **Grab** keeps it.'),
+            lambda member: self._award_drop(member, drop),
+        )
         try:
-            view.message = await message.channel.send(
-                f'\N{WRAPPED PRESENT} A drop appeared with {prize}! Press **Grab** first.', view=view)
+            view.message = await message.channel.send(view=view)
         except discord.HTTPException:
             pass
 
     @staticmethod
-    def _scale_suffix(scale: float) -> str:
-        """A short note appended to payout messages when a bonus multiplier applied."""
-        return f' *(x{scale:.2f} payout bonus)*' if scale > 1.0 else ''
+    def _scale_note(scale: float) -> str | None:
+        """A short footer note for payout cards when a bonus multiplier applied."""
+        return f'x{scale:.2f} payout bonus' if scale > 1.0 else None
 
     async def _ensure_quests(self, user_id: int, guild_id: int, day: datetime.date) -> list[Any]:
         """Fetch today's quest rows, materializing the deterministic board on first touch."""
@@ -276,8 +289,8 @@ class Economy(Cog):
         balance = await self.bot.db.get_user_balance(user_id, guild_id)
         await balance.add(cash=total)
         return '\n'.join(
-            f'\N{SCROLL} **Quest complete:** {board[row["quest"]].description if row["quest"] in board else row["quest"]} '
-            f'— {Emojis.Economy.cash} **{fnumb(row["reward"])}**'
+            f'{board[row["quest"]].description if row["quest"] in board else row["quest"]} '
+            f'• {Emojis.Economy.cash} **{fnumb(row["reward"])}**'
             for row in completed
         )
 
@@ -286,7 +299,7 @@ class Economy(Cog):
         assert ctx.guild is not None
         lines = await self._advance_quests(ctx.author.id, ctx.guild.id, kind, amount)
         if lines:
-            await ctx.send(lines)
+            await ctx.send(view=card('\N{SCROLL} Quest complete', lines))
             await self._sync_achievements(ctx)
 
     async def _award_achievements(self, user_id: int, guild_id: int) -> str | None:
@@ -325,7 +338,7 @@ class Economy(Cog):
         assert ctx.guild is not None
         text = await self._award_achievements(ctx.author.id, ctx.guild.id)
         if announce and text:
-            await ctx.send(view=make_notice('\N{TROPHY} Achievement unlocked!', text, accent=Accent.success))
+            await ctx.send(view=card('\N{TROPHY} Achievement unlocked!', text, accent=Accent.success))
 
     async def job_autocomplete(
         self, _interaction: discord.Interaction, current: str
@@ -334,7 +347,7 @@ class Economy(Cog):
         results = fuzzy.finder(current, JOB_LADDER, key=lambda j: j.name)
         return [
             app_commands.Choice(
-                name=f'{job.name} • {fnumb(job.pay_min)}-{fnumb(job.pay_max)}/shift • needs {job.shifts_required} shifts',
+                name=f'{job.name} • {job.pay_min:,}-{job.pay_max:,}/shift • needs {job.shifts_required} shifts',
                 value=job.id,
             )
             for job in results[:25]
@@ -565,11 +578,11 @@ class Economy(Cog):
         richer = sum(1 for other in everyone if other.user_id != user.id and other.total > balance.total)
         rank = f'**#{richer + 1:,}** of {max(len(everyone), 1):,}'
         cash = Emojis.Economy.cash
-        await ctx.send(view=make_notice(
+        await ctx.send(view=card(
             f"{user.display_name}'s Balance",
-            f'{cash} **Cash** {fnumb(balance.cash)}\n{cash} **Bank** {bank}\n'
-            f'{cash} **Items** {fnumb(items)}\n{cash} **Net worth** {fnumb(balance.total + items)}\n'
-            f'\N{TROPHY} Server rank {rank}',
+            f'{cash} **{fnumb(balance.total + items)}** net worth\n'
+            f'-# Cash {fnumb(balance.cash)} • Bank {bank} • Items {fnumb(items)}\n'
+            f'\N{TROPHY} Rank {rank}',
             thumbnail=get_asset_url(user),
         ))
 
@@ -607,6 +620,12 @@ class Economy(Cog):
         embed.set_footer(text=footer, icon_url=discord.PartialEmoji.from_str(cash).url)
         await LinePaginator.start(ctx, entries=users, embed=embed, location='description')
 
+    async def _send_claim(
+        self, ctx: Context, kind: str, title: str, amount: int, scale: float, *notes: str
+    ) -> None:
+        line = random.choice(CLAIM_LINES[kind]).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
+        await ctx.send(view=card(title, line, notes=(*notes, self._scale_note(scale))))
+
     @command("daily", description="Claim your daily reward and build a streak.", guild_only=True, hybrid=True, extras={"example": "daily"})
     async def daily(self, ctx: Context) -> None:
         """Claim your daily reward. Claim on consecutive days to grow your streak bonus."""
@@ -633,9 +652,8 @@ class Economy(Cog):
             await balance.add(cash=amount, bank_space=roll_bank_space())
             await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now, result.streak)
 
-        await ctx.send_success(
-            f"You claimed {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)} "
-            f"\N{FIRE} Streak: **{pluralize(result.streak):day}**."
+        await self._send_claim(
+            ctx, 'daily', '\N{CALENDAR} Daily reward', amount, scale, f'\N{FIRE} {pluralize(result.streak):day} streak'
         )
         await self._sync_achievements(ctx)
 
@@ -661,9 +679,7 @@ class Economy(Cog):
             balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
             await balance.add(cash=amount)
             await self.bot.db.economy.set_weekly(ctx.author.id, ctx.guild.id, now)
-        await ctx.send_success(
-            f"You claimed your weekly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
-        )
+        await self._send_claim(ctx, 'weekly', '\N{SPIRAL CALENDAR PAD} Weekly reward', amount, scale)
 
     @command("monthly", description="Claim your monthly reward.", guild_only=True)
     async def monthly(self, ctx: Context) -> None:
@@ -687,9 +703,7 @@ class Economy(Cog):
             balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
             await balance.add(cash=amount)
             await self.bot.db.economy.set_monthly(ctx.author.id, ctx.guild.id, now)
-        await ctx.send_success(
-            f"You claimed your monthly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
-        )
+        await self._send_claim(ctx, 'monthly', '\N{TEAR-OFF CALENDAR} Monthly reward', amount, scale)
 
     @command("voteclaim", alias="claimvote", description="Claim coins for your active bot-list vote.", guild_only=True)
     async def voteclaim(self, ctx: Context) -> None:
@@ -721,9 +735,7 @@ class Economy(Cog):
         amount = round(VOTE_REWARD * scale)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount)
-        await ctx.send_success(
-            f"Thanks for voting! You claimed {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
-        )
+        await self._send_claim(ctx, 'vote', '\N{BALLOT BOX WITH BALLOT} Vote reward', amount, scale)
 
     # -- items: shared actions (commands and the item browser both call these) --
 
@@ -1373,62 +1385,52 @@ class Economy(Cog):
 
     # -- earning activities ----------------------------------------------
 
+    async def _forage(self, ctx: Context, activity: str, title: str, table: Any, junk_at: int) -> None:
+        """Roll a loot activity (``fish``, ``hunt``, ``dig``): pay it, wear the tool and post the result card."""
+        assert ctx.guild is not None
+        catch = roll_loot(table)
+        boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
+        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
+        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, activity)
+        amount = round(catch.amount * boost * scale * factor)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        await balance.add(cash=amount)
+        if roll_death(activity):
+            extra += await resolve_death(self.bot, ctx.author.id, ctx.guild.id)
+
+        hits, misses = LOOT_LINES[activity]
+        caught = f"{catch.emoji} **{catch.name}**"
+        if catch.amount <= junk_at:
+            await ctx.send(view=card(title, random.choice(misses).format(catch=caught) + extra))
+        else:
+            coins = f"{Emojis.Economy.cash} **{fnumb(amount)}**"
+            await ctx.send(view=card(
+                title, random.choice(hits).format(catch=caught, coins=coins) + extra,
+                notes=(f"+{boost - 1.0:.0%} loot boost" if boost > 1.0 else None, self._scale_note(scale)),
+            ))
+        await self._bump_quests(ctx, activity)
+
     @command("fish", description="Cast a line and earn a random catch.", guild_only=True)
     @cooldown(1, FISHING_COOLDOWN)
     async def fish(self, ctx: Context) -> None:
         """Go fishing for a chance at cash — outcomes range from junk to a rare pearl."""
-        assert ctx.guild is not None
-        catch = roll_loot(FISHING_TABLE)
-        boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, "fish")
-        amount = round(catch.amount * boost * scale * factor)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
-
-        if catch.amount <= 5:
-            await ctx.send_info(f"{catch.emoji} You reeled in **{catch.name}** — barely worth it.{extra}")
-        else:
-            suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
-            await ctx.send_success(
-                f"{catch.emoji} You caught **{catch.name}** and sold it for "
-                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}{extra}"
-            )
-        await self._bump_quests(ctx, "fish")
+        await self._forage(ctx, "fish", "\N{FISHING POLE AND FISH} Fishing", FISHING_TABLE, 5)
 
     @command("hunt", description="Head out hunting for a bigger, riskier payout.", guild_only=True)
     @cooldown(1, HUNTING_COOLDOWN)
     async def hunt(self, ctx: Context) -> None:
         """Go hunting — higher payouts and variance than fishing, on a longer cooldown."""
-        assert ctx.guild is not None
-        catch = roll_loot(HUNTING_TABLE)
-        boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, "hunt")
-        amount = round(catch.amount * boost * scale * factor)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
-        if roll_death('hunt'):
-            extra += await resolve_death(self.bot, ctx.author.id, ctx.guild.id)
-
-        if catch.amount <= 10:
-            await ctx.send_info(f"{catch.emoji} You found **{catch.name}** and came back empty-handed.{extra}")
-        else:
-            suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
-            await ctx.send_success(
-                f"{catch.emoji} You bagged **{catch.name}** worth "
-                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}{extra}"
-            )
-        await self._bump_quests(ctx, "hunt")
+        await self._forage(ctx, "hunt", "\N{BOW AND ARROW} Hunting", HUNTING_TABLE, 10)
 
     @command("beg", description="Beg for a little spare change.", guild_only=True)
     @cooldown(1, BEG_COOLDOWN)
     async def beg(self, ctx: Context) -> None:
         """Beg passers-by for spare change — quick, low stakes, occasionally lucrative."""
         assert ctx.guild is not None
+        title = "\N{PERSON WITH FOLDED HANDS} Begging"
         catch = roll_loot(BEG_TABLE)
         if catch.amount <= 0:
-            await ctx.send_info(f'{catch.emoji} {random.choice(BEG_FAIL_LINES)}')
+            await ctx.send(view=card(title, f'{catch.emoji} {random.choice(BEG_FAIL_LINES)}'))
         else:
             scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
             amount = round(catch.amount * scale)
@@ -1438,31 +1440,14 @@ class Economy(Cog):
                 donor=f'**{random.choice(BEG_DONORS).title()}**',
                 coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**',
             )
-            await ctx.send_success(f'{catch.emoji} {line}{self._scale_suffix(scale)}')
+            await ctx.send(view=card(title, f'{catch.emoji} {line}', notes=(self._scale_note(scale),)))
         await self._bump_quests(ctx, "beg")
 
     @command("dig", description="Dig around for buried valuables.", guild_only=True)
     @cooldown(1, DIG_COOLDOWN)
     async def dig(self, ctx: Context) -> None:
         """Grab a shovel and dig — finds range from bottle caps to ancient relics."""
-        assert ctx.guild is not None
-        catch = roll_loot(DIG_TABLE)
-        boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
-        scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, "dig")
-        amount = round(catch.amount * boost * scale * factor)
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=amount)
-
-        if catch.amount <= 8:
-            await ctx.send_info(f"{catch.emoji} You dug up **{catch.name}** — hardly a treasure.{extra}")
-        else:
-            suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
-            await ctx.send_success(
-                f"{catch.emoji} You unearthed **{catch.name}** worth "
-                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}{extra}"
-            )
-        await self._bump_quests(ctx, "dig")
+        await self._forage(ctx, "dig", "\N{PICK} Digging", DIG_TABLE, 8)
 
     @command("search", description="Search one of three random spots for cash.", guild_only=True)
     @cooldown(1, SEARCH_COOLDOWN)
@@ -1474,7 +1459,7 @@ class Economy(Cog):
         """
         assert ctx.guild is not None
         guild_id = ctx.guild.id
-        options = pick_search_options()
+        title = "\N{RIGHT-POINTING MAGNIFYING GLASS} Search"
 
         async def resolve(interaction: discord.Interaction, location: SearchLocation) -> None:
             outcome = resolve_search(location)
@@ -1482,26 +1467,31 @@ class Economy(Cog):
             if outcome.injured:
                 fine = await self.bot.db.economy.fine_cash(ctx.author.id, guild_id, outcome.fine)
                 text = (
-                    f'{location.emoji} **{location.name}** — {outcome.flavor}\n'
+                    f'{location.emoji} **{location.name}**: {outcome.flavor}\n'
                     f'You lost {Emojis.Economy.cash} **{fnumb(fine)}**.'
                 )
                 if roll_death('search'):
                     text += await resolve_death(self.bot, ctx.author.id, guild_id)
+                view.freeze(card_text(title, text))
             else:
                 assert outcome.catch is not None
                 scale = await self._payout_scale(ctx.author.id, guild_id)
                 amount = round(outcome.catch.amount * scale)
                 await balance.add(cash=amount)
-                text = (
-                    f'{location.emoji} **{location.name}** — you found {outcome.catch.emoji} '
-                    f'**{outcome.catch.name}** worth {Emojis.Economy.cash} **{fnumb(amount)}**!'
-                    f'{self._scale_suffix(scale)}'
-                )
-            await interaction.response.edit_message(content=text, view=view)
+                view.freeze(card_text(title, random.choice(SEARCH_FOUND_LINES).format(
+                    place=location.name,
+                    catch=f'{outcome.catch.emoji} **{outcome.catch.name}**',
+                    coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**',
+                ), (self._scale_note(scale),)))
+            await interaction.response.edit_message(view=view)
             await self._bump_quests(ctx, "search")
 
-        view = SearchView(ctx.author, options, resolve)
-        view.message = await ctx.send("\N{RIGHT-POINTING MAGNIFYING GLASS} **Where do you want to search?**", view=view)
+        view = SearchView(
+            ctx.author, pick_search_options(), resolve,
+            prompt=card_text(title, 'Where do you want to look?\n-# Riskier spots pay more, but they can cost you.'),
+            timeout_text=card_text(title, 'You hesitated too long and went home empty-handed.'),
+        )
+        view.message = await ctx.send(view=view)
 
     @command("postmemes", description="Post a meme online and hope it goes viral.", guild_only=True)
     @cooldown(1, POSTMEME_COOLDOWN)
@@ -1513,33 +1503,36 @@ class Economy(Cog):
         """
         assert ctx.guild is not None
         guild_id = ctx.guild.id
+        title = "\N{MOBILE PHONE} Post a meme"
 
         async def resolve(interaction: discord.Interaction, meme: SearchLocation) -> None:
             outcome = resolve_search(meme)
             balance = await ctx.db.get_user_balance(ctx.author.id, guild_id)
             if outcome.injured:
                 fine = await self.bot.db.economy.fine_cash(ctx.author.id, guild_id, outcome.fine)
-                text = (
-                    f'{meme.emoji} **{meme.name}** flopped — {outcome.flavor}\n'
+                view.freeze(card_text(title, (
+                    f'{meme.emoji} **{meme.name}** flopped: {outcome.flavor}\n'
                     f'You lost {Emojis.Economy.cash} **{fnumb(fine)}**.'
-                )
+                )))
             else:
                 assert outcome.catch is not None
                 scale = await self._payout_scale(ctx.author.id, guild_id)
                 amount = round(outcome.catch.amount * scale)
                 await balance.add(cash=amount)
-                text = (
-                    f'{meme.emoji} Your **{meme.name}** earned {outcome.catch.emoji} **{outcome.catch.name}** — '
-                    f'{Emojis.Economy.cash} **{fnumb(amount)}** in ad revenue!{self._scale_suffix(scale)}'
-                )
-            await interaction.response.edit_message(content=text, view=view)
+                view.freeze(card_text(title, random.choice(MEME_HIT_LINES).format(
+                    meme=meme.name,
+                    catch=f'{outcome.catch.emoji} **{outcome.catch.name}**',
+                    coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**',
+                ), (self._scale_note(scale),)))
+            await interaction.response.edit_message(view=view)
             await self._bump_quests(ctx, 'postmeme')
 
         view = SearchView(
             ctx.author, pick_search_options(locations=MEME_FORMATS), resolve,
-            timeout_text='You overthought the caption and never posted.',
+            prompt=card_text(title, 'What kind of meme are you posting?\n-# Edgy formats go viral more, and flop harder.'),
+            timeout_text=card_text(title, 'You overthought the caption and never posted.'),
         )
-        view.message = await ctx.send("\N{MOBILE PHONE} **What kind of meme are you posting?**", view=view)
+        view.message = await ctx.send(view=view)
 
     @command("work", description="Work a shift at your job.", guild_only=True, extras={"example": "work"})
     @cooldown(1, WORK_COOLDOWN, commands.BucketType.member)
@@ -1555,15 +1548,25 @@ class Economy(Cog):
         job = get_job(row["job_id"] if row else None)
 
         result = compute_shift(job)
-        challenge = generate_challenge()
-        view = WorkChallengeView(ctx.author, challenge)
+        challenge = generate_challenge(job_id=job.id)
+        title = f"{job.emoji} {job.name}"
+
+        def task(prompt: str) -> str:
+            ends = discord.utils.utcnow() + datetime.timedelta(seconds=WORK_CHALLENGE_TIMEOUT)
+            return card_text(title, prompt, (
+                f"Right: +{WORK_SUCCESS_BONUS - 1:.0%} pay",
+                f"Wrong or late: {WORK_FAIL_FACTOR:.0%} pay",
+                f"Ends {discord.utils.format_dt(ends, 'R')}",
+            ))
+
         if challenge.kind == 'memory':
-            header = f"{job.emoji} **Memorise the order!**\n{challenge.prompt}"
-            view.message = await ctx.send(header)
+            message = await ctx.send(view=card(title, f"**Memorise the order!**\n{challenge.prompt}"))
             await asyncio.sleep(3)
-            view.message = await view.message.edit(content=f"{job.emoji} **Which order did you see?**", view=view)
+            view = WorkChallengeView(ctx.author, challenge, task("**Which order did you see?**"))
+            view.message = await message.edit(view=view)
         else:
-            view.message = await ctx.send(f"{job.emoji} **Quick task before you clock in!**\n{challenge.prompt}", view=view)
+            view = WorkChallengeView(ctx.author, challenge, task(challenge.prompt))
+            view.message = await ctx.send(view=view)
         await view.wait()
         factor = WORK_SUCCESS_BONUS if view.correct else WORK_FAIL_FACTOR
         if view.correct:
@@ -1580,21 +1583,16 @@ class Economy(Cog):
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount, bank_space=roll_bank_space())
 
-        message = (
-            f"{job.emoji} You worked a shift as **{job.name}** and earned "
-            f"{Emojis.Economy.cash} **{fnumb(amount)}**.{self._scale_suffix(scale)}"
-        )
-        message += f"\n{outcome}"
+        lines = [random.choice(job.lines or WORKING_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**"), outcome]
         if result.event.id != "normal":
-            message += f"\n{result.event.flavor}"
+            lines.append(result.event.flavor)
         newly_unlocked = [j for j in JOB_LADDER if j.shifts_required == shifts]
         if newly_unlocked:
             unlocked = newly_unlocked[0]
-            message += (
-                f"\n\N{CHART WITH UPWARDS TREND} **{unlocked.name}** is now available to you — "
-                f"apply with `job apply {unlocked.id}`!"
+            lines.append(
+                f"\N{CHART WITH UPWARDS TREND} {unlocked.emoji} **{unlocked.name}** unlocked: `job apply {unlocked.id}`"
             )
-        await ctx.send_success(message)
+        await view.finish(card_text(title, "\n".join(lines), (f"{shifts:,} lifetime shifts", self._scale_note(scale))))
         await self._bump_quests(ctx, "work")
         await self._sync_achievements(ctx)
 
@@ -1611,18 +1609,10 @@ class Economy(Cog):
         shifts = row["shifts"] if row else 0
         current_id = row["job_id"] if row else JOB_LADDER[0].id
 
-        lines = []
-        for ladder_job in JOB_LADDER:
-            unlocked = ladder_job.shifts_required <= shifts
-            marker = "\N{BRIEFCASE}" if ladder_job.id == current_id else ("\N{WHITE HEAVY CHECK MARK}" if unlocked else "\N{LOCK}")
-            lines.append(
-                f"{marker} {ladder_job.emoji} **{ladder_job.name}** — "
-                f"{Emojis.Economy.cash} {fnumb(ladder_job.pay_min)}-{fnumb(ladder_job.pay_max)}/shift "
-                f"*(needs {ladder_job.shifts_required} shifts)*"
-            )
-        await ctx.send(view=make_notice(
-            "Career Ladder", "\n".join(lines),
-            footer=f"You have worked {fnumb(shifts)} shifts. Apply with `job apply <name>`.",
+        await ctx.send(view=card(
+            "\N{BRIEFCASE} Career Ladder",
+            "\n".join(job_line(job, current_id=current_id, shifts=shifts) for job in JOB_LADDER),
+            footer=f"{shifts:,} lifetime shifts • pay per shift • Apply: `job apply <name>`",
         ))
 
     async def job_apply_action(self, member: discord.Member, name: str) -> tuple[bool, str]:
@@ -1685,11 +1675,10 @@ class Economy(Cog):
         ends_at = record["ends_at"].replace(tzinfo=datetime.UTC)
         odds = f"{yours / total_tickets:.1%}" if total_tickets else "0%"
 
-        view = make_notice(
+        view = card(
             "Server Lottery",
             "The pot grows with every ticket sold.\n"
-            "You'll need to have the Ticket Price in cash in order to buy a ticket.\n"
-            "Buy yourself in with `lottery buy <amount>`.",
+            "-# Buy in with `lottery buy <amount>`.",
             accent=Accent.info,
             thumbnail=get_asset_url(ctx.guild),
             fields=[
@@ -1740,13 +1729,10 @@ class Economy(Cog):
             f"Drawing {discord.utils.format_dt(when, 'R')}."
         )
 
-        view = make_notice(
+        view = card(
             "Server Lottery",
-            "## There has been a lottery started for this server!\n"
-            "-# Enter to participate and grab the chance to earn a fortune!\n\n"
-            "The pot grows with every ticket sold.\n"
-            "You'll need to have the Ticket Price in cash in order to buy a ticket.\n"
-            "Buy yourself in with `lottery buy <amount>`.",
+            "**A lottery just started!** The pot grows with every ticket sold.\n"
+            "-# Buy in with `lottery buy <amount>`.",
             accent=Accent.info,
             thumbnail=get_asset_url(ctx.guild),
             fields=[
@@ -1821,7 +1807,7 @@ class Economy(Cog):
         if not isinstance(channel, discord.abc.Messageable):
             return
         if winner_id is None or jackpot <= 0:
-            view = make_notice(
+            view = card(
                 "Lottery Ended",
                 "The lottery ended with no tickets sold. Better luck next time!",
                 accent=Accent.warning,
@@ -1830,7 +1816,7 @@ class Economy(Cog):
             return
 
         # The mention lives inside the container's text display, which still pings.
-        view = make_notice(
+        view = card(
             "\N{PARTY POPPER} Lottery Winner!",
             f"<@{winner_id}> won the jackpot of {Emojis.Economy.cash} **{fnumb(jackpot)}**!",
             accent=Accent.success,
@@ -1918,7 +1904,7 @@ class Economy(Cog):
                     for name, left in waiting
                 ),
             ))
-        await ctx.send(view=make_notice(f"{ctx.author.display_name}'s Cooldowns", fields=fields))
+        await ctx.send(view=card(f"{ctx.author.display_name}'s Cooldowns", fields=fields))
 
     @command("multipliers", alias="multi", description="See what boosts your earnings.", guild_only=True)
     @describe(member="The member to look at (defaults to you).")
@@ -1946,7 +1932,7 @@ class Economy(Cog):
             vote=await self.bot.db.votes.get_active_multiplier(user.id),
             tools=tools,
         )
-        await ctx.send(view=make_notice(
+        await ctx.send(view=card(
             f"{user.display_name}'s Multipliers", '\n'.join(lines), thumbnail=get_asset_url(user)
         ))
 
@@ -1965,7 +1951,7 @@ class Economy(Cog):
             (f'{g.activity.title()} ({g.found}/{g.total})', '\n'.join(label for label, _ in g.entries))
             for g in groups
         ]
-        await ctx.send(view=make_notice(
+        await ctx.send(view=card(
             f"{user.display_name}'s Collection", f'**{found}/{total}** drops discovered.',
             fields=fields, thumbnail=get_asset_url(user),
         ))
@@ -2087,7 +2073,7 @@ class Economy(Cog):
         top = best_game(await db.game_stats.get_member_games(gid, user.id))
         best = f"{str(top['game']).replace('_', ' ').title()} ({fnumb(top['profit'])} profit)" if top else "None yet"
         cash = Emojis.Economy.cash
-        await ctx.send(view=make_notice(
+        await ctx.send(view=card(
             f"{user.display_name}'s Profile" + (f" - {title}" if title else ""),
             f"{cash} **Net worth** {fnumb(worth)} (rank **#{richer + 1:,}** of {max(len(everyone), 1):,})\n"
             f"\N{GLOWING STAR} **Prestige** {await db.economy.get_prestige(user.id, gid)}\n"
@@ -2133,7 +2119,7 @@ class Economy(Cog):
             f"feeding costs {fnumb(species.feed_cost)}"
             for species in PET_SPECIES
         ]
-        await ctx.send(view=make_notice(
+        await ctx.send(view=card(
             "Pet Adoption Centre", "\n".join(lines),
             footer="Adopt with `pet adopt <species> [name]` — one pet per member.",
         ))
@@ -2213,9 +2199,10 @@ class Economy(Cog):
         balance = await self.bot.db.get_user_balance(member.id, member.guild.id)
         await balance.add(cash=amount)
         await self.bot.db.economy.update_pet(member.id, member.guild.id, {"last_claim": now.replace(tzinfo=None)})
+        note = self._scale_note(scale)
         return True, (
             f"{species.emoji} **{row['name']}** brought you {Emojis.Economy.cash} "
-            f"**{fnumb(amount)}** ({claim.hours:.1f}h of gathering).{self._scale_suffix(scale)}"
+            f"**{fnumb(amount)}** ({claim.hours:.1f}h of gathering)." + (f"\n-# {note}" if note else "")
         )
 
     @pet.command("feed", description="Feed your pet.", guild_only=True)
@@ -2277,7 +2264,7 @@ class Economy(Cog):
         settings = await self._settings(ctx.guild.id)
         max_bet = f"{Emojis.Economy.cash} {fnumb(settings.max_bet)}" if settings.max_bet else "*uncapped*"
         icon = get_asset_url(ctx.guild)  # type: ignore[arg-type]
-        await ctx.send(view=make_notice(
+        await ctx.send(view=card(
             "Economy Settings",
             f"**Payout multiplier** x{settings.payout_multiplier:g}\n"
             f"**Robbing** {'Enabled' if settings.rob_enabled else 'Disabled'}\n"
