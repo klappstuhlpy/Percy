@@ -69,7 +69,7 @@ if (configForm) {
 }
 
 // ─── Level-up message: placeholders, live preview, test send ─────────────────
-// The preview mirrors Percy's substitution (app/services/level_message.py): only known
+// The preview mirrors Percy's substitution (app/services/guild/level_message.py): only known
 // {placeholders} are replaced, everything else stays exactly as typed.
 (function () {
     const input = document.getElementById('level_up_message');

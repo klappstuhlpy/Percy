@@ -1,7 +1,7 @@
 # Generating percy-client types from Percy's OpenAPI schema
 
 Percy's FastAPI app is the source of truth. Pydantic **response models** in
-`app/internal_api/routers/*.py` become `openapi.json`, which `percy-codegen` turns into
+`app/internal_api/routers/*.py` (and `routers/models/*.py`) become `openapi.json`, which `percy-codegen` turns into
 `src/generated.rs`. Both files are committed (reviewable diffs, no network at build time) and CI
 fails when either is stale.
 
@@ -120,8 +120,8 @@ from `lib.rs` (one `pub use generated::{...}` list, exactly the `pub struct`/`pu
 query structs, helper `impl`s on generated types and a few shapes the schema cannot express.
 
 **Shared models have one definition.** `ChannelRef`/`RoleRef`/`Role`/`Channel`/`IgnoredEntity` live
-in `routers/guild_models.py` and are imported by every other router; `CardOption` (leveling.py) is
-the rank card preset everywhere; `MusicHistoryItem` is in `music_models.py`. After adding a model
+in `routers/models/guild.py` and are imported by every other router; `CardOption` (leveling.py) is
+the rank card preset everywhere; `MusicHistoryItem` is in `models/music.py`. After adding a model
 check `components.schemas` for `app__internal_api__...` or numbered names - that means two classes
 share a name.
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Internal folder restructure (clients, services by domain, router models, cog packages); no behaviour change.
+
 ## [2.29.0] - 2026-11-03
 
 ### Added
