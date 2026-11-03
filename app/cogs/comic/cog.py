@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import utcnow
 
-from app.clients.comic import ComicCache, LOCGClient, Parser
+from app.clients.comic import Brand, ComicCache, GenericComic, GenericComicMessage, LOCGClient, Parser
 from app.core import (
     Bot,
     Cog,
@@ -33,7 +33,7 @@ from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
 from config import Emojis, default_prefix, locg_api_url
 
-from .models import Brand, ComicFeed, Format, GenericComic, GenericComicMessage
+from .models import ComicFeed, Format
 from .ui import JumpToTopButton
 
 if TYPE_CHECKING:

@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from app.cogs.comic.models import Brand, GenericComic
+from app.clients.comic import Brand, GenericComic
 from app.services.comics import (
     ComicIngest,
     character_rows,

@@ -439,8 +439,8 @@ async def _run_backfill(brand: str) -> None:
     locg-api, a scraped manga page), so a brand that fails is reported and skipped rather than
     aborting the other two.
     """
-    # Imported here rather than at module scope: this pulls in the comic cog's Discord-facing
-    # models, which no other CLI command needs.
+    # Imported here rather than at module scope: the comic client pulls in discord/bs4,
+    # which no other CLI command needs.
     from app.clients.comic import LOCGClient, Parser
 
     session = aiohttp.ClientSession()

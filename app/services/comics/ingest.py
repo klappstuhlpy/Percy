@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     import datetime
     from collections.abc import Iterable, Sequence
 
-    from app.cogs.comic.models import GenericComic
+    from app.clients.comic import GenericComic
     from app.database.repositories.releases import ReleasesRepository
 
 __all__ = ('ComicIngest', 'ComicIngestReport', 'character_rows', 'creator_rows', 'release_row', 'split_series')
