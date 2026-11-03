@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 from collections import OrderedDict
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict, TypeVar, Union, overload
 
 import discord
 from discord import AppCommandOptionType, app_commands
@@ -17,15 +17,54 @@ from app.utils import AnsiColor, AnsiStringBuilder, TemporaryAttribute, truncate
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
-    from typing import Self
+    from typing import Self, Unpack
 
     from discord.ext.commands import GroupMixin
 
     from app.core.context import Context
     from app.core.models import Cog
+    from app.core.permissions import PermissionInput
     from app.utils import AsyncCallable
 
 T = TypeVar("T")
+
+
+class CommandKwargs(TypedDict, total=False):
+    """Keyword arguments accepted by :func:`command` and :meth:`GroupCommand.command`.
+
+    Spelled out (rather than ``**kwargs: Any``) so editors complete and type-check decorator arguments.
+    """
+
+    alias: str
+    aliases: Iterable[str]
+    usage: str
+    brief: str
+    help: str
+    description: str
+    examples: list[str]
+    guild_only: bool
+    nsfw: bool
+    hidden: bool
+    enabled: bool
+    extras: dict[str, Any]
+    user_permissions: PermissionInput
+    bot_permissions: PermissionInput
+    with_app_command: bool
+    ignore_extra: bool
+    rest_is_raw: bool
+    require_var_positional: bool
+    cooldown_after_parsing: bool
+    parent: GroupCommand
+
+
+class GroupKwargs(CommandKwargs, total=False):
+    """:class:`CommandKwargs` plus the group-only options of :func:`group` / :meth:`GroupCommand.group`."""
+
+    iwc: bool
+    invoke_without_command: bool
+    case_insensitive: bool
+    fallback: str
+
 
 __all__ = (
     "Command",
@@ -93,7 +132,7 @@ class NumberRange(commands.Range):
 
         Returns ``None`` if ``converter`` is neither, so callers can leave other annotations alone.
         """
-        if isinstance(converter, commands.Range):
+        if isinstance(converter, commands.Range):  # noqa
             return cls(annotation=converter.annotation, min=converter.min, max=converter.max)
 
         if isinstance(converter, app_commands.transformers.RangeTransformer):
@@ -272,7 +311,7 @@ class Command(commands.Command):
             new_args = tuple(NumberRange.from_converter(arg) or arg for arg in args)
             if new_args == args:
                 return param
-            return param.replace(annotation=Union[new_args])  # noqa: UP007 -- dynamic tuple, no PEP 604 form
+            return param.replace(annotation=Union[new_args])  # noqa : UP007 -- dynamic tuple, no PEP 604 form
 
         replacement = NumberRange.from_converter(converter)
         if replacement is None:
@@ -670,31 +709,68 @@ class HybridCommand(Command, commands.HybridCommand):
         return define_app_command_impl(self, _app_command_override, **kwargs)
 
 
+# The typed overloads deliberately drop discord.py's unused `cls` parameter.
+# noinspection PyMethodOverriding
 @discord.utils.copy_doc(commands.Group)
 class GroupCommand(commands.Group, Command):
+    # Subcommands inherit ``hybrid`` from the parent unless it is passed explicitly, so the overloads
+    # type an explicit ``hybrid=True`` as hybrid and everything else as this group's kind (see
+    # :class:`HybridGroupCommand` for the hybrid default).
+    @overload
+    def command(
+        self, name: str = ..., *, hybrid: Literal[True], **kwargs: Unpack[CommandKwargs]
+    ) -> Callable[[AsyncCallable[..., Any]], HybridCommand]: ...
+
+    @overload
+    def command(
+        self, name: str = ..., *, hybrid: bool = ..., **kwargs: Unpack[CommandKwargs]
+    ) -> Callable[[AsyncCallable[..., Any]], Command]: ...
+
     @discord.utils.copy_doc(commands.Group.command)
-    def command(self, *args: Any, **kwargs: Any) -> Callable[..., Command]:
-        def decorator(func: AsyncCallable) -> Command:
+    def command(self, name: str = MISSING, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], Command]:
+        def decorator(func: AsyncCallable[..., Any]) -> Command:
             _resolve_kwargs_inheritance(kwargs, self)
-            result = command(*args, **kwargs)(func)
+            result = command(name, **kwargs)(func)
             self.add_command(result)
             return result
 
         return decorator
+
+    @overload
+    def group(
+        self, name: str = ..., *, hybrid: Literal[True], **kwargs: Unpack[GroupKwargs]
+    ) -> Callable[[AsyncCallable[..., Any]], HybridGroupCommand]: ...
+
+    @overload
+    def group(
+        self, name: str = ..., *, hybrid: bool = ..., **kwargs: Unpack[GroupKwargs]
+    ) -> Callable[[AsyncCallable[..., Any]], GroupCommand]: ...
 
     @discord.utils.copy_doc(commands.Group.group)
-    def group(self, *args: Any, **kwargs: Any) -> Callable[..., GroupCommand]:
-        def decorator(func: AsyncCallable) -> GroupCommand:
+    def group(self, name: str = MISSING, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], GroupCommand]:
+        def decorator(func: AsyncCallable[..., Any]) -> GroupCommand:
             _resolve_kwargs_inheritance(kwargs, self)
-            result = group(*args, **kwargs)(func)
+            result = group(name, **kwargs)(func)
             self.add_command(result)
             return result
 
         return decorator
 
 
+# The typed overloads deliberately drop discord.py's unused `cls` parameter.
+# noinspection PyMethodOverriding
 @discord.utils.copy_doc(commands.HybridGroup)
 class HybridGroupCommand(GroupCommand, commands.HybridGroup):
+    if TYPE_CHECKING:
+        # Typing only: discord.py rejects non-hybrid children of a hybrid group, so every child is hybrid.
+        def command(
+            self, name: str = ..., *, hybrid: bool = ..., **kwargs: Unpack[CommandKwargs]
+        ) -> Callable[[AsyncCallable[..., Any]], HybridCommand]: ...
+
+        def group(
+            self, name: str = ..., *, hybrid: bool = ..., **kwargs: Unpack[GroupKwargs]
+        ) -> Callable[[AsyncCallable[..., Any]], HybridGroupCommand]: ...
+
     def define_app_command(self, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], None]:
         return define_app_command_impl(self, app_commands.Group, **kwargs)
 
@@ -811,6 +887,24 @@ def _resolve_kwargs_inheritance(new: dict[str, Any], parent: GroupCommand) -> di
     return new
 
 
+@overload
+def command(
+    name: str = ..., *, hybrid: Literal[True], **kwargs: Unpack[CommandKwargs]
+) -> Callable[[AsyncCallable[..., Any]], HybridCommand]: ...
+
+
+@overload
+def command(
+    name: str = ..., *, hybrid: Literal[False] = ..., **kwargs: Unpack[CommandKwargs]
+) -> Callable[[AsyncCallable[..., Any]], Command]: ...
+
+
+@overload
+def command(
+    name: str = ..., *, hybrid: bool, **kwargs: Unpack[CommandKwargs]
+) -> Callable[[AsyncCallable[..., Any]], Command | HybridCommand]: ...
+
+
 def command(
     name: str = MISSING,
     *,
@@ -824,7 +918,7 @@ def command(
     guild_only: bool = False,
     nsfw: bool = False,
     **other_kwargs: Any,
-) -> Callable[..., Command | HybridCommand]:
+) -> Callable[[AsyncCallable[..., Any]], Command]:
     """Turn a coroutine into a :class:`Command` (or :class:`HybridCommand` when ``hybrid=True``).
 
     This is the project's replacement for :func:`commands.command`; define commands with this rather than the
@@ -865,7 +959,7 @@ def command(
     other_kwargs.setdefault("nsfw", nsfw)
 
     # Apply decorators
-    def decorator(func: AsyncCallable) -> Command:
+    def decorator(func: AsyncCallable[..., Any]) -> Command:
         func = commands.command(**kwargs, **other_kwargs)(func)
 
         if nsfw:
@@ -875,6 +969,24 @@ def command(
         return func
 
     return decorator
+
+
+@overload
+def group(
+    name: str = ..., *, hybrid: Literal[True], **kwargs: Unpack[GroupKwargs]
+) -> Callable[[AsyncCallable[..., Any]], HybridGroupCommand]: ...
+
+
+@overload
+def group(
+    name: str = ..., *, hybrid: Literal[False] = ..., **kwargs: Unpack[GroupKwargs]
+) -> Callable[[AsyncCallable[..., Any]], GroupCommand]: ...
+
+
+@overload
+def group(
+    name: str = ..., *, hybrid: bool, **kwargs: Unpack[GroupKwargs]
+) -> Callable[[AsyncCallable[..., Any]], GroupCommand | HybridGroupCommand]: ...
 
 
 def group(
@@ -888,7 +1000,7 @@ def group(
     hybrid: bool = False,
     iwc: bool = True,
     **other_kwargs: Any,
-) -> Callable[..., GroupCommand | HybridGroupCommand]:
+) -> Callable[[AsyncCallable[..., Any]], GroupCommand]:
     """Turn a coroutine into a :class:`GroupCommand` (or :class:`HybridGroupCommand` when ``hybrid=True``).
 
     The callback runs when the group is invoked without a recognised subcommand. Accepts the same
@@ -913,6 +1025,8 @@ def group(
     )
 
     other_kwargs.setdefault("invoke_without_command", iwc)
+    if (examples := other_kwargs.pop("examples", MISSING)) is not MISSING:
+        other_kwargs.setdefault("extras", {})["examples"] = examples
 
     return commands.group(**kwargs, **other_kwargs)
 
