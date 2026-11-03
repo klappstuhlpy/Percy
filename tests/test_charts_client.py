@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.clients.charts import chart_tracks
+from app.clients.deezer import chart_tracks
 
 
 def test_chart_tracks_normalises_and_skips_bad_rows() -> None:

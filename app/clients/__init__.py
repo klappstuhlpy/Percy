@@ -1,6 +1,6 @@
 from app.clients.anilist import AniListClient
 from app.clients.base import BaseHTTPClient, CircuitBreakerOpen, HTTPClientError, TransportError
-from app.clients.charts import DeezerChartClient
+from app.clients.deezer import DeezerChartClient
 from app.clients.lyrics import LRCLibClient
 from app.clients.news import FeedResponse, NewsClient
 from app.clients.ollama import OllamaClient, OllamaResponseError

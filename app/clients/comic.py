@@ -9,10 +9,9 @@ from urllib.parse import urljoin
 import aiohttp
 from bs4 import BeautifulSoup
 
+from app.cogs.comic.models import Brand, GenericComic
 from app.utils import executor, utcparse
 from app.utils.lock import lock
-
-from .models import Brand, GenericComic
 
 log = logging.getLogger(__name__)
 

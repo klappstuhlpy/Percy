@@ -441,7 +441,7 @@ async def _run_backfill(brand: str) -> None:
     """
     # Imported here rather than at module scope: this pulls in the comic cog's Discord-facing
     # models, which no other CLI command needs.
-    from app.cogs.comic.client import LOCGClient, Parser
+    from app.clients.comic import LOCGClient, Parser
 
     session = aiohttp.ClientSession()
     db: Database | None = None

@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from ..dependencies import BotDep, GuildDep, verify_token
 
 if TYPE_CHECKING:
-    from app.services.klappstuhl_me import KlappstuhlMeClient
+    from app.clients.klappstuhl_me import KlappstuhlMeClient
 
 log = logging.getLogger(__name__)
 

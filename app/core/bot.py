@@ -22,6 +22,7 @@ from expiringdict import ExpiringDict
 
 import config
 from app.clients import OllamaClient
+from app.clients.klappstuhl_me import KlappstuhlClient, KlappstuhlInternalClient
 from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand, assign_native_permissions
 from app.core.context import Context
@@ -41,7 +42,6 @@ from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand, format_duration
 from app.services.event_hub import EventHub
-from app.services.klappstuhl_me import KlappstuhlClient, KlappstuhlInternalClient
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,

@@ -13,7 +13,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from app.cogs.doc import client, engine
+from app.clients import docs as client
+from app.cogs.doc import engine
 from app.cogs.doc.cache import doc_cache
 from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem, DocResult
 from app.cogs.doc.ui import DocSearchView, DocView, build_symbol_container
@@ -28,7 +29,7 @@ from config import Emojis
 if TYPE_CHECKING:
     from discord.app_commands import Choice
 
-    from app.cogs.doc.client import InventoryDict
+    from app.clients.docs import InventoryDict
 
 log = logging.getLogger(__name__)
 

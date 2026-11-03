@@ -14,14 +14,14 @@ from app.core.models import command, cooldown, describe, group
 from app.utils import helpers
 
 if TYPE_CHECKING:
+    from app.clients.klappstuhl_me import KlappstuhlClient
     from app.core import Bot, Context
-    from app.services.klappstuhl_me import KlappstuhlClient
 
 
 class KlappstuhlToolsMixin:
     """Commands backed by the klappstuhl.me API.
 
-    These wrap Percy's :class:`~app.services.klappstuhl_me.KlappstuhlClient`. They
+    These wrap Percy's :class:`~app.clients.klappstuhl_me.KlappstuhlClient`. They
     are all *account-scoped* (short links and pastes need ``links:*`` / ``pastes:*``;
     the image/render/scan endpoints need ``images:read``), so they require a personal
     key configured via ``KLAPPSTUHL_ME_API_TOKEN``. When it is absent every command
