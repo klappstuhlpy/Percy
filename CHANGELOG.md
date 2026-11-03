@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 9 new jobs on the career ladder, including two above Astronaut: Startup Founder and President.
+- `work` has five new puzzles, questions about your own job, and new shift events.
+- New `search` spots and `postmemes` formats.
+
+### Changed
+- Earning commands, claims, quest completions and chat drops answer in one small card, with varied result lines per job and activity. `work`, `search` and `postmemes` update the same message from task to result.
+- The economy hub, shop, inventory and trade cards are more compact. The career page shows the rungs around your job; `job list` shows them all.
+
 ## [2.31.1] - 2026-11-03
 
 ### Changed
