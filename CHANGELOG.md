@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [2.30.0] - 2026-11-03
 
+### Added
+- Poker: the hand-strength analysis is one compact table (every hand x every street) on a shared 0-100% scale, with the most likely hand per street highlighted and a "Likely at least" row showing the strongest hand held at least half the time.
+- Charts can carry a subtitle; the stats charts use it for their totals and time window.
+
+### Changed
+- All charts (stats, presence, heatmap, equalizer) use a quieter modern style: one sans font, sentence-case titles, a faint hairline grid, flat bars with rounded ends and values labelled only where they matter.
+- Quote images wrap long text properly, shrink long quotes to fit and use the dashboard colours.
+- Rank cards and quote images render about twice as fast.
 - Internal folder restructure (clients, services by domain, router models, cog packages); no behaviour change.
+
+### Fixed
+- Embed colours taken from emojis and avatars with transparency were always black.
+- The rank card's "of N members" undercounted on servers whose members were not all loaded.
+- Colour swatch captions were slightly off-centre and long colour names ran off the image.
+
+### Removed
+- Unused rendering code and assets, and the `pilmoji` and `fonttools` dependencies.
 
 ## [2.29.0] - 2026-11-03
 
