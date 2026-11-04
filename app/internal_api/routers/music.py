@@ -893,6 +893,8 @@ async def get_music_history(
 
 # Charts change slowly and are the same for every viewer; they are cheap to keep a while.
 _TRENDING_TTL = 900.0
+_TRENDING_MIN = 5  # fewer picks than this in a week is a thin shelf, not a chart
+_TRENDING_FALLBACK_DAYS = 30
 _trending_cache: dict[int | None, tuple[float, list[dict]]] = {}
 
 
@@ -902,6 +904,8 @@ async def _trending(bot: Any, guild_id: int | None) -> list[dict]:
     if hit and hit[0] > now:
         return hit[1]
     rows = await bot.db.music_plays.trending(guild_id=guild_id)
+    if len(rows) < _TRENDING_MIN:
+        rows = await bot.db.music_plays.trending(guild_id=guild_id, days=_TRENDING_FALLBACK_DAYS)
     items = [
         {
             'title': display_title(r['title'], r['author']), 'author': r['author'], 'uri': r['uri'],
@@ -936,8 +940,8 @@ async def _charts(bot: Any) -> list[dict]:
 
 @router.get("/music/trending")
 async def get_music_trending(guild: GuildDep, bot: BotDep) -> MusicTrending:
-    """The week's most-picked tracks in this guild (``server``) and across every guild (``global``),
-    plus Deezer's worldwide chart (``charts``)."""
+    """The most-picked tracks of the week (of the month when a week is thin) in this guild (``server``)
+    and across every guild (``global``), plus Deezer's worldwide chart (``charts``)."""
     return MusicTrending.model_validate({
         'server': await _trending(bot, guild.id), 'global': await _trending(bot, None), 'charts': await _charts(bot),
     })

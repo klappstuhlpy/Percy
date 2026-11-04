@@ -27073,7 +27073,7 @@
     },
     "/api/v1/guilds/{guild_id}/music/trending": {
       "get": {
-        "description": "The week's most-picked tracks in this guild (``server``) and across every guild (``global``),\nplus Deezer's worldwide chart (``charts``).",
+        "description": "The most-picked tracks of the week (of the month when a week is thin) in this guild (``server``)\nand across every guild (``global``), plus Deezer's worldwide chart (``charts``).",
         "operationId": "get_music_trending_api_v1_guilds__guild_id__music_trending_get",
         "parameters": [
           {

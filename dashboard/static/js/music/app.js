@@ -861,7 +861,7 @@
         once(`vibe:${query}`, null, () => playTrack({ query, label }, false));
     }
 
-    // Trending: this server's and Percy's most-picked tracks of the week plus Deezer's worldwide chart,
+    // Trending: this server's and Percy's most-picked recent tracks plus Deezer's worldwide chart,
     // fetched after first paint. Hidden when all three are empty. Chart entries have no uri, so they
     // play as a title + artist search like any other uri-less card.
     async function loadTrending() {
