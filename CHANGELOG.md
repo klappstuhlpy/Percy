@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.32.1] - 2026-11-04
+
+### Fixed
+- The music app's "Popular in this server" and "Trending on Percy" shelves no longer shrink to one track in a quiet week: under 5 tracks, they look back 30 days instead of 7.
+
 ## [2.32.0] - 2026-11-03
 
 ### Added
