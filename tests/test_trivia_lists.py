@@ -65,8 +65,18 @@ def test_file_size_and_encoding() -> None:
 
 
 def test_deep_nesting_is_a_list_error() -> None:
-    with pytest.raises(TriviaListError, match='nested'):
+    # 3.15's decoder guards the C stack, so which error this depth hits depends on the platform's stack size.
+    with pytest.raises(TriviaListError):
         parse_list(b'[' * 100000)
+
+
+def test_recursion_error_names_the_nesting(monkeypatch: pytest.MonkeyPatch) -> None:
+    def overflow(_: str) -> None:
+        raise RecursionError
+
+    monkeypatch.setattr('app.services.trivia.lists.json.loads', overflow)
+    with pytest.raises(TriviaListError, match='nested'):
+        parse_list(b'[]')
 
 
 def test_answer_matches() -> None:
