@@ -5,7 +5,7 @@ import weakref
 from typing import TYPE_CHECKING, ClassVar
 
 import discord
-from discord.ext import commands  # noqa: TC002  (runtime-resolved command annotation)
+from discord.ext import commands  # runtime-resolved command annotation
 
 from app.cogs.starboard import ui
 from app.cogs.starboard.engine import StarboardAction, decide_action, is_too_old

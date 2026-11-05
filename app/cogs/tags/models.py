@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import datetime  # noqa: TC003 (record annotations)
+import datetime  # record annotations
 import io
 from typing import TYPE_CHECKING, Any, Literal, cast
 

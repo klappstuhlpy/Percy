@@ -17,7 +17,7 @@ from app.core import Bot, Cog, Context, command, describe, group
 from app.core.converter import ActionReason
 from app.core.models import PermissionTemplate
 from app.services.moderation.restrictions import is_current
-from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
+from app.utils import timetools  # discord.py evaluates the converter annotation
 
 from . import restriction_actions as actions
 

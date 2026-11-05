@@ -24,11 +24,11 @@ jobs:
     name: Tests, lint & types (py${{ matrix.python }})
     runs-on: ubuntu-latest
 
-    # 3.13 is the supported floor (pyproject), 3.15 is what dev and prod run.
+    # 3.15 is the supported floor (pyproject) and what dev and prod run.
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.13", "3.15"]
+        python: ["3.15"]
 
     # CI runs the non-beta (Linux) code path, which reads tokens/IDs from the
     # environment. The suite is fully mocked and never connects to Discord or a

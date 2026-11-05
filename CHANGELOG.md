@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.33.0] - 2026-11-05
+
+### Changed
+- Percy now requires Python 3.15. Self-hosters on 3.13 or 3.14 must upgrade before updating.
+
 ## [2.32.1] - 2026-11-04
 
 ### Fixed

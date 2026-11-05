@@ -6,7 +6,7 @@ from typing import Annotated, ClassVar
 import discord
 from discord import AppCommandOptionType, app_commands
 from discord.ext import commands, tasks
-from discord.ext.commands import Range  # noqa: TC002 -- flag/command param annotations are evaluated at runtime
+from discord.ext.commands import Range  # flag/command param annotations are evaluated at runtime
 
 from app.cogs.leveling.models import _MAX_LEVEL, _MAX_XP, GuildLevelConfig, LevelConfig
 from app.cogs.leveling.ui import InteractiveLevelRolesView, InteractiveMultiplierView, RankCardEditor

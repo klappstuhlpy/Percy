@@ -8,7 +8,7 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.15"
 jishaku = {git = "https://github.com/Gorialis/jishaku"}
 aiohttp = "^3.13.4"
 beautifulsoup4 = "^4.12.3"
@@ -49,7 +49,7 @@ pytest-asyncio = ">=0.24"
 pytest-timeout = ">=2.3"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py315"
 line-length = 125
 extend-exclude = ["dashboard"]
 
@@ -82,12 +82,16 @@ ignore = [
     "UP034",
     "ANN001",
     "ANN401",
+    # Would move imports under TYPE_CHECKING; discord.py and FastAPI read annotations at runtime.
+    "TC001",
+    "TC002",
+    "TC003",
 ]
 
 [tool.pyright]
 useLibraryCodeForTypes = true
 typeCheckingMode = "basic"
-pythonVersion = "3.13"
+pythonVersion = "3.15"
 exclude = ["**/node_modules", "**/__pycache__", ".venv", "dashboard"]
 strictListInference = true
 strictDictionaryInference = true

@@ -18,7 +18,7 @@ from app.rendering.card_style import clean_style, resolve_style, style_options
 from app.services.music.lyrics import display_title
 
 from ..dependencies import BotDep, verify_token
-from .leveling import CardOption  # noqa: TC001 - pydantic resolves it at runtime
+from .leveling import CardOption  # pydantic resolves it at runtime
 from .music import serialize_play
 
 if TYPE_CHECKING:

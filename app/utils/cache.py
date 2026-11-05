@@ -63,7 +63,7 @@ class CacheProtocol(Protocol[P, R]):
 
 
 #: Distinguishes "absent" from a legitimately stored ``None`` in :meth:`ExpiringCache.pop`.
-_SENTINEL: Any = object()
+_SENTINEL = sentinel('_SENTINEL')
 
 #: Entry cap for ``Strategy.TIMED`` caches (whose ``maxsize`` is the TTL, not a size).
 TIMED_MAX_ENTRIES = 4096

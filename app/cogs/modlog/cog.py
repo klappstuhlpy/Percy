@@ -5,7 +5,7 @@ from contextlib import suppress
 from typing import ClassVar
 
 import discord
-from discord.ext import commands  # noqa: TC002 - resolved at runtime for command/flag annotations
+from discord.ext import commands  # resolved at runtime for command/flag annotations
 
 from app.cogs.moderation.infractions import refuse_without_reason
 from app.cogs.modlog.models import CaseType, ModerationCase

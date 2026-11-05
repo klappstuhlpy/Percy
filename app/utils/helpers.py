@@ -349,7 +349,7 @@ class Colour(discord.Colour):
 
     @classmethod
     def brand(cls) -> Self:
-        return None # cls(0xD97757)  # noqa
+        return None # cls(0xD97757)
 
     @classmethod
     def brand_bright(cls) -> Self:
@@ -446,7 +446,7 @@ class Colour(discord.Colour):
         return cls(0x1A1A1A)
 
 
-_ATTR_MISSING = object()
+_ATTR_MISSING = sentinel('_ATTR_MISSING')
 
 
 class TemporaryAttribute[T, V]:

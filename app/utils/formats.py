@@ -1,7 +1,5 @@
-# PEP 810: on 3.15+ dateparser (~120 ms) loads on first parse instead of at boot; older versions ignore this.
+# PEP 810: dateparser (~120 ms) loads on first parse instead of at boot.
 # Bound with an underscore so `from .formats import *` in app/utils/__init__.py does not reify it.
-__lazy_modules__ = ["dateparser"]
-
 import datetime
 import locale
 import logging
@@ -12,8 +10,8 @@ from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, It
 from pathlib import Path
 from typing import Any, BinaryIO, TypeVar
 
-import dateparser as _dateparser
 import discord
+lazy import dateparser as _dateparser
 
 from config import Emojis
 

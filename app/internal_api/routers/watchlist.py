@@ -12,7 +12,7 @@ are per-user and never cached.
 """
 from __future__ import annotations
 
-import datetime  # noqa: TC003 -- used in pydantic body models, whose annotations are evaluated at runtime
+import datetime  # used in pydantic body models, whose annotations are evaluated at runtime
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status

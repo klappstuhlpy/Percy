@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel
-from .models.guild import ChannelRef  # noqa: TC001 - pydantic resolves it at runtime
+from .models.guild import ChannelRef  # pydantic resolves it at runtime
 
 if TYPE_CHECKING:
     from app.cogs.starboard.cog import Starboard

@@ -12,7 +12,7 @@ invalidate from) -- the TTL, not an invalidation call, is what bounds staleness 
 """
 from __future__ import annotations
 
-import datetime  # noqa: TC003 -- used in handler Query() annotations, which FastAPI evaluates at runtime
+import datetime  # used in handler Query() annotations, which FastAPI evaluates at runtime
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

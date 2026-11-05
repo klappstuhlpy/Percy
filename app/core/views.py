@@ -107,7 +107,7 @@ class View(discord.ui.View):
     async def on_error(self, interaction: Interaction, error: Exception, item: discord.ui.Item, /) -> None:
         await interaction.client.handle_interaction_error(interaction, error)  # type: ignore[attr-defined]
 
-    def disable_item(self, item: discord.ui.Item) -> "View":
+    def disable_item(self, item: discord.ui.Item) -> View:
         """Disables the given item.
 
         Parameters

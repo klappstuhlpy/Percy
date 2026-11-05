@@ -78,6 +78,21 @@ sys.exit(1 if bad else 0)
     assert r.returncode == 0, f'routers import loads cog/ui modules: {r.stdout} {r.stderr[-800:]}'
 
 
+def test_lazy_cog_packages_resolve_on_first_use() -> None:
+    code = """
+import inspect, sys
+import app.cogs.moderation.member_actions, app.cogs.notifications.decide
+assert 'app.cogs.moderation.cog' not in sys.modules
+assert 'app.cogs.notifications.cog' not in sys.modules
+from app.cogs.moderation import FlaggedMember, Moderation, setup as moderation_setup
+from app.cogs.notifications import Notifications, setup as notifications_setup
+assert inspect.iscoroutinefunction(moderation_setup) and inspect.iscoroutinefunction(notifications_setup)
+assert Moderation.__module__ == 'app.cogs.moderation.cog' and Notifications.__module__ == 'app.cogs.notifications.cog'
+"""
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=60, cwd=APP.parent)
+    assert r.returncode == 0, r.stderr[-800:]
+
+
 def test_clients_live_only_in_clients() -> None:
     bad = [
         rel(f) for f in APP.glob('**/*.py')

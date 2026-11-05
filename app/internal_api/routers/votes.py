@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 import config
 
-from ..dependencies import BotDep  # noqa: TC001 -- FastAPI evaluates handler param annotations at runtime
+from ..dependencies import BotDep  # FastAPI evaluates handler param annotations at runtime
 
 log = logging.getLogger(__name__)
 

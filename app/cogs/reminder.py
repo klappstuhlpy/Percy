@@ -9,13 +9,13 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import MISSING
 
-from app.cogs.user import TimeZone  # noqa: TC001  (runtime-resolved flag annotation)
+from app.cogs.user import TimeZone  # runtime-resolved flag annotation
 from app.core import Context, Flags, View, flag, store_true
 from app.core.models import Cog, describe, group
 from app.core.timer import Timer
 from app.services.infra.recurrence import advance_recurrence, describe_interval, interval_too_short, normalize_interval
 from app.utils import checks, formats, get_asset_url, helpers, pluralize, positive_reply, timetools
-from app.utils.timetools import RelativeDelta  # noqa: TC001  (runtime-resolved flag annotation)
+from app.utils.timetools import RelativeDelta  # runtime-resolved flag annotation
 from config import Emojis
 
 if TYPE_CHECKING:

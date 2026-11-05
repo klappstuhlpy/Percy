@@ -25,7 +25,7 @@ never leak into an entry the next stranger is served.
 """
 from __future__ import annotations
 
-import datetime  # noqa: TC003 -- used in handler Query() annotations, which FastAPI evaluates at runtime
+import datetime  # used in handler Query() annotations, which FastAPI evaluates at runtime
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

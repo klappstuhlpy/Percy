@@ -37,7 +37,7 @@ DEDUPE_WINDOW = datetime.timedelta(hours=1)
 
 # Each action and the permission the acting moderator needs for it -- the same one the matching
 # command requires (warn mirrors the ``warn`` command's Kick Members).
-ACTION_PERMISSIONS: dict[str, str] = {
+ACTION_PERMISSIONS: frozendict[str, str] = frozendict({
     'kick': 'kick_members',
     'ban': 'ban_members',
     'unban': 'ban_members',
@@ -58,7 +58,7 @@ ACTION_PERMISSIONS: dict[str, str] = {
     'nickunfreeze': 'manage_nicknames',
     'channelmute': 'manage_roles',
     'channelunmute': 'manage_roles',
-}
+})
 # Purge reads live channel history and has no single target; unban's target is no longer a member.
 # The restriction actions need a channel or a nickname, which a request row has no column for.
 REQUESTABLE_ACTIONS = frozenset(ACTION_PERMISSIONS) - {'purge', 'unban'} - RESTRICTION_ACTIONS

@@ -47,7 +47,7 @@ class EmojiURL:
         self.animated: bool = animated
 
     @classmethod
-    async def convert(cls, ctx: Context, argument: str) -> "EmojiURL":
+    async def convert(cls, ctx: Context, argument: str) -> EmojiURL:
         try:
             partial = await commands.PartialEmojiConverter().convert(ctx, argument)
         except commands.BadArgument:
