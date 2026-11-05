@@ -60,7 +60,7 @@ class TagLayoutView(LayoutView):
     def __init__(
         self,
         *,
-        accent: discord.Colour = helpers.Colour.brand(),
+        accent: discord.Colour | None = helpers.Colour.brand(),
         timeout: float | None = 180.0,
         members: discord.abc.Snowflake | None = None,
     ) -> None:

@@ -1,7 +1,11 @@
 .venv/
 .idea/
-__pycache__/
-ruff_cache/
+**/__pycache__/
+.ruff_cache/
+.pytest_cache/
+.claude/
+.github/
+tests/
 percy.log
 .env
 dashboard/

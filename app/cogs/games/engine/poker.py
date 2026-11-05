@@ -21,9 +21,9 @@ from datetime import UTC, datetime
 from itertools import chain, combinations
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 
-import numpy as np
-from joblib import Parallel, delayed
-from scipy.special import comb
+lazy import numpy as np
+lazy from joblib import Parallel, delayed
+lazy from scipy.special import comb
 
 from app.cogs.games.engine.cards import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck
 from app.utils import RevDict, fnumb

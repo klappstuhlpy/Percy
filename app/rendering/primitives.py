@@ -91,7 +91,7 @@ def get_dominant_color(image: Image.Image | io.BytesIO, palette_size: int = 16) 
         rgba = image.convert("RGBA")
 
     rgba.thumbnail((100, 100))
-    pixels = list(rgba.getdata())
+    pixels = list(rgba.get_flattened_data())
     # Transparent pixels are usually (0, 0, 0, 0) and would otherwise win on any emoji/PNG.
     visible = [p[:3] for p in pixels if p[3] >= 128] or [p[:3] for p in pixels]
 

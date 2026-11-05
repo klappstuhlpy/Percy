@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import discord
 
-from app.rendering import templates
 from app.rendering.card_style import DEFAULT_STYLE, CardStyle
 from app.rendering.models import (
     ActiveBoost,
@@ -33,6 +32,7 @@ from app.rendering.models import (
     SeriesData,
 )
 from app.rendering.primitives import Font, FontManager
+lazy from app.rendering import templates
 
 if TYPE_CHECKING:
     from app.cogs.leveling import LevelConfig

@@ -39,10 +39,10 @@ jobs:
       INTERNAL_API_PORT: "8090"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
 
@@ -55,13 +55,8 @@ jobs:
       - name: Run tests
         run: poetry run pytest
 
-      # Ruff and Pyright currently report a backlog of pre-existing findings.
-      # They run in informational (non-blocking) mode until that backlog is
-      # worked down, at which point each should be promoted to a hard gate.
-      - name: Lint (Ruff, non-blocking)
-        continue-on-error: true
+      - name: Lint (Ruff)
         run: poetry run ruff check .
 
-      - name: Type check (Pyright, non-blocking)
-        continue-on-error: true
+      - name: Type check (Pyright)
         run: poetry run pyright

@@ -6,7 +6,7 @@ import re
 from collections import namedtuple
 from typing import Literal, TypeVar
 
-import numpy as np
+lazy import numpy as np
 
 from app.utils import RevDict
 from config import Emojis

@@ -63,4 +63,7 @@ VOLUME ["/data"]
 # otherwise). Under host networking this is reachable on the host directly.
 EXPOSE 8091
 
+# The app only handles Ctrl-C, and as PID 1 it ignores SIGTERM: `docker stop` waited 10 s and then killed it.
+STOPSIGNAL SIGINT
+
 CMD ["./dashboard"]

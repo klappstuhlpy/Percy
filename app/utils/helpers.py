@@ -348,8 +348,9 @@ class Colour(discord.Colour):
     """
 
     @classmethod
-    def brand(cls) -> Self:
-        return None # cls(0xD97757)
+    def brand(cls) -> Self | None:
+        # Deliberately no accent colour on cards and embeds; the brand value is 0xD97757.
+        return None
 
     @classmethod
     def brand_bright(cls) -> Self:

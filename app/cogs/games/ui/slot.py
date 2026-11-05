@@ -8,7 +8,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, ClassVar
 
 import discord
-import numpy as np
+lazy import numpy as np
 
 from app.cogs.emoji import EMOJI_REGEX
 from app.cogs.games.models import Game, GameResult

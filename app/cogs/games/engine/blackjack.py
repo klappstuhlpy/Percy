@@ -18,7 +18,7 @@ import enum
 from itertools import zip_longest
 from typing import Any
 
-import numpy as np
+lazy import numpy as np
 
 from app.cogs.games.engine.cards import BaseHand, Deck
 
