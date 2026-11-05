@@ -165,7 +165,7 @@ class _Database:
     async def _connect(self) -> None:
         """Builds the pool and applies pending migrations; shuts the bot down on failure."""
         try:
-            self._internal_pool = await self.create_pool()
+            self._internal_pool = await self._create_pool_when_reachable()
             async with self.acquire() as conn:
                 await MigrationRunner().upgrade(conn)  # type: ignore[arg-type]
         except Exception:
@@ -185,6 +185,19 @@ class _Database:
             # Always release waiters: on failure ``pool`` stays ``None`` and query helpers
             # raise a clear error rather than hanging on ``_ready``.
             self._ready.set()
+
+    async def _create_pool_when_reachable(self) -> asyncpg.Pool:
+        """Waits out an unreachable or still-starting server; a rejected login is still fatal in ``_connect``."""
+        delay, waiting = 2.0, False
+        while True:
+            try:
+                return await self.create_pool()
+            except (OSError, TimeoutError, asyncpg.PostgresConnectionError, asyncpg.CannotConnectNowError) as exc:
+                if not waiting:
+                    waiting = True
+                    log.warning("PostgreSQL is unreachable (%r); waiting for it.", exc)
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 60.0)
 
     @classmethod
     async def create_pool(cls) -> asyncpg.Pool:

@@ -30,3 +30,14 @@ class JSONFormatter(logging.Formatter):
                 entry[key] = getattr(record, key)
 
         return json.dumps(entry, default=str)
+
+
+class QuietReconnects(logging.Filter):
+    """discord.py logs a full traceback per reconnect attempt; one line is enough for an expected retry."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.exc_info and str(record.msg).startswith('Attempting a reconnect'):
+            record.msg = f"{record.msg} ({record.exc_info[1]!r})"
+            record.exc_info = record.exc_text = None
+            record.levelno, record.levelname = logging.WARNING, 'WARNING'
+        return True

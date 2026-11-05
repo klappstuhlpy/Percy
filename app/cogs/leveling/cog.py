@@ -5,7 +5,7 @@ from typing import Annotated, ClassVar
 
 import discord
 from discord import AppCommandOptionType, app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.ext.commands import Range  # flag/command param annotations are evaluated at runtime
 
 from app.cogs.leveling.models import _MAX_LEVEL, _MAX_XP, GuildLevelConfig, LevelConfig
@@ -16,6 +16,7 @@ from app.core.models import Context, PermissionTemplate, describe, group
 from app.rendering.card_style import CardStyle, resolve_style
 from app.rendering.models import ActiveBoost
 from app.utils import cache, fnumb, get_asset_url, helpers, humanize_duration, medal_emoji, truncate
+from app.utils.tasks import network_loop
 from config import Emojis
 
 log = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class Leveling(Cog):
         self.award_voice_xp.cancel()
         self.snapshot_xp.cancel()
 
-    @tasks.loop(hours=24)
+    @network_loop(hours=24)
     async def snapshot_xp(self) -> None:
         """Record a daily per-guild cumulative-XP snapshot for the dashboard chart.
 
@@ -85,7 +86,7 @@ class Leveling(Cog):
     async def _before_snapshot_xp(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(minutes=1)
+    @network_loop(minutes=1)
     async def award_voice_xp(self) -> None:
         """Grant voice XP each minute to active, non-idle members in populated channels.
 

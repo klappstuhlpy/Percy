@@ -22,6 +22,7 @@ from app.database.migrations import MIGRATIONS_TABLE, Migration, MigrationError
 from app.services.comics import ComicIngest
 from app.services.news import NewsIngest, load_vocabulary, seed_sources
 from app.services.watchlist import SeedError, UniverseSeed, WatchlistIngest, load_seed
+from app.utils.logging import QuietReconnects
 from config import DatabaseConfig, locg_api_url, logs_path
 
 # Opt-in: uvloop is used when installed, never declared. The event loop policy API is
@@ -109,6 +110,9 @@ def setup_logging() -> Generator[None, Any]:
         logging.getLogger('discord').setLevel(logging.INFO)
         logging.getLogger('discord.http').setLevel(logging.WARNING)
         logging.getLogger('discord.state').addFilter(RemoveNoise())
+        logging.getLogger('discord.client').addFilter(QuietReconnects())
+        # Logs several lines per retry while Lavalink is down; the music cog logs down and back once each.
+        logging.getLogger('wavelink.websocket').setLevel(logging.ERROR)
         logging.getLogger('charset_normalizer').setLevel(logging.ERROR)
         logging.getLogger('TrackException').setLevel(logging.CRITICAL)
 

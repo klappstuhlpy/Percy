@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.34.0] - 2026-11-05
+
+### Added
+- Percy now waits out an internet outage: it holds at startup until the network and database are reachable, and background tasks pick up again once the connection returns.
+- Music rebuilds from its saved session after an outage, once Discord and Lavalink are both back.
+
+### Changed
+- Outages log a few short lines instead of repeated tracebacks.
+- The Docker image starts faster, stops cleanly on `docker stop`, and rebuilds in seconds after a version bump.
+- The dashboard container also stops cleanly on `docker stop`.
+
 ## [2.33.0] - 2026-11-05
 
 ### Changed

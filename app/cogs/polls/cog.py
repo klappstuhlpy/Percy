@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.utils import MISSING
 from fastapi import HTTPException
 from starlette import status
@@ -37,6 +37,7 @@ from app.core.models import (
 from app.core.pagination import BasePaginator, LinePaginator
 from app.services import EventExtractor
 from app.utils import cache, fuzzy, get_asset_url, get_shortened_string, helpers, pluralize, timetools
+from app.utils.tasks import network_loop
 
 if TYPE_CHECKING:
     import datetime
@@ -141,7 +142,7 @@ class Polls(Cog):
         if task is not None:
             task.cancel()
 
-    @tasks.loop(hours=1.0)
+    @network_loop(hours=1.0)
     async def cleanup_message_cache(self) -> None:
         self._message_cache.clear()
 

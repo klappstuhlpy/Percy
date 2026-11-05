@@ -29,7 +29,6 @@ from typing import TYPE_CHECKING, Literal
 import asyncpg
 import discord
 from discord import app_commands
-from discord.ext import tasks
 
 from app.clients.anilist import AniListClient
 from app.clients.news import NewsClient
@@ -56,6 +55,7 @@ from app.services.releases import (
 from app.services.watchlist.ingest import WatchlistIngest
 from app.utils import cache, fuzzy
 from app.utils.lock import lock
+from app.utils.tasks import network_loop
 from config import Emojis
 
 from .ui import (
@@ -502,7 +502,7 @@ class Releases(Cog):
             raise
         return True
 
-    @tasks.loop(hours=1)
+    @network_loop(hours=1)
     @lock('Releases.dispatch', 'release dispatch task')
     async def dispatch_releases(self) -> None:
         """One fan-out run: catalogue → subscribers → per-user digest → DM.
@@ -558,7 +558,7 @@ class Releases(Cog):
     async def _before_dispatch_releases(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(hours=24)
+    @network_loop(hours=24)
     @lock('Releases.refresh_dates', 'release-date refresh task')
     async def refresh_release_dates(self) -> None:
         """Nightly: re-check the next 30 days of film/TV dates against TMDB and write what moved.
@@ -597,7 +597,7 @@ class Releases(Cog):
     async def _before_refresh_release_dates(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(seconds=POLL_INTERVAL.total_seconds())
+    @network_loop(seconds=POLL_INTERVAL.total_seconds())
     @lock('Releases.poll_news', 'news polling task')
     async def poll_news(self) -> None:
         """Polls the feeds that are due and writes their stories through to the catalogue.

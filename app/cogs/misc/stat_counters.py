@@ -4,11 +4,11 @@ import contextlib
 from typing import TYPE_CHECKING, Literal
 
 import discord
-from discord.ext import tasks
 
 from app.core import Accent, Bot, Cog, Context, NoticeView, describe, group
 from app.core.models import PermissionTemplate
 from app.utils import truncate
+from app.utils.tasks import network_loop
 
 if TYPE_CHECKING:
     import asyncpg
@@ -65,7 +65,7 @@ class StatCountersMixin:
     async def _teardown_counters(self) -> None:
         self.refresh_counters.cancel()
 
-    @tasks.loop(minutes=10)
+    @network_loop(minutes=10)
     async def refresh_counters(self) -> None:
         """Periodically rename each bound channel to its current value.
 

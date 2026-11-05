@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString
 from discord import app_commands
 from discord.app_commands import Choice
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import Playable
 
@@ -49,6 +49,7 @@ from app.utils import (
     pagify,
     pluralize,
 )
+from app.utils.tasks import network_loop
 from config import Emojis, genius_key
 
 from .lookups import album, artist_tracks
@@ -61,6 +62,15 @@ if TYPE_CHECKING:
     from app.utils.progress import ProgressTracker
 
 log = logging.getLogger(__name__)
+
+# ponytail: a guess at how long the voice connection outlives a gateway outage, not measured against a live
+# session; lower it if playback stays silent after a short drop, raise it if audio restarts needlessly.
+VOICE_LOST_AFTER = 30.0
+
+
+def needs_voice_rebuild(offline_for: float, *, resumed: bool) -> bool:
+    """A new gateway session drops every voice client; a resumed one only loses voice after a long outage."""
+    return not resumed or offline_for >= VOICE_LOST_AFTER
 
 # Hosts accepted as autoplay seeds (recommendations only generate from YouTube).
 _YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "music.youtube.com")
@@ -128,6 +138,10 @@ class Music(Cog):
         self._music_intent: MusicIntentParser = MusicIntentParser(self.bot.ai)
         # Guards the one-shot session restore (node-ready can fire multiple times).
         self._restored: bool = False
+        self._offline_since: float | None = None
+        # Set when Discord came back before Lavalink: the rebuild then waits for node-ready.
+        self._outage_pending: bool = False
+        self._nodes_down: set[str] = set()
         # Guards the rebuild that runs after Lavalink comes back without resuming.
         self._resyncing: bool = False
         # dont persists sessions on beta
@@ -161,7 +175,7 @@ class Music(Cog):
                 with suppress(Exception):
                     await player._destroy()
 
-    @tasks.loop(seconds=20)
+    @network_loop(seconds=20)
     async def persist_sessions(self) -> None:
         """Periodically snapshot active players so a crash/restart can resume them.
 
@@ -176,7 +190,7 @@ class Music(Cog):
     async def _before_persist(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(hours=24)
+    @network_loop(hours=24)
     async def prune_play_history(self) -> None:
         """Drops play history older than 90 days. Never raises (a raise would stop the loop)."""
         try:
@@ -188,7 +202,7 @@ class Music(Cog):
     async def _before_prune(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(seconds=30)
+    @network_loop(seconds=30)
     async def lavalink_watchdog(self) -> None:
         """Reconnect a node whose websocket died without wavelink noticing.
 
@@ -204,7 +218,9 @@ class Music(Cog):
 
             websocket = node._websocket
             if websocket is None:
-                log.warning('Lavalink node %s has no websocket, reconnecting.', node.identifier)
+                if node.identifier not in self._nodes_down:
+                    self._nodes_down.add(node.identifier)
+                    log.warning('Lavalink node %s is down; retrying until it is back.', node.identifier)
                 with suppress(Exception):
                     await node._connect(client=self.bot)
                 continue
@@ -418,19 +434,51 @@ class Music(Cog):
             log.debug("Error while recovering player in guild %s: %s", guild_id, exc)
 
     @Cog.listener()
+    async def on_disconnect(self) -> None:
+        self._offline_since = self._offline_since or time.monotonic()
+
+    @Cog.listener()
+    async def on_ready(self) -> None:
+        self._after_reconnect(resumed=False)
+
+    @Cog.listener()
+    async def on_resumed(self) -> None:
+        self._after_reconnect(resumed=True)
+
+    def _after_reconnect(self, *, resumed: bool) -> None:
+        since, self._offline_since = self._offline_since, None
+        if not self._restored or since is None or not needs_voice_rebuild(time.monotonic() - since, resumed=resumed):
+            return
+        if self._node_connected():
+            self.bot.loop.create_task(self._resume_after_outage())
+        else:
+            self._outage_pending = True
+
+    @staticmethod
+    def _node_connected() -> bool:
+        return any(node.status is wavelink.NodeStatus.CONNECTED for node in wavelink.Pool.nodes.values())
+
+    async def _resume_after_outage(self) -> None:
+        """Brings playback back from the snapshots after losing Discord."""
+        await self._resync_after_node_loss()  # players still attached to their guild, but with dead voice
+        await self._restore_sessions()  # players a new gateway session dropped from the guild
+
+    @Cog.listener()
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
         log.info("Wavelink Node connected: %s | Resumed: %s", payload.node.uri, payload.resumed)
+        self._nodes_down.discard(payload.node.identifier)
         if not self._restored:
             self._restored = True
             self.bot.loop.create_task(self._restore_sessions())
-        elif not payload.resumed:
+        elif not payload.resumed or self._outage_pending:
             # The node reconnected but Lavalink lost every player session — a full
             # restart, or an outage longer than the node's resume window. The Player
             # objects still attached to each guild are now orphaned on the Lavalink
             # side: any operation on them (pause/skip/seek, or a dashboard control
             # action) returns "not found". Rebuild them from the persisted snapshots
             # so playback resumes cleanly instead of leaving dead players behind.
-            self.bot.loop.create_task(self._resync_after_node_loss())
+            self._outage_pending = False
+            self.bot.loop.create_task(self._resume_after_outage())
 
     @Cog.listener()
     async def on_wavelink_inactive_player(self, player: Player) -> None:

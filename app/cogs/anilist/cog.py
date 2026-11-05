@@ -7,12 +7,13 @@ from typing import Any
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.ext.commands import Range  # flag/command param annotations are evaluated at runtime
 
 from app.clients import AniListClient
 from app.core import Bot, Cog, Context, Flags, describe, flag, group
 from app.utils import fuzzy
+from app.utils.tasks import network_loop
 
 from .ui import AniListBrowser, Kind, media_title, month_to_season
 
@@ -41,7 +42,7 @@ class AniList(Cog):
     async def cog_unload(self) -> None:
         self.refresh_lookup.cancel()
 
-    @tasks.loop(hours=6)
+    @network_loop(hours=6)
     async def refresh_lookup(self) -> None:
         """Autocomplete suggestions: what is trending now plus the all-time favourites, per media type."""
         for media_type in self._lookup:

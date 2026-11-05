@@ -12,11 +12,12 @@ from contextlib import suppress
 from typing import Literal
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 from app.core import Bot, Cog, Context, command, cooldown, describe, group
 from app.services.guild.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS, SEVERITIES, check_request
 from app.utils import timetools  # discord.py evaluates the converter annotation
+from app.utils.tasks import network_loop
 
 from .decide import edit_request_message, notify
 from .reports import ReportButton, file_report
@@ -50,7 +51,7 @@ class Notifications(Cog):
 
     # -- Loops -----------------------------------------------------------------------------
 
-    @tasks.loop(minutes=30)
+    @network_loop(minutes=30)
     async def expire_requests(self) -> None:
         try:
             for row in await self.bot.db.notifications.expire_requests():
@@ -60,7 +61,7 @@ class Notifications(Cog):
         except Exception:
             log.exception('Expiring action requests failed.')
 
-    @tasks.loop(hours=24)
+    @network_loop(hours=24)
     async def prune_notifications(self) -> None:
         try:
             await self.bot.db.notifications.prune()

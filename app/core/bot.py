@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import importlib
 import logging
 import re
 import sys
@@ -54,6 +55,7 @@ from app.utils import (
 )
 from app.utils.lock import LockedResourceError
 from app.utils.metrics import MetricsCollector
+from app.utils.tasks import wait_for_network
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from app.utils.webhooks import send_webhook
 from config import (
@@ -392,6 +394,9 @@ class Bot(commands.Bot):
             )
             await lavalink
             await self._load_extensions([music] if music in self.initial_extensions else [])
+
+            # Deferred at boot; loaded off the event loop here so the first chart or card game does not stall it.
+            await asyncio.to_thread(lambda: [importlib.import_module(m) for m in ('app.rendering.templates', 'scipy.special', 'joblib')])
 
             gated = self.apply_native_permissions()
             self.log.info('Applied native slash-command permissions to %d command(s).', gated)
@@ -1148,4 +1153,6 @@ class Bot(commands.Bot):
                 task.cancel()
 
     async def start(self, token: str = resolved_token, *, reconnect: bool = True) -> None:  # type: ignore
+        # discord.py retries a lost connection itself, but a failed first login ends the process.
+        await wait_for_network()
         await super().start(token, reconnect=reconnect)

@@ -3,6 +3,8 @@ import functools
 import gc
 import inspect
 import logging
+import socket
+import time
 import warnings
 from abc import ABC
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Hashable
@@ -11,18 +13,91 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, ParamSpec, Protocol, TypeVar
 
+import aiohttp
+import asyncpg
+import discord
+from discord.ext import tasks as discord_tasks
+
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 T = TypeVar("T")
 P = ParamSpec("P")
 
 __all__ = (
+    "NETWORK_ERRORS",
     "Scheduler",
     "executor",
+    "network_loop",
     "scheduled_coroutine",
+    "wait_for_network",
 )
 
 _background_tasks: set[asyncio.Task] = set()
+
+_log = logging.getLogger(__name__)
+
+#: What a lost connection to Discord, an external API or the database surfaces as.
+NETWORK_ERRORS: tuple[type[BaseException], ...] = (
+    ConnectionError,
+    TimeoutError,
+    socket.gaierror,
+    aiohttp.ClientError,
+    discord.DiscordServerError,
+    discord.GatewayNotFound,
+    discord.ConnectionClosed,
+    asyncpg.PostgresConnectionError,
+    asyncpg.CannotConnectNowError,
+    asyncpg.InterfaceError,
+)
+
+
+def network_loop(**kwargs: Any) -> Callable[[Callable[..., Coroutine[Any, Any, Any]]], discord_tasks.Loop]:
+    """``tasks.loop`` that waits out an outage: a network error skips the iteration, the loop keeps its schedule.
+
+    A plain loop stops for good on a database connection error and logs a full traceback per retry on the
+    others. This logs one line when the task starts failing and one when it recovers. Anything else still raises.
+    """
+
+    def decorator(coro: Callable[..., Coroutine[Any, Any, Any]]) -> discord_tasks.Loop:
+        failing = False
+
+        @functools.wraps(coro)
+        async def iteration(*args: Any, **kwds: Any) -> Any:
+            nonlocal failing
+            try:
+                result = await coro(*args, **kwds)
+            except NETWORK_ERRORS as exc:
+                if not failing:
+                    failing = True
+                    _log.warning('%s is waiting for the network: %r', coro.__qualname__, exc)
+                return None
+            if failing:
+                failing = False
+                _log.info('%s recovered.', coro.__qualname__)
+            return result
+
+        return discord_tasks.loop(**kwargs)(iteration)
+
+    return decorator
+
+
+async def wait_for_network(host: str = 'discord.com', port: int = 443, *, max_delay: float = 60.0) -> None:
+    """Returns once ``host`` accepts a TCP connection, logging one line rather than one per attempt."""
+    delay, started, waiting = 2.0, time.monotonic(), False
+    while True:
+        try:
+            _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5.0)
+        except (OSError, TimeoutError) as exc:
+            if not waiting:
+                waiting = True
+                _log.warning('%s:%d is unreachable (%r); waiting for the network.', host, port, exc)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, max_delay)
+        else:
+            writer.close()
+            if waiting:
+                _log.info('Network is back after %.0f s.', time.monotonic() - started)
+            return
 
 
 def executor[**P, T](

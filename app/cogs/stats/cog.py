@@ -20,7 +20,7 @@ import psutil
 import wavelink
 from discord import app_commands
 from discord.app_commands import Choice
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
@@ -76,7 +76,7 @@ from app.utils import (
     helpers,
     medal_emoji,
 )
-from app.utils.tasks import executor
+from app.utils.tasks import executor, network_loop
 from app.utils.timetools import human_timedelta
 from app.utils.webhooks import send_webhook
 from config import Emojis, beta, get_full_version, path
@@ -211,7 +211,7 @@ class Stats(Cog):
 
         self._presence_cache = ExpiringDict(max_len=1000, max_age_seconds=30)
 
-    @tasks.loop(hours=24.0)
+    @network_loop(hours=24.0)
     async def cleanup_presence_history(self) -> None:
         """|coro|
 
@@ -222,7 +222,7 @@ class Stats(Cog):
         except Exception:
             log.exception("Presence history cleanup failed.")
 
-    @tasks.loop(seconds=10.0)
+    @network_loop(seconds=10.0)
     async def command_insert(self) -> None:
         """|coro|
 
@@ -245,7 +245,7 @@ class Stats(Cog):
         if len(batch) > 1:
             log.info("Registered %s commands to the database.", len(batch))
 
-    @tasks.loop(seconds=10.0)
+    @network_loop(seconds=10.0)
     async def avatar_insert(self) -> None:
         """|coro|
 
@@ -346,7 +346,7 @@ class Stats(Cog):
             embed.add_field(name=name, value=value)
         await self._post(embed=embed)
 
-    @tasks.loop(seconds=60.0)
+    @network_loop(seconds=60.0)
     async def health_check(self) -> None:
         """|coro|
 
@@ -406,7 +406,7 @@ class Stats(Cog):
     async def _before_health_check(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(time=DAILY_SUMMARY_TIME)
+    @network_loop(time=DAILY_SUMMARY_TIME)
     async def daily_summary(self) -> None:
         """|coro|
 

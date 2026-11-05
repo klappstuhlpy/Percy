@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 import asyncpg
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 from app.cogs.moderation.restrictions import RestrictionsMixin
 from app.core import Bot, Context, Flags, NoticeView, flag, store_true
@@ -34,6 +34,7 @@ from app.utils import (
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 from app.utils.formats import append_lists, join_lines_limited, truncate
 from app.utils.lock import lock
+from app.utils.tasks import network_loop
 from config import Emojis
 
 from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
@@ -182,7 +183,7 @@ class Moderation(RestrictionsMixin, Cog):
         checker = self._spam_check[guild_id]
         return not checker.is_flagged(ctx.author.id)
 
-    @tasks.loop(seconds=15.0)
+    @network_loop(seconds=15.0)
     @lock("Moderation", "mute_batch", wait=True)
     async def bulk_mute_insert(self) -> None:
         """|coro|

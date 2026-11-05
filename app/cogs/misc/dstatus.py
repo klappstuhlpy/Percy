@@ -16,6 +16,7 @@ from app.core.components_v2 import Accent, NoticeView
 from app.core.models import Context, PermissionTemplate, describe, group
 from app.database import BaseRecord
 from app.utils import cache, utcparse
+from app.utils.tasks import network_loop
 from config import Emojis
 
 if TYPE_CHECKING:
@@ -553,7 +554,7 @@ class DiscordStatusMixin:
 
         await ctx.send_success("Successfully unsubscribed from Discord Status updates.")
 
-    @tasks.loop(minutes=3)
+    @network_loop(minutes=3)
     async def check_new_incident(self) -> None:
         """|coro|
 

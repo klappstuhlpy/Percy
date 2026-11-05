@@ -8,7 +8,7 @@ import asyncpg
 import discord
 import yarl
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 from app.core import Bot, Cog, Context
 from app.core.models import PermissionTemplate, command, cooldown, describe, group
@@ -17,6 +17,7 @@ from app.rendering import get_dominant_color
 from app.services.guild.webhooks import check_destination
 from app.utils import helpers, usage_per_day
 from app.utils.lock import lock
+from app.utils.tasks import network_loop
 from config import Emojis
 
 EMOJI_REGEX = re.compile(r"<a?:.+?:([0-9]{15,21})>")
@@ -90,7 +91,7 @@ class Emoji(Cog):
         self._emoji_data_batch.clear()
         await self.bot.db.emoji_stats.bulk_insert(transformed)
 
-    @tasks.loop(seconds=60.0)
+    @network_loop(seconds=60.0)
     async def bulk_insert_loop(self) -> None:
         await self.bulk_insert()
 

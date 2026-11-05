@@ -18,7 +18,7 @@ import aiohttp
 import discord
 from dateutil.relativedelta import relativedelta
 from discord import File, app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.utils import format_dt
 
 import config
@@ -41,6 +41,7 @@ from app.utils import (
     pluralize,
 )
 from app.utils.lock import lock
+from app.utils.tasks import network_loop
 from config import Emojis, default_prefix, github_key, main_guild_id, test_guild_id
 
 if TYPE_CHECKING:
@@ -412,7 +413,7 @@ class MetaMixin:
         js = await self.github_request("POST", "gists", data=data, headers=headers)
         return js["html_url"]
 
-    @tasks.loop(hours=1)
+    @network_loop(hours=1)
     async def auto_archive_old_forum_threads(self) -> None:
         """|coro|
 
